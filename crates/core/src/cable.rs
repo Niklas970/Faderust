@@ -105,7 +105,7 @@ fn peak_db(peak: u32) -> String {
 /// look: the loudest sample going in and coming out, gaps in the sound (the
 /// wire ran dry) and dropped audio (it overflowed), until the server is
 /// replaced. Gaps and drops are what a call hears as crackling, a peak near
-/// 0 dB as distortion.
+/// 0 dB as distortion. Only while the debug mode is on.
 fn report_gaps(generation: u64, rings: &[std::sync::Arc<faderust_usbcable::ring::Ring>]) {
     let mut seen = vec![(0u64, 0u64, 0u64); rings.len()];
     while GENERATION.load(Ordering::SeqCst) == generation {
@@ -121,7 +121,7 @@ fn report_gaps(generation: u64, rings: &[std::sync::Arc<faderust_usbcable::ring:
             let flowing = now.0 != last.0;
             let broken = now.1 != last.1 || now.2 != last.2;
             // Silence on both sides is not worth a line.
-            if flowing && (broken || peak_in > 0 || peak_out > 0) {
+            if log::debug() && flowing && (broken || peak_in > 0 || peak_out > 0) {
                 log::write(&format!(
                     "USB-Kabel {}: Spitze ein {}, aus {}, {} Lücken, {} Bytes verworfen (letzte {} s)",
                     cable + 1,
