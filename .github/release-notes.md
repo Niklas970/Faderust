@@ -1,13 +1,13 @@
-## What's new in 0.8.0
+## What's new in 0.8.1
 
-- **Soundboard (optional):** switch it on under "Design", add WAV or MP3 files and play them with a click into any output, with its own strip (volume, outputs, mute) like every input
-- **Mini mixer in the tray (optional):** under "Design" you can make a click on the tray icon open the compact mixer at the bottom right, above the taskbar
-- **Volume display (optional, on by default):** when the Stream Deck changes a level or mutes something, a short note with the name and the new value appears at the bottom of the screen. It takes no focus and can be switched off under "Design"
-- **Rounder fader caps** and a more accurate **level sync**: the meter of an input now follows the output that carries it best
-- **Selectable log:** text in the log can be marked and copied with Ctrl+C
-- **Simpler data folder:** settings, log and token now live in `%APPDATA%\Faderust` (the old folder is moved automatically; the Stream Deck plugin 0.3.3 finds both)
-- **Cable log:** idle cables no longer count as gaps
-- **More robust:** no crash on unusual characters in device names, no silent hangs in the audio lanes, and the settings lock is no longer held during slow work
+- **Debug mode (optional):** under "Devices" you can switch on measurements, the self-test and the log buttons. While it is off, nothing is measured or written beyond errors and events, which saves CPU
+- **Tray mini mixer in its own window:** the main window is no longer touched when it opens
+- **Volume display with a level bar,** also for mute, set levels, presets and default device changes from the Stream Deck
+- **Input meters show the level after the strip fader,** like the outputs, and the meter follows the best-matching output
+- **Green edge per kind:** switch the green edge on active signal separately for outputs, devices and programs under "Design"
+- **Echo** in the input effects (time, repeats, amount)
+- **CPU diagnosis:** with debug mode on, Faderust logs which thread uses the CPU, to track down load after sleep
+- **Stream Deck plugin 0.3.5:** keys "Mute all", "Set level", "Louder / Quieter" for several faders, "Select" (pick faders by key, the Louder / Quieter keys then move the selection) and a ready-made Faderust page for the 15-key Stream Deck
 
 ## Installation
 
@@ -19,16 +19,16 @@ All features and a guide are in the [README](https://github.com/Niklas970/faderu
 
 ---
 
-## Neu in 0.8.0
+## Neu in 0.8.1
 
-- **Soundboard (optional):** unter „Design“ einschalten, WAV- oder MP3-Dateien hinzufügen und per Klick in einen Ausgang spielen, mit eigenem Streifen (Lautstärke, Ausgänge, Stumm) wie jeder Eingang
-- **Mini-Mixer im Tray (optional):** unter „Design“ lässt sich einstellen, dass ein Klick aufs Tray-Symbol den Kompaktmixer unten rechts über der Taskbar öffnet
-- **Lautstärke-Anzeige (optional, standardmäßig an):** ändert das Stream Deck einen Pegel oder schaltet stumm, erscheint kurz unten am Bildschirm Name und neuer Wert. Sie nimmt keinen Fokus und ist unter „Design“ abschaltbar
-- **Rundere Fader-Kappen** und genauerer **Pegel-Gleichlauf**: der Pegel eines Eingangs folgt jetzt dem Ausgang, der ihn am besten abbildet
-- **Markierbares Protokoll:** Text im Protokoll lässt sich markieren und mit Strg+C kopieren
-- **Einfacherer Datenordner:** Einstellungen, Protokoll und Token liegen jetzt in `%APPDATA%\Faderust` (der alte Ordner wird automatisch verschoben; das Stream-Deck-Plugin 0.3.3 findet beide)
-- **Kabel-Protokoll:** ruhende Kabel zählen nicht mehr als Lücken
-- **Robuster:** kein Absturz bei ungewöhnlichen Zeichen in Gerätenamen, keine stillen Hänger in den Audio-Lanes, und die Einstellungssperre wird bei langsamer Arbeit nicht mehr gehalten
+- **Debug-Modus (optional):** unter „Geräte“ lassen sich Messungen, Selbsttest und Protokoll-Knöpfe einschalten. Solange er aus ist, wird außer Fehlern und Ereignissen nichts gemessen oder geschrieben, das spart CPU
+- **Tray-Mini-Mixer im eigenen Fenster:** das Hauptfenster bleibt beim Öffnen unberührt
+- **Lautstärke-Anzeige mit Pegelbalken,** auch bei Stumm, gesetzten Pegeln, Presets und Standardgerät vom Stream Deck
+- **Eingangs-Pegel nach dem Streifen-Fader,** wie bei den Ausgängen, und der Pegel folgt dem am besten passenden Ausgang
+- **Grüner Rand getrennt:** den grünen Rand bei Signal gibt es unter „Design“ einzeln für Ausgänge, Geräte und Programme
+- **Echo** bei den Eingangs-Effekten (Zeit, Wiederholungen, Anteil)
+- **CPU-Diagnose:** mit Debug-Modus protokolliert Faderust, welcher Thread die CPU belegt, um die Last nach dem Ruhezustand zu finden
+- **Stream-Deck-Plugin 0.3.5:** Tasten „Alles stumm“, „Pegel setzen“, „Lauter / Leiser“ für mehrere Fader, „Auswählen“ (Fader per Taste wählen, Lauter / Leiser bewegen dann die Auswahl) und eine fertige Faderust-Seite für das Stream Deck mit 15 Tasten
 
 ## Installation
 
