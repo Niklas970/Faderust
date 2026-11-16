@@ -274,6 +274,7 @@ fn fx(app: &App, i: usize) -> Element<'_, Message> {
             slider(0.0..=0.8, f.echo_feedback, move |v| edit(
                 Edit::EchoFeedback(i, (v * 20.0).round() / 20.0)
             ))
+            .step(0.01_f32)
             .into()
         ),
         echo_row(
@@ -283,6 +284,7 @@ fn fx(app: &App, i: usize) -> Element<'_, Message> {
                 i,
                 (v * 20.0).round() / 20.0
             )))
+            .step(0.01_f32)
             .into()
         ),
         hint("Fügt der Stimme ein Echo hinzu. Wiederholungen: wie oft es nachhallt."),
