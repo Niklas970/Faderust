@@ -289,6 +289,23 @@ test("settings panel gets the lists", async () => {
   assert.equal(msg.payload.connected, true);
 });
 
+test("group key moves the chosen strips and masters together", async () => {
+  const settings = { strips: [0, 1], masters: [1], step: -2 };
+  appear("group", "grp", settings);
+  event("keyDown", "group", "grp", settings);
+  assert.deepEqual(await fr.next((m) => m.type === "addStripGain" && m.input === 0), {
+    type: "addStripGain",
+    input: 0,
+    delta: -2,
+  });
+  assert.ok(await fr.next((m) => m.type === "addStripGain" && m.input === 1));
+  assert.deepEqual(await fr.next((m) => m.type === "addMasterGain"), {
+    type: "addMasterGain",
+    output: 1,
+    delta: -2,
+  });
+});
+
 test("keys alert while Faderust is closed", async () => {
   fr.socket.close();
   await new Promise((r) => setTimeout(r, 200));

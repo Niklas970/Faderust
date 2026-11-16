@@ -206,6 +206,23 @@
       ]
     },
     {
+      "Name": "Lauter / Leiser",
+      "UUID": "com.niklas970.faderust.group",
+      "Icon": "imgs/actions/volume/icon",
+      "Tooltip": "Ändert mehrere Streifen und Master gemeinsam: lauter (positiver Schritt) oder leiser (negativ).",
+      "PropertyInspectorPath": "ui/group.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/volume/key",
+          "TitleAlignment": "bottom",
+          "FontSize": 11
+        }
+      ]
+    },
+    {
       "Name": "Faderust-Seite",
       "UUID": "com.niklas970.faderust.page",
       "Icon": "imgs/actions/preset/icon",
