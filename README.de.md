@@ -19,9 +19,22 @@
   Jeder Ausgang bekommt seine eigene Mischung, Geräte dürfen im Betrieb kommen und gehen, virtuelle Kabel bringt Faderust selbst mit.
 </p>
 
+<p align="center"><b><a href="https://github.com/Niklas970/faderust/releases/latest">⬇ Download für Windows</a></b> · <a href="https://faderust.schmidhome.eu/">Website</a> · <a href="#installation">Installation</a></p>
+
 ![Faderust im Pult mit Geräten, Programmen und drei Ausgängen](assets/screenshot.png)
 
 > **Alpha.** Faderust läuft, ist aber noch kaum auf echter Hardware erprobt. Fehler bitte als [Issue](https://github.com/Niklas970/faderust/issues) melden.
+
+## Warum Faderust
+
+| | Faderust | Voicemeeter | EarTrumpet |
+|---|---|---|---|
+| Open Source | MIT | nein | MIT |
+| Eigene Mischung pro Ausgang | ja | ja | nein |
+| Programme ohne Kabel pro Programm aufnehmen | ja | eingeschränkt | nein (nur Lautstärke) |
+| Virtuelle Kabel | eingebaut, kein eigener Kernel-Treiber | eigener Treiber | nein |
+| Rauschfilter, EQ, Gate, Ducking | ja | teilweise | nein |
+| Stream-Deck-Plugin | ja | über Drittanbieter | nein |
 
 ## Was Faderust kann
 
