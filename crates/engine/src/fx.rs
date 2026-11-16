@@ -28,6 +28,14 @@ pub struct FxSettings {
     pub gate: bool,
     /// Level below which the gate closes, dBFS.
     pub gate_db: f32,
+    /// Echo effect (delay with repeats).
+    pub echo: bool,
+    /// Delay between the repeats, ms.
+    pub echo_ms: f32,
+    /// Share of each repeat that is fed back, 0…0.8.
+    pub echo_feedback: f32,
+    /// Loudness of the echo against the dry voice, 0…1.
+    pub echo_mix: f32,
 }
 
 impl Default for FxSettings {
@@ -41,6 +49,10 @@ impl Default for FxSettings {
             high_db: 0.0,
             gate: false,
             gate_db: -45.0,
+            echo: false,
+            echo_ms: 300.0,
+            echo_feedback: 0.35,
+            echo_mix: 0.3,
         }
     }
 }
@@ -65,6 +77,10 @@ impl FxSettings {
             high_db: clamp(self.high_db, 0.0, -12.0, 12.0),
             gate: self.gate,
             gate_db: clamp(self.gate_db, d.gate_db, -90.0, -10.0),
+            echo: self.echo,
+            echo_ms: clamp(self.echo_ms, d.echo_ms, ECHO_MIN_MS, ECHO_MAX_MS),
+            echo_feedback: clamp(self.echo_feedback, d.echo_feedback, 0.0, 0.8),
+            echo_mix: clamp(self.echo_mix, d.echo_mix, 0.0, 1.0),
         }
     }
 }
@@ -80,6 +96,10 @@ pub struct InputFx {
     high_db: AtomicU32,
     gate: AtomicBool,
     gate_db: AtomicU32,
+    echo: AtomicBool,
+    echo_ms: AtomicU32,
+    echo_feedback: AtomicU32,
+    echo_mix: AtomicU32,
     /// Bumped after every change so the callback knows to reload.
     version: AtomicU32,
 }
@@ -95,6 +115,10 @@ impl Default for InputFx {
             high_db: AtomicU32::new(0),
             gate: AtomicBool::new(false),
             gate_db: AtomicU32::new(0),
+            echo: AtomicBool::new(false),
+            echo_ms: AtomicU32::new(0),
+            echo_feedback: AtomicU32::new(0),
+            echo_mix: AtomicU32::new(0),
             version: AtomicU32::new(0),
         };
         fx.set(FxSettings::default());
@@ -118,6 +142,10 @@ impl InputFx {
         self.high_db.store(s.high_db.to_bits(), r);
         self.gate.store(s.gate, r);
         self.gate_db.store(s.gate_db.to_bits(), r);
+        self.echo.store(s.echo, r);
+        self.echo_ms.store(s.echo_ms.to_bits(), r);
+        self.echo_feedback.store(s.echo_feedback.to_bits(), r);
+        self.echo_mix.store(s.echo_mix.to_bits(), r);
         self.version.fetch_add(1, Ordering::Release);
     }
 
@@ -133,6 +161,10 @@ impl InputFx {
             high_db: f(&self.high_db),
             gate: self.gate.load(r),
             gate_db: f(&self.gate_db),
+            echo: self.echo.load(r),
+            echo_ms: f(&self.echo_ms),
+            echo_feedback: f(&self.echo_feedback),
+            echo_mix: f(&self.echo_mix),
         }
     }
 
@@ -399,6 +431,58 @@ impl Denoiser {
     }
 }
 
+pub const ECHO_MIN_MS: f32 = 50.0;
+pub const ECHO_MAX_MS: f32 = 1000.0;
+
+/// Stereo delay line with feedback. The buffer is allocated once, up front.
+struct Echo {
+    /// Interleaved stereo, `capacity` frames.
+    buf: Vec<f32>,
+    capacity: usize,
+    write: usize,
+    delay: usize,
+    feedback: f32,
+    mix: f32,
+    running: bool,
+}
+
+impl Echo {
+    fn new(rate: f32) -> Self {
+        let capacity = (rate * ECHO_MAX_MS / 1000.0) as usize + 2;
+        Self {
+            buf: vec![0.0; capacity * 2],
+            capacity,
+            write: 0,
+            delay: capacity - 1,
+            feedback: 0.0,
+            mix: 0.0,
+            running: false,
+        }
+    }
+
+    fn set(&mut self, rate: f32, s: &FxSettings) {
+        self.delay = ((rate * s.echo_ms / 1000.0) as usize).clamp(1, self.capacity - 1);
+        self.feedback = s.echo_feedback;
+        self.mix = s.echo_mix;
+    }
+
+    fn run(&mut self, frames: &mut [f32]) {
+        if !self.running {
+            self.buf.fill(0.0);
+            self.running = true;
+        }
+        for frame in frames.chunks_exact_mut(2) {
+            let read = (self.write + self.capacity - self.delay) % self.capacity;
+            for (ch, v) in frame.iter_mut().enumerate() {
+                let delayed = self.buf[read * 2 + ch];
+                self.buf[self.write * 2 + ch] = (*v + delayed * self.feedback).clamp(-1.0, 1.0);
+                *v = (*v + delayed * self.mix).clamp(-1.0, 1.0);
+            }
+            self.write = (self.write + 1) % self.capacity;
+        }
+    }
+}
+
 /// The effects of one input, run in its callback. Real-time safe.
 pub struct FxChain {
     /// Left and right; only at [`RNN_RATE`].
@@ -412,6 +496,7 @@ pub struct FxChain {
     mid: Biquad,
     high: Biquad,
     gate: Gate,
+    echo: Echo,
     open_at: f32,
     close_at: f32,
 }
@@ -434,6 +519,7 @@ impl FxChain {
             mid: Biquad::IDENTITY,
             high: Biquad::IDENTITY,
             gate: Gate::new(rate),
+            echo: Echo::new(rate),
             open_at: 0.0,
             close_at: 0.0,
         }
@@ -450,6 +536,7 @@ impl FxChain {
         self.high = self.high.shelf(rate, 8000.0, s.high_db, true);
         self.open_at = linear(s.gate_db);
         self.close_at = linear(s.gate_db - GATE_HYSTERESIS_DB);
+        self.echo.set(rate, &s);
     }
 
     /// Processes interleaved stereo frames in place.
@@ -498,6 +585,11 @@ impl FxChain {
                 frame[1] *= g;
             }
         }
+        if s.echo {
+            self.echo.run(frames);
+        } else {
+            self.echo.running = false;
+        }
     }
 }
 
@@ -529,6 +621,45 @@ mod tests {
             chain.process(&fx, block);
         }
         buf
+    }
+
+    #[test]
+    fn echo_repeats_the_voice_after_the_delay() {
+        let ms = 100.0;
+        let delay = (RATE as f32 * ms / 1000.0) as usize;
+        let mut input = vec![0.0; 2 * RATE as usize / 2];
+        input[0] = 0.5;
+        input[1] = 0.5;
+        let out = run(
+            FxSettings {
+                echo: true,
+                echo_ms: ms,
+                echo_feedback: 0.5,
+                echo_mix: 1.0,
+                ..FxSettings::default()
+            },
+            input,
+        );
+        assert_eq!(out[0], 0.5);
+        assert!((out[delay * 2] - 0.5).abs() < 1e-6);
+        assert!((out[delay * 4] - 0.25).abs() < 1e-6);
+        assert_eq!(out[delay * 2 - 2], 0.0);
+    }
+
+    #[test]
+    fn echo_off_is_transparent_and_forgets_the_tail() {
+        let fx = InputFx::new();
+        let mut chain = FxChain::new(RATE);
+        fx.set(FxSettings {
+            echo: true,
+            ..FxSettings::default()
+        });
+        let mut loud = sine(440.0, 0.5, 4800);
+        chain.process(&fx, &mut loud);
+        fx.set(FxSettings::default());
+        let mut quiet = vec![0.0; 2 * 48_000];
+        chain.process(&fx, &mut quiet);
+        assert!(quiet.iter().all(|v| *v == 0.0));
     }
 
     #[test]

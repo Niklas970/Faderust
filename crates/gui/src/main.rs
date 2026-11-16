@@ -132,6 +132,10 @@ pub struct Fx {
     pub eq: [f32; 3],
     pub gate: bool,
     pub gate_db: f32,
+    pub echo: bool,
+    pub echo_ms: f32,
+    pub echo_feedback: f32,
+    pub echo_mix: f32,
 }
 
 impl From<CoreFx> for Fx {
@@ -143,6 +147,10 @@ impl From<CoreFx> for Fx {
             eq: [f.low_db, f.mid_db, f.high_db],
             gate: f.gate,
             gate_db: f.gate_db,
+            echo: f.echo,
+            echo_ms: f.echo_ms,
+            echo_feedback: f.echo_feedback,
+            echo_mix: f.echo_mix,
         }
     }
 }
@@ -158,6 +166,10 @@ impl From<&Fx> for CoreFx {
             high_db: f.eq[2],
             gate: f.gate,
             gate_db: f.gate_db,
+            echo: f.echo,
+            echo_ms: f.echo_ms,
+            echo_feedback: f.echo_feedback,
+            echo_mix: f.echo_mix,
         }
     }
 }
@@ -314,6 +326,10 @@ pub enum Edit {
     Eq(usize, usize, f32),
     Gate(usize, bool),
     GateDb(usize, f32),
+    Echo(usize, bool),
+    EchoMs(usize, f32),
+    EchoFeedback(usize, f32),
+    EchoMix(usize, f32),
     ResetFx(usize),
     /// Which input lowers this one (none = off).
     DuckTrigger(usize, Option<usize>),
@@ -1947,6 +1963,10 @@ impl App {
             Edit::Eq(i, b, v) => self.set_fx(i, |f| f.eq[b] = v),
             Edit::Gate(i, on) => self.set_fx(i, |f| f.gate = on),
             Edit::GateDb(i, v) => self.set_fx(i, |f| f.gate_db = v),
+            Edit::Echo(i, on) => self.set_fx(i, |f| f.echo = on),
+            Edit::EchoMs(i, v) => self.set_fx(i, |f| f.echo_ms = v),
+            Edit::EchoFeedback(i, v) => self.set_fx(i, |f| f.echo_feedback = v),
+            Edit::EchoMix(i, v) => self.set_fx(i, |f| f.echo_mix = v),
             Edit::ResetFx(i) => {
                 self.set_fx(i, |f| *f = CoreFx::default().into());
                 self.set_duck(i, |d| *d = Duck::default());
