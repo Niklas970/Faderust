@@ -97,6 +97,10 @@ export async function sendOptions(force = false): Promise<void> {
     connected: faderust.connected,
     inputs: list(s?.inputs),
     outputs: list(s?.outputs),
+    targets: [
+      ...(s?.inputs ?? []).map((n, i) => ({ value: `s${i}`, label: `Streifen: ${n}` })),
+      ...(s?.outputs ?? []).map((n, i) => ({ value: `m${i}`, label: `Master: ${n}` })),
+    ],
     presets: (s?.presets ?? []).map((p) => ({ value: p, label: p })),
     devices: [...endpoints("Wiedergabe", d?.playback), ...endpoints("Aufnahme", d?.recording)],
   };

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "Name": "Faderust",
-  "Version": "0.3.4.0",
+  "Version": "0.3.5.0",
   "Author": "Niklas970",
   "Description": "Steuert den Faderust-Mixer: Fader, Stummschalten, Presets und Windows-Standardgeräte.",
   "URL": "https://github.com/Niklas970/faderust",
@@ -204,6 +204,85 @@
           "FontSize": 11
         }
       ]
+    },
+    {
+      "Name": "Lauter / Leiser",
+      "UUID": "com.niklas970.faderust.group",
+      "Icon": "imgs/actions/volume/icon",
+      "Tooltip": "Ändert mehrere Streifen und Master gemeinsam: lauter (positiver Schritt) oder leiser (negativ).",
+      "PropertyInspectorPath": "ui/group.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/volume/key",
+          "TitleAlignment": "bottom",
+          "FontSize": 11
+        }
+      ]
+    },
+    {
+      "Name": "Auswählen",
+      "UUID": "com.niklas970.faderust.select",
+      "Icon": "imgs/actions/strip/icon",
+      "Tooltip": "Wählt einen Streifen oder Master aus (leuchtet). „Lauter / Leiser“ mit „Auswahl verwenden“ bewegt dann die Auswahl.",
+      "PropertyInspectorPath": "ui/select.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "imgs/actions/strip/key",
+          "TitleAlignment": "bottom",
+          "FontSize": 11
+        },
+        {
+          "Image": "imgs/actions/preset/active",
+          "TitleAlignment": "bottom",
+          "FontSize": 11
+        }
+      ]
+    },
+    {
+      "Name": "Faderust-Seite",
+      "UUID": "com.niklas970.faderust.page",
+      "Icon": "imgs/actions/preset/icon",
+      "Tooltip": "Öffnet die Faderust-Seite mit den wichtigen Tasten (Stream Deck mit 15 Tasten).",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/preset/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Zurück",
+      "UUID": "com.niklas970.faderust.back",
+      "Icon": "imgs/actions/preset/icon",
+      "Tooltip": "Zurück zum vorherigen Profil (für die Faderust-Seite).",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/preset/key",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    }
+  ],
+  "Profiles": [
+    {
+      "Name": "Faderust",
+      "DeviceType": 0,
+      "Readonly": false,
+      "DontAutoSwitchWhenInstalled": true,
+      "AutoInstall": false
     }
   ]
 }

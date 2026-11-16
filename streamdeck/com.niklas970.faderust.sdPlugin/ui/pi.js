@@ -49,10 +49,30 @@ function fill(select) {
   }
 }
 
+// A group of checkboxes (data-multi names the list) stored as an array of numbers.
+function fillMulti(box) {
+  const list = options?.[box.dataset.multi] ?? [];
+  const chosen = new Set(settings[box.dataset.setting] ?? []);
+  box.replaceChildren();
+  for (const o of list) {
+    const label = document.createElement("label");
+    label.className = "check";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = String(o.value);
+    input.checked = chosen.has(o.value);
+    label.append(input, o.label);
+    box.append(label);
+  }
+}
+
 function render() {
   document.getElementById("status").hidden = !options || options.connected;
   for (const el of fields()) {
-    if (el.tagName === "SELECT") {
+    if (el.dataset.multi) {
+      if (options) fillMulti(el);
+    } else if (el.tagName === "SELECT") {
+      if (options) fill(el);
       if (options) fill(el);
     } else if (el.type === "checkbox") {
       el.checked = !!settings[el.dataset.setting];
@@ -87,6 +107,14 @@ window.connectElgatoStreamDeckSocket = (port, uuid, registerEvent, _info, action
 };
 
 document.addEventListener("change", (e) => {
+  const box = e.target.closest("[data-multi]");
+  if (box) {
+    const picked = [...box.querySelectorAll("input:checked")].map((i) => Number(i.value));
+    if (picked.length) settings[box.dataset.setting] = picked;
+    else delete settings[box.dataset.setting];
+    save();
+    return;
+  }
   const el = e.target.closest("[data-setting]");
   if (!el) return;
   const v = value(el);

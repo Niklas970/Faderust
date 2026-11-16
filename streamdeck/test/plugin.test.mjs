@@ -289,9 +289,50 @@ test("settings panel gets the lists", async () => {
   assert.equal(msg.payload.connected, true);
 });
 
+test("group key moves the chosen strips and masters together", async () => {
+  const settings = { strips: [0, 1], masters: [1], step: -2 };
+  appear("group", "grp", settings);
+  event("keyDown", "group", "grp", settings);
+  assert.deepEqual(await fr.next((m) => m.type === "addStripGain" && m.input === 0), {
+    type: "addStripGain",
+    input: 0,
+    delta: -2,
+  });
+  assert.ok(await fr.next((m) => m.type === "addStripGain" && m.input === 1));
+  assert.deepEqual(await fr.next((m) => m.type === "addMasterGain"), {
+    type: "addMasterGain",
+    output: 1,
+    delta: -2,
+  });
+});
+
+test("select keys pick faders for a group key that uses the selection", async () => {
+  appear("select", "sel0", { target: "s0" });
+  appear("select", "selc", { target: "clear" });
+  appear("group", "gsel", { selection: true, step: 5 });
+  event("keyDown", "select", "sel0", { target: "s0" });
+  assert.equal((await sd.next((m) => m.event === "setState" && m.context === "sel0" && m.payload.state === 1)).payload.state, 1);
+  event("keyDown", "group", "gsel", { selection: true, step: 5 });
+  assert.deepEqual(await fr.next((m) => m.type === "addStripGain"), { type: "addStripGain", input: 0, delta: 5 });
+  event("keyDown", "select", "selc", { target: "clear" });
+  assert.ok(await sd.next((m) => m.event === "setState" && m.context === "sel0" && m.payload.state === 0));
+});
+
 test("keys alert while Faderust is closed", async () => {
   fr.socket.close();
   await new Promise((r) => setTimeout(r, 200));
   event("keyDown", "preset", "p2", { name: "Spielen" });
   assert.ok(await sd.next((m) => m.event === "showAlert" && m.context === "p2"));
+});
+
+test("page key opens the Faderust profile, back returns", async () => {
+  appear("page", "pg", {});
+  event("keyDown", "page", "pg", {});
+  const open = await sd.next((m) => m.event === "switchToProfile");
+  assert.equal(open.device, "dev");
+  assert.deepEqual(open.payload, { page: 0, profile: "Faderust" });
+  appear("back", "bk", {});
+  event("keyDown", "back", "bk", {});
+  const back = await sd.next((m) => m.event === "switchToProfile");
+  assert.equal(back.payload.profile, undefined);
 });

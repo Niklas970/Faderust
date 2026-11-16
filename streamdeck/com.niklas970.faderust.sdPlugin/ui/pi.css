@@ -25,3 +25,5 @@ input[type="checkbox"] { margin: 0 6px 0 0; accent-color: #4fd1c0; }
 .hint { margin: 2px 0 6px 104px; color: #8a8a8a; line-height: 1.4; }
 .status { margin: 0 0 6px 104px; padding: 6px 8px; border-radius: 3px; background: #4a2b1d; color: #f2b08d; }
 .status[hidden] { display: none; }
+.multi { flex: 1; display: flex; flex-direction: column; padding: 4px 0; }
+.multi .check { min-height: 22px; }
