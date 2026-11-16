@@ -372,6 +372,8 @@ pub enum Edit {
     InstallDeck,
     Mode(&'static str),
     OutputEdge(bool),
+    DeviceEdge(bool),
+    ProgramEdge(bool),
     Osd(bool),
     TrayPopup(bool),
     AccentHex(String),
@@ -2296,6 +2298,8 @@ impl App {
             }
             Edit::Mode(m) => self.set_look(|p| p.mode = m.into()),
             Edit::OutputEdge(on) => self.set_look(|p| p.output_edge_off = !on),
+            Edit::DeviceEdge(on) => self.set_look(|p| p.device_edge_off = !on),
+            Edit::ProgramEdge(on) => self.set_look(|p| p.program_edge_off = !on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),
             Edit::Picker(t) => {
@@ -3012,6 +3016,11 @@ impl App {
         } else {
             Self::chips(&s.routes, Some(i), narrow)
         };
+        let edge_off = if s.program {
+            self.prefs.program_edge_off
+        } else {
+            self.prefs.device_edge_off
+        };
         Self::card(
             column![
                 top,
@@ -3036,7 +3045,7 @@ impl App {
             } else {
                 164.0
             },
-            !s.muted && s.shown > -60.0,
+            !edge_off && !s.muted && s.shown > -60.0,
         )
     }
 

@@ -877,19 +877,19 @@ fn design(app: &App) -> Element<'_, Message> {
             app.picker,
             |t| edit(Edit::SignalHex(t)),
         ),
-        h3("Grüner Rand an aktiven Ausgängen"),
-        segmented(vec![
-            (
-                "An".into(),
-                !app.prefs.output_edge_off,
-                edit(Edit::OutputEdge(true))
-            ),
-            (
-                "Aus".into(),
-                app.prefs.output_edge_off,
-                edit(Edit::OutputEdge(false))
-            ),
-        ]),
+        h3("Grüner Rand bei Signal"),
+        row![
+            check(!app.prefs.output_edge_off)
+                .label(tr("Ausgänge"))
+                .on_toggle(|v| edit(Edit::OutputEdge(v))),
+            check(!app.prefs.device_edge_off)
+                .label(tr("Geräte"))
+                .on_toggle(|v| edit(Edit::DeviceEdge(v))),
+            check(!app.prefs.program_edge_off)
+                .label(tr("Programme"))
+                .on_toggle(|v| edit(Edit::ProgramEdge(v))),
+        ]
+        .spacing(18),
         h3("Soundboard"),
         segmented(vec![
             (
