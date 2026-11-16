@@ -380,6 +380,11 @@ pub enum Edit {
     OutputEdge(bool),
     DeviceEdge(bool),
     ProgramEdge(bool),
+    MeterSegments(bool),
+    PeakMark(bool),
+    ZeroMark(bool),
+    ReadoutDisplay(bool),
+    MatrixMeters(bool),
     Osd(bool),
     Debug(bool),
     TrayPopup(bool),
@@ -2358,6 +2363,11 @@ impl App {
             Edit::OutputEdge(on) => self.set_look(|p| p.output_edge_off = !on),
             Edit::DeviceEdge(on) => self.set_look(|p| p.device_edge_off = !on),
             Edit::ProgramEdge(on) => self.set_look(|p| p.program_edge_off = !on),
+            Edit::MeterSegments(on) => self.set_look(|p| p.meter_segments = on),
+            Edit::PeakMark(on) => self.set_look(|p| p.peak_off = !on),
+            Edit::ZeroMark(on) => self.set_look(|p| p.zero_mark = on),
+            Edit::ReadoutDisplay(on) => self.set_look(|p| p.readout_display = on),
+            Edit::MatrixMeters(on) => self.set_look(|p| p.matrix_meters_off = !on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::Debug(on) => self.set_look(|p| p.debug = on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),
@@ -2892,8 +2902,8 @@ impl App {
         .into()
     }
 
-    fn readout(db: f32, muted: bool) -> Element<'static, Message> {
-        text(if db <= scale::OFF {
+    fn readout(&self, db: f32, muted: bool) -> Element<'static, Message> {
+        let value = text(if db <= scale::OFF {
             "−∞ dB".to_string()
         } else {
             format!("{} dB", scale::format(db))
@@ -2902,9 +2912,40 @@ impl App {
             weight: iced::font::Weight::Bold,
             ..MONO
         })
-        .size(13)
-        .color(if muted { muted_color() } else { accent_light() })
+        .size(13);
+        if !self.prefs.readout_display {
+            return value
+                .color(if muted { muted_color() } else { accent_light() })
+                .into();
+        }
+        // The value in a small recessed display, like the window on a cap.
+        container(
+            value
+                .color(if muted { muted_color() } else { signal() })
+                .center(),
+        )
+        .width(88)
+        .padding([4, 0])
+        .center_x(88)
+        .style(|_| container::Style {
+            background: Some(Background::Color(rgb(11, 12, 14))),
+            border: Border {
+                color: rgb(44, 47, 51),
+                width: 1.0,
+                radius: 5.0.into(),
+            },
+            ..container::Style::default()
+        })
         .into()
+    }
+
+    /// The switchable building blocks of the faders.
+    fn parts(&self) -> fader::Parts {
+        fader::Parts {
+            segments: self.prefs.meter_segments,
+            peak: !self.prefs.peak_off,
+            zero_mark: self.prefs.zero_mark,
+        }
     }
 
     /// Lit keycap: an LED strip on top glows red when muted.
@@ -3003,6 +3044,7 @@ impl App {
             level: s.shown,
             peak: s.peak,
             kind: Kind::Input(i),
+            parts: self.parts(),
             post_fader: false,
             narrow,
             labels: !self.is_mini(),
@@ -3089,7 +3131,7 @@ impl App {
                 if self.is_mini() {
                     Element::from(space().height(0))
                 } else {
-                    Self::readout(s.db, s.muted)
+                    self.readout(s.db, s.muted)
                 },
                 Self::mute_button(s.muted, Message::Mute(i), "MUTE"),
                 foot,
@@ -3118,6 +3160,7 @@ impl App {
             level: m.shown,
             peak: m.peak,
             kind: Kind::Master(o),
+            parts: self.parts(),
             post_fader: true,
             narrow: self.tight(),
             labels: !self.is_mini(),
@@ -3175,7 +3218,7 @@ impl App {
                 if self.is_mini() {
                     Element::from(space().height(0))
                 } else {
-                    Self::readout(m.db, m.muted)
+                    self.readout(m.db, m.muted)
                 },
                 Self::mute_button(m.muted, Message::MasterMute(o), "MUTE"),
                 space().height(if self.is_mini() { 0 } else { 24 }),
@@ -3359,134 +3402,195 @@ impl App {
             .into()
     }
 
+    /// Thin level bar of the matrix, or nothing when the block is switched off.
+    fn level_bar(
+        &self,
+        frac: f32,
+        peak: f32,
+        offset: f32,
+        muted: bool,
+    ) -> Element<'static, Message> {
+        if self.prefs.matrix_meters_off {
+            return space().height(0).into();
+        }
+        let peak =
+            (!self.prefs.peak_off && peak > -60.0).then(|| fader::HMeter::frac_of(peak, offset));
+        Canvas::new(fader::HMeter {
+            frac,
+            peak,
+            muted,
+            segments: self.prefs.meter_segments,
+        })
+        .width(Length::Fill)
+        .height(6)
+        .into()
+    }
+
+    /// Rail and handle of the horizontal faders in the matrix.
+    fn h_slider(
+        dim: bool,
+    ) -> impl Fn(&Theme, iced::widget::slider::Status) -> iced::widget::slider::Style {
+        move |_, status| {
+            let hot = matches!(
+                status,
+                iced::widget::slider::Status::Hovered | iced::widget::slider::Status::Dragged
+            );
+            let tone = if dim { muted_color() } else { accent() };
+            iced::widget::slider::Style {
+                rail: iced::widget::slider::Rail {
+                    backgrounds: (Background::Color(tone), Background::Color(well())),
+                    width: 6.0,
+                    border: Border {
+                        color: border(),
+                        width: 1.0,
+                        radius: 3.0.into(),
+                    },
+                },
+                handle: iced::widget::slider::Handle {
+                    shape: iced::widget::slider::HandleShape::Rectangle {
+                        width: 12,
+                        border_radius: 3.0.into(),
+                    },
+                    background: Background::Color(if hot {
+                        accent_light()
+                    } else {
+                        mix(panel_2(), text_color(), 0.55)
+                    }),
+                    border_width: 1.0,
+                    border_color: border(),
+                },
+            }
+        }
+    }
+
+    /// Small M key of the matrix; red while muted.
+    fn m_key(on: bool, msg: Message) -> Element<'static, Message> {
+        let look = if on { Look::Danger } else { Look::Secondary };
+        button(
+            text("M")
+                .size(11)
+                .font(BOLD)
+                .color(look_text(look))
+                .center(),
+        )
+        .width(26)
+        .height(24)
+        .padding(0)
+        .on_press(msg)
+        .style(key(look))
+        .into()
+    }
+
+    /// Card of the matrix: rounded panel, optional signal edge.
+    fn matrix_card<'a>(
+        content: impl Into<Element<'a, Message>>,
+        width: Length,
+        edge: bool,
+        height: Option<f32>,
+    ) -> Element<'a, Message> {
+        container(content)
+            .width(width)
+            .height(height.map_or(Length::Shrink, Length::Fixed))
+            .align_y(Vertical::Center)
+            .padding([8, 12])
+            .clip(true)
+            .style(move |_| container::Style {
+                background: Some(Background::Color(panel())),
+                border: Border {
+                    color: if edge {
+                        mix(hairline(), signal(), 0.55)
+                    } else {
+                        hairline()
+                    },
+                    width: 1.0,
+                    radius: 10.0.into(),
+                },
+                ..container::Style::default()
+            })
+            .into()
+    }
+
+    /// Matrix: a column per output (its master as a card), a row per input, a fader in each cell.
     fn matrix(&self) -> Element<'_, Message> {
-        const CELL: f32 = 250.0;
-        const LABEL: f32 = 150.0;
-        let head = row![space().width(LABEL)]
+        const CELL: f32 = 270.0;
+        const LABEL: f32 = 170.0;
+        let add = button(text("+ Programm").size(12).font(BOLD).color(accent_light()))
+            .padding([4, 12])
+            .on_press(Message::Open(Some(Dialog::Apps)))
+            .style(key(Look::Secondary));
+        let corner = container(add).width(LABEL);
+        let head = row![corner]
             .extend(self.outs.iter().enumerate().map(|(o, m)| {
-                container(
-                    row![
-                        container(
-                            text(format!("A{}", o + 1))
-                                .size(11)
-                                .font(BOLD)
-                                .color(on_accent())
-                                .center()
-                        )
-                        .width(30)
-                        .height(20)
-                        .center_x(30)
-                        .center_y(20)
-                        .style(|_| container::Style {
-                            background: Some(Background::Color(accent())),
-                            border: Border {
-                                radius: 3.0.into(),
-                                ..Border::default()
-                            },
-                            ..container::Style::default()
-                        }),
-                        column![
-                            text(m.label.to_uppercase())
-                                .size(12)
-                                .font(BOLD)
-                                .color(text_color()),
-                            text(m.note.clone())
-                                .size(11)
-                                .wrapping(iced::widget::text::Wrapping::None)
-                                .color(if m.note_on { signal() } else { muted_color() }),
-                        ]
-                        .spacing(1),
-                    ]
-                    .spacing(8)
-                    .align_y(Vertical::Center),
+                let chip = container(
+                    text(format!("A{}", o + 1))
+                        .size(11)
+                        .font(BOLD)
+                        .color(on_accent())
+                        .center(),
                 )
-                .width(CELL)
-                .clip(true)
-                .into()
-            }))
-            .spacing(12);
-        let mut rows = column![head].spacing(10);
-        for (i, s) in self.strips.iter().enumerate() {
-            let cells = (0..s.row.len()).map(|o| {
-                let g = s.row[o];
-                let dim = g.muted;
-                let slider = iced::widget::slider(0.0..=1.0, scale::to_pos(g.db), move |p| {
-                    Message::Cell(i, o, p)
+                .width(30)
+                .height(20)
+                .center_x(30)
+                .center_y(20)
+                .style(|_| container::Style {
+                    background: Some(Background::Color(accent())),
+                    border: Border {
+                        radius: 3.0.into(),
+                        ..Border::default()
+                    },
+                    ..container::Style::default()
+                });
+                let titles = column![
+                    text(m.label.to_uppercase())
+                        .size(12)
+                        .font(BOLD)
+                        .color(text_color()),
+                    text(m.note.clone())
+                        .size(11)
+                        .wrapping(iced::widget::text::Wrapping::None)
+                        .color(if m.note_on { signal() } else { muted_color() }),
+                ]
+                .spacing(1);
+                let master = iced::widget::slider(0.0..=1.0, scale::to_pos(m.db), move |p| {
+                    Message::Master(o, scale::from_pos(p))
                 })
                 .step(0.002_f32)
                 .width(Length::Fill)
-                .style(move |_, status| {
-                    let hot = matches!(
-                        status,
-                        iced::widget::slider::Status::Hovered
-                            | iced::widget::slider::Status::Dragged
-                    );
-                    let tone = if dim { muted_color() } else { accent() };
-                    iced::widget::slider::Style {
-                        rail: iced::widget::slider::Rail {
-                            backgrounds: (Background::Color(tone), Background::Color(well())),
-                            width: 6.0,
-                            border: Border {
-                                color: border(),
-                                width: 1.0,
-                                radius: 3.0.into(),
-                            },
-                        },
-                        handle: iced::widget::slider::Handle {
-                            shape: iced::widget::slider::HandleShape::Rectangle {
-                                width: 12,
-                                border_radius: 3.0.into(),
-                            },
-                            background: Background::Color(if hot {
-                                accent_light()
-                            } else {
-                                mix(panel_2(), text_color(), 0.55)
-                            }),
-                            border_width: 1.0,
-                            border_color: border(),
-                        },
-                    }
-                });
-                let look = if dim { Look::Danger } else { Look::Secondary };
-                container(
+                .style(Self::h_slider(m.muted));
+                let card = column![
+                    row![chip, titles].spacing(8).align_y(Vertical::Center),
+                    self.level_bar(fader::HMeter::frac_of(m.shown, 0.0), m.peak, 0.0, m.muted),
+                    master,
                     row![
-                        slider,
-                        container(text(scale::format(g.db)).font(MONO).size(12).color(if dim {
-                            muted_color()
-                        } else {
-                            text_color()
-                        }))
-                        .width(44)
-                        .align_x(Horizontal::Right),
-                        button(
-                            text("M")
-                                .size(11)
-                                .font(BOLD)
-                                .color(look_text(look))
-                                .center()
-                        )
-                        .width(26)
-                        .height(24)
-                        .padding(0)
-                        .on_press(Message::Route(i, o))
-                        .style(key(look)),
+                        text("MASTER").size(10).font(BOLD).color(muted_color()),
+                        space().width(Length::Fill),
+                        text(scale::format(m.db))
+                            .font(MONO)
+                            .size(13)
+                            .color(if m.muted { muted_color() } else { text_color() }),
+                        Self::m_key(m.muted, Message::MasterMute(o)),
                     ]
                     .spacing(8)
                     .align_y(Vertical::Center),
+                ]
+                .spacing(6);
+                Self::matrix_card(
+                    card,
+                    Length::Fixed(CELL),
+                    !self.prefs.output_edge_off && !m.muted && m.shown > -60.0,
+                    None,
                 )
-                .width(CELL)
-                .padding([6, 10])
-                .style(|_| container::Style {
-                    background: Some(Background::Color(panel())),
-                    border: Border {
-                        color: hairline(),
-                        width: 1.0,
-                        radius: 6.0.into(),
-                    },
-                    ..container::Style::default()
-                })
-                .into()
-            });
+            }))
+            .spacing(12)
+            .align_y(Vertical::Bottom);
+        let mut rows = column![head].spacing(10);
+        // Label and cells of a row are equally high; the level bar needs a little more.
+        let row_h = if self.prefs.matrix_meters_off {
+            52.0
+        } else {
+            64.0
+        };
+        for (i, s) in self.strips.iter().enumerate() {
             let name = button(
                 column![
                     text(s.label.to_uppercase())
@@ -3499,35 +3603,75 @@ impl App {
                 ]
                 .spacing(1),
             )
-            .width(LABEL)
-            .padding([4, 8])
+            .width(Length::Fill)
+            .padding(0)
             .on_press(Message::Open(Some(Dialog::Fx(i))))
             .style(|_, status| button::Style {
                 background: None,
-                text_color: text_color(),
-                border: Border {
-                    color: if matches!(status, button::Status::Hovered) {
-                        accent()
-                    } else {
-                        Color::TRANSPARENT
-                    },
-                    width: 1.0,
-                    radius: 4.0.into(),
+                text_color: if matches!(status, button::Status::Hovered) {
+                    accent_light()
+                } else {
+                    text_color()
                 },
                 ..button::Style::default()
             });
+            let edge_off = if s.program {
+                self.prefs.program_edge_off
+            } else {
+                self.prefs.device_edge_off
+            };
+            let label = Self::matrix_card(
+                column![
+                    row![name, Self::m_key(s.muted, Message::Mute(i))]
+                        .spacing(6)
+                        .align_y(Vertical::Center),
+                    self.level_bar(
+                        fader::HMeter::frac_of(s.shown, s.db.max(scale::OFF)),
+                        s.peak,
+                        s.db.max(scale::OFF),
+                        s.muted
+                    ),
+                ]
+                .spacing(6),
+                Length::Fixed(LABEL),
+                !edge_off && !s.muted && s.shown > -60.0,
+                Some(row_h),
+            );
+            let cells = (0..s.row.len()).map(|o| {
+                let g = s.row[o];
+                let dim = g.muted;
+                let slider = iced::widget::slider(0.0..=1.0, scale::to_pos(g.db), move |p| {
+                    Message::Cell(i, o, p)
+                })
+                .step(0.002_f32)
+                .width(Length::Fill)
+                .style(Self::h_slider(dim));
+                Self::matrix_card(
+                    row![
+                        slider,
+                        container(text(scale::format(g.db)).font(MONO).size(13).color(if dim {
+                            muted_color()
+                        } else {
+                            text_color()
+                        }))
+                        .width(46)
+                        .align_x(Horizontal::Right),
+                        Self::m_key(dim, Message::Route(i, o)),
+                    ]
+                    .spacing(8)
+                    .align_y(Vertical::Center),
+                    Length::Fixed(CELL),
+                    false,
+                    Some(row_h),
+                )
+            });
             rows = rows.push(
-                row![name]
+                row![label]
                     .extend(cells)
                     .spacing(12)
                     .align_y(Vertical::Center),
             );
         }
-        let add = button(text("+ Programm").size(12).font(BOLD).color(accent_light()))
-            .padding([4, 12])
-            .on_press(Message::Open(Some(Dialog::Apps)))
-            .style(key(Look::Secondary));
-        rows = rows.push(add);
         container(
             iced::widget::scrollable(container(rows).padding(4))
                 .width(Length::Fill)

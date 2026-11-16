@@ -892,6 +892,25 @@ fn design(app: &App) -> Element<'_, Message> {
                 .on_toggle(|v| edit(Edit::ProgramEdge(v))),
         ]
         .spacing(18),
+        h3("Bausteine"),
+        column![
+            check(app.prefs.meter_segments)
+                .label(tr("LED-Segmente statt Balken"))
+                .on_toggle(|v| edit(Edit::MeterSegments(v))),
+            check(!app.prefs.peak_off)
+                .label(tr("Spitzenwert-Marke"))
+                .on_toggle(|v| edit(Edit::PeakMark(v))),
+            check(app.prefs.zero_mark)
+                .label(tr("Nullstrich am Fader"))
+                .on_toggle(|v| edit(Edit::ZeroMark(v))),
+            check(app.prefs.readout_display)
+                .label(tr("Wert im Display"))
+                .on_toggle(|v| edit(Edit::ReadoutDisplay(v))),
+            check(!app.prefs.matrix_meters_off)
+                .label(tr("Pegelbalken in der Matrix"))
+                .on_toggle(|v| edit(Edit::MatrixMeters(v))),
+        ]
+        .spacing(6),
         h3("Soundboard"),
         segmented(vec![
             (

@@ -30,6 +30,17 @@ impl Kind {
     }
 }
 
+/// Building blocks of the fader that the design dialog switches on and off.
+#[derive(Clone, Copy)]
+pub struct Parts {
+    /// LED segments instead of the continuous bar.
+    pub segments: bool,
+    /// Peak mark on the meter.
+    pub peak: bool,
+    /// A line at 0 dB across the slot.
+    pub zero_mark: bool,
+}
+
 /// Fader track, scale, cap and LED meter of one strip in a single canvas.
 pub struct Fader<'a> {
     pub cache: &'a canvas::Cache,
@@ -47,6 +58,7 @@ pub struct Fader<'a> {
     /// Scale (numbers and marks) beside the slot; off in compact mode.
     pub labels: bool,
     pub kind: Kind,
+    pub parts: Parts,
 }
 
 #[derive(Default)]
@@ -275,6 +287,14 @@ impl Fader<'_> {
                 .with_color(rgb(44, 47, 51))
                 .with_width(1.0),
         );
+        if self.parts.zero_mark {
+            let y = Self::y_of(scale::to_pos(0.0), total);
+            f.fill_rectangle(
+                Point::new(sx - 3.0, y - 0.5),
+                Size::new(slot_w + 6.0, 1.0),
+                mix(muted_color(), text_color(), 0.4),
+            );
+        }
         let fill_h = (total - PAD - 3.0 - cap_y).max(0.0);
         if fill_h > 0.0 {
             let (core, glow) = if self.muted {
@@ -405,6 +425,52 @@ impl Fader<'_> {
         let lit = if self.muted { 0.0 } else { frac_of(self.level) };
         let inner = h - 2.0;
         let base = top + h - 1.0;
+        let band = |at: f32| {
+            if at < 0.72 {
+                signal()
+            } else if at < 0.80 {
+                mix(signal(), amber(), 0.5)
+            } else if at < 0.90 {
+                amber()
+            } else if at < 0.95 {
+                mix(amber(), danger(), 0.5)
+            } else {
+                danger()
+            }
+        };
+        if self.parts.segments {
+            // LED segments: 4 px lit, 2 px gap, coloured by height.
+            let n = (inner / 6.0).floor().max(1.0) as usize;
+            let seg = inner / n as f32;
+            let lit_n = (lit * n as f32).round() as usize;
+            let peak_n = if self.parts.peak && !self.muted && self.peak > -60.0 {
+                ((frac_of(self.peak) * n as f32).round() as usize).clamp(1, n)
+            } else {
+                0
+            };
+            for k in 0..n {
+                let y = base - seg * (k + 1) as f32;
+                let on = k < lit_n;
+                let is_peak = peak_n > 0 && k + 1 == peak_n && !on;
+                let color = if on {
+                    band((k as f32 + 0.5) / n as f32)
+                } else if is_peak {
+                    if (k as f32 + 0.5) / n as f32 > 0.95 {
+                        danger()
+                    } else {
+                        Color::WHITE
+                    }
+                } else {
+                    mix(well(), border(), 0.5)
+                };
+                f.fill_rectangle(
+                    Point::new(mx + 2.0, y + 1.0),
+                    Size::new(mw - 4.0, (seg - 2.0).max(1.0)),
+                    color,
+                );
+            }
+            return;
+        }
         // One continuous bar; signal, amber and clip colours by height.
         // Solid bands, because gradients draw wrongly on some graphics drivers.
         for (from, to, color) in [
@@ -423,7 +489,7 @@ impl Fader<'_> {
                 );
             }
         }
-        if !self.muted && self.peak > -60.0 {
+        if self.parts.peak && !self.muted && self.peak > -60.0 {
             let py = base - inner * frac_of(self.peak);
             f.fill_rectangle(
                 Point::new(mx + 1.0, (py - 1.5).max(top + 1.0)),
@@ -435,5 +501,90 @@ impl Fader<'_> {
                 },
             );
         }
+    }
+}
+
+/// Thin horizontal level bar for the matrix: same bands as the vertical meter.
+pub struct HMeter {
+    /// Lit part, 0..1 (already including the fader if the level is post-fader).
+    pub frac: f32,
+    /// Peak mark, 0..1, if shown.
+    pub peak: Option<f32>,
+    pub muted: bool,
+    pub segments: bool,
+}
+
+impl HMeter {
+    /// Fraction of the meter range for a level in dB plus the gain after it.
+    pub fn frac_of(level: f32, offset: f32) -> f32 {
+        ((level + offset + 60.0) / 60.0).clamp(0.0, 1.0)
+    }
+}
+
+impl canvas::Program<Message> for HMeter {
+    type State = ();
+
+    fn draw(
+        &self,
+        _state: &(),
+        renderer: &Renderer,
+        _theme: &Theme,
+        bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> Vec<Geometry> {
+        let mut f = Frame::new(renderer, bounds.size());
+        let (w, h) = (bounds.width, bounds.height);
+        f.fill_rectangle(Point::ORIGIN, Size::new(w, h), well());
+        let lit = if self.muted { 0.0 } else { self.frac };
+        let band = |at: f32| {
+            if at < 0.72 {
+                signal()
+            } else if at < 0.80 {
+                mix(signal(), amber(), 0.5)
+            } else if at < 0.90 {
+                amber()
+            } else if at < 0.95 {
+                mix(amber(), danger(), 0.5)
+            } else {
+                danger()
+            }
+        };
+        if self.segments {
+            let n = (w / 5.0).floor().max(1.0) as usize;
+            let seg = w / n as f32;
+            let lit_n = (lit * n as f32).round() as usize;
+            for k in 0..n {
+                if k < lit_n {
+                    f.fill_rectangle(
+                        Point::new(seg * k as f32, 0.0),
+                        Size::new((seg - 1.5).max(1.0), h),
+                        band((k as f32 + 0.5) / n as f32),
+                    );
+                }
+            }
+        } else {
+            for (from, to, color) in [
+                (0.0_f32, 0.72_f32, signal()),
+                (0.72, 0.80, mix(signal(), amber(), 0.5)),
+                (0.80, 0.90, amber()),
+                (0.90, 0.95, mix(amber(), danger(), 0.5)),
+                (0.95, 1.0, danger()),
+            ] {
+                let (lo, hi) = (from.min(lit), to.min(lit));
+                if hi - lo > 0.0005 {
+                    f.fill_rectangle(Point::new(w * lo, 0.0), Size::new(w * (hi - lo), h), color);
+                }
+            }
+        }
+        if let (Some(p), false) = (self.peak, self.muted) {
+            if p > 0.0 {
+                f.fill_rectangle(
+                    Point::new((w * p - 2.0).max(0.0), 0.0),
+                    Size::new(2.0, h),
+                    if p > 0.95 { danger() } else { Color::WHITE },
+                );
+            }
+        }
+        vec![f.into_geometry()]
     }
 }
