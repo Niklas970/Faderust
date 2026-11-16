@@ -39,9 +39,7 @@ const TABLE: &[(&str, &str)] = &[
         "A click plays the sound on the “Soundboard” strip. Set volume and outputs there.",
     ),
     ("An", "On"),
-    ("Grüner Rand an aktiven Ausgängen", "Green edge on active outputs"),
-    ("Grüner Rand an aktiven Geräten", "Green edge on active devices"),
-    ("Grüner Rand an aktiven Programmen", "Green edge on active programs"),
+    ("Grüner Rand bei Signal", "Green edge on signal"),
     (
         "Ausgabegeräte pro Programm gibt es nur unter Windows.",
         "Output devices per program exist only on Windows.",
