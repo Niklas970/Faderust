@@ -19,9 +19,22 @@
   Every output gets its own mix, devices may come and go while it runs, and Faderust brings its own virtual cables.
 </p>
 
+<p align="center"><b><a href="https://github.com/Niklas970/faderust/releases/latest">⬇ Download for Windows</a></b> · <a href="https://faderust.schmidhome.eu/">Website</a> · <a href="#installation">Installation</a></p>
+
 ![Faderust desk with devices, programs and three outputs](assets/screenshot.png)
 
 > **Alpha.** Faderust runs, but has hardly been tested on real hardware yet. Please report problems as an [issue](https://github.com/Niklas970/faderust/issues).
+
+## Why Faderust
+
+| | Faderust | Voicemeeter | EarTrumpet |
+|---|---|---|---|
+| Open source | MIT | no | MIT |
+| Separate mix per output | yes | yes | no |
+| Capture programs without a cable per program | yes | limited | no (volume only) |
+| Virtual cables | built in, no own kernel driver | own driver | no |
+| Noise suppression, EQ, gate, ducking | yes | partly | no |
+| Stream Deck plugin | yes | via third parties | no |
 
 ## What Faderust does
 
