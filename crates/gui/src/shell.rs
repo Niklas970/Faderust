@@ -118,6 +118,9 @@ pub struct Prefs {
     pub signal: String,
     /// No green edge around an output that carries signal.
     pub output_edge_off: bool,
+    /// The same for devices and for programs on the desk.
+    pub device_edge_off: bool,
+    pub program_edge_off: bool,
     /// "de", "en" or empty for the system language.
     pub lang: String,
     /// The window stays above all others.

@@ -40,6 +40,8 @@ const TABLE: &[(&str, &str)] = &[
     ),
     ("An", "On"),
     ("Grüner Rand an aktiven Ausgängen", "Green edge on active outputs"),
+    ("Grüner Rand an aktiven Geräten", "Green edge on active devices"),
+    ("Grüner Rand an aktiven Programmen", "Green edge on active programs"),
     (
         "Ausgabegeräte pro Programm gibt es nur unter Windows.",
         "Output devices per program exist only on Windows.",

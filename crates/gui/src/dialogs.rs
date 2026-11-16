@@ -848,6 +848,32 @@ fn design(app: &App) -> Element<'_, Message> {
                 edit(Edit::OutputEdge(false))
             ),
         ]),
+        h3("Grüner Rand an aktiven Geräten"),
+        segmented(vec![
+            (
+                "An".into(),
+                !app.prefs.device_edge_off,
+                edit(Edit::DeviceEdge(true))
+            ),
+            (
+                "Aus".into(),
+                app.prefs.device_edge_off,
+                edit(Edit::DeviceEdge(false))
+            ),
+        ]),
+        h3("Grüner Rand an aktiven Programmen"),
+        segmented(vec![
+            (
+                "An".into(),
+                !app.prefs.program_edge_off,
+                edit(Edit::ProgramEdge(true))
+            ),
+            (
+                "Aus".into(),
+                app.prefs.program_edge_off,
+                edit(Edit::ProgramEdge(false))
+            ),
+        ]),
         h3("Soundboard"),
         segmented(vec![
             (
