@@ -31,6 +31,43 @@ fn h3(label: impl Into<String>) -> Element<'static, Message> {
     .into()
 }
 
+/// A titled group in a card, so a wide dialog reads as a grid of blocks.
+fn card<'a>(
+    title: impl Into<String>,
+    content: impl Into<Element<'a, Message>>,
+) -> Element<'a, Message> {
+    container(
+        column![
+            text(tr(&title.into()).to_uppercase())
+                .size(12)
+                .font(BOLD)
+                .color(muted_color()),
+            content.into()
+        ]
+        .spacing(10),
+    )
+    .padding(14)
+    .width(Length::Fill)
+    .style(|_| container::Style {
+        background: Some(Background::Color(well())),
+        border: Border {
+            color: border(),
+            width: 1.0,
+            radius: 4.0.into(),
+        },
+        ..container::Style::default()
+    })
+    .into()
+}
+
+/// One column of cards; the portions set how wide it is next to the others.
+fn cards<'a>(portion: u16, items: Vec<Element<'a, Message>>) -> Element<'a, Message> {
+    column(items)
+        .spacing(12)
+        .width(Length::FillPortion(portion))
+        .into()
+}
+
 fn hint(label: impl Into<String>) -> Element<'static, Message> {
     text(label.into()).size(12).color(muted_color()).into()
 }
@@ -94,8 +131,9 @@ fn frame<'a>(
         .spacing(12),
     )
     .padding(20)
-    .width(width)
-    .max_height(if tall { 780.0 } else { 640.0 })
+    .width(Length::Fill)
+    .max_width(width)
+    .max_height(if tall { 780.0 } else { 760.0 })
     .style(|_| container::Style {
         background: Some(Background::Color(panel())),
         border: Border {
@@ -842,44 +880,61 @@ fn design(app: &App) -> Element<'_, Message> {
         ))
     });
     let lang_now = app.lang();
-    let body = column![
-        h3("Ansicht"),
+    let view_card = card(
+        "Ansicht",
         segmented(vec![
             (
                 "Pult".into(),
                 matches!(app.view, crate::View::Desk),
-                Message::SetView(crate::View::Desk)
+                Message::SetView(crate::View::Desk),
             ),
             (
                 "Matrix".into(),
                 matches!(app.view, crate::View::Matrix),
-                Message::SetView(crate::View::Matrix)
+                Message::SetView(crate::View::Matrix),
             ),
         ]),
-        h3("Stille Programme ausblenden"),
-        segmented(hide),
-        hint("„Beendete“ blendet nur Programme aus, die geschlossen sind. Stille, aber geöffnete bleiben sichtbar."),
-        h3("Akzentfarbe"),
-        accents,
-        custom_color(
-            app.accent_input
-                .clone()
-                .unwrap_or_else(|| accent_now.clone()),
-            Target::Accent,
-            app.picker,
-            |t| edit(Edit::AccentHex(t)),
-        ),
-        h3("Signalfarbe"),
-        signals,
-        custom_color(
-            app.signal_input
-                .clone()
-                .unwrap_or_else(|| signal_now.clone()),
-            Target::Signal,
-            app.picker,
-            |t| edit(Edit::SignalHex(t)),
-        ),
-        h3("Grüner Rand bei Signal"),
+    );
+    let hide_card = card(
+        "Stille Programme ausblenden",
+        column![
+            segmented(hide),
+            hint("„Beendete“ blendet nur Programme aus, die geschlossen sind. Stille, aber geöffnete bleiben sichtbar."),
+        ]
+        .spacing(8),
+    );
+    let accent_card = card(
+        "Akzentfarbe",
+        column![
+            accents,
+            custom_color(
+                app.accent_input
+                    .clone()
+                    .unwrap_or_else(|| accent_now.clone()),
+                Target::Accent,
+                app.picker,
+                |t| edit(Edit::AccentHex(t)),
+            ),
+        ]
+        .spacing(10),
+    );
+    let signal_card = card(
+        "Signalfarbe",
+        column![
+            signals,
+            custom_color(
+                app.signal_input
+                    .clone()
+                    .unwrap_or_else(|| signal_now.clone()),
+                Target::Signal,
+                app.picker,
+                |t| edit(Edit::SignalHex(t)),
+            ),
+        ]
+        .spacing(10),
+    );
+    let edge_card = card(
+        "Grüner Rand bei Signal",
         row![
             check(!app.prefs.output_edge_off)
                 .label(tr("Ausgänge"))
@@ -892,7 +947,30 @@ fn design(app: &App) -> Element<'_, Message> {
                 .on_toggle(|v| edit(Edit::ProgramEdge(v))),
         ]
         .spacing(18),
-        h3("Bausteine"),
+    );
+    let fader_card = card(
+        "Fader",
+        column![
+            check(app.prefs.cap_square)
+                .label(tr("Eckige Fader-Kappe"))
+                .on_toggle(|v| edit(Edit::CapSquare(v))),
+            check(!app.prefs.scale_off)
+                .label(tr("Skala am Fader"))
+                .on_toggle(|v| edit(Edit::Scale(v))),
+            check(app.prefs.zero_mark)
+                .label(tr("Nullstrich am Fader"))
+                .on_toggle(|v| edit(Edit::ZeroMark(v))),
+            check(!app.prefs.glow_off)
+                .label(tr("Leuchten am Fader"))
+                .on_toggle(|v| edit(Edit::Glow(v))),
+            check(app.prefs.readout_display)
+                .label(tr("Wert im Display"))
+                .on_toggle(|v| edit(Edit::ReadoutDisplay(v))),
+        ]
+        .spacing(6),
+    );
+    let meter_card = card(
+        "Pegel",
         column![
             check(app.prefs.meter_segments)
                 .label(tr("LED-Segmente statt Balken"))
@@ -900,64 +978,72 @@ fn design(app: &App) -> Element<'_, Message> {
             check(!app.prefs.peak_off)
                 .label(tr("Spitzenwert-Marke"))
                 .on_toggle(|v| edit(Edit::PeakMark(v))),
-            check(app.prefs.zero_mark)
-                .label(tr("Nullstrich am Fader"))
-                .on_toggle(|v| edit(Edit::ZeroMark(v))),
-            check(app.prefs.readout_display)
-                .label(tr("Wert im Display"))
-                .on_toggle(|v| edit(Edit::ReadoutDisplay(v))),
             check(!app.prefs.matrix_meters_off)
                 .label(tr("Pegelbalken in der Matrix"))
                 .on_toggle(|v| edit(Edit::MatrixMeters(v))),
         ]
         .spacing(6),
-        h3("Soundboard"),
-        segmented(vec![
-            (
-                "An".into(),
-                app.prefs.soundboard,
-                edit(Edit::Soundboard(true))
-            ),
-            (
-                "Aus".into(),
-                !app.prefs.soundboard,
-                edit(Edit::Soundboard(false))
-            ),
-        ]),
-        h3("Lautstärke-Anzeige"),
-        check(!app.prefs.osd_off)
-            .label(tr("Kurze Einblendung am Bildschirmrand bei Stream Deck"))
-            .on_toggle(|v| edit(Edit::Osd(v))),
-        h3("Tray-Symbol"),
-        check(app.prefs.tray_popup)
-            .label(tr("Klick öffnet einen kleinen Mixer neben der Taskbar"))
-            .on_toggle(|v| edit(Edit::TrayPopup(v))),
-        h3("Helligkeit"),
-        segmented(vec![
-            (
-                "Wie Windows".into(),
-                mode_now == "system",
-                edit(Edit::Mode("system"))
-            ),
-            (
-                "Hell".into(),
-                mode_now == "light",
-                edit(Edit::Mode("light"))
-            ),
-            (
-                "Dunkel".into(),
-                mode_now == "dark",
-                edit(Edit::Mode("dark"))
-            ),
-        ]),
-        h3("Sprache"),
-        segmented(vec![
-            ("English".into(), lang_now == "en", edit(Edit::Lang("en"))),
-            ("Deutsch".into(), lang_now == "de", edit(Edit::Lang("de"))),
-        ]),
+    );
+    let extras_card = card(
+        "Fenster",
+        column![
+            text(tr("Soundboard")).size(13).color(text_color()),
+            segmented(vec![
+                (
+                    "An".into(),
+                    app.prefs.soundboard,
+                    edit(Edit::Soundboard(true))
+                ),
+                (
+                    "Aus".into(),
+                    !app.prefs.soundboard,
+                    edit(Edit::Soundboard(false))
+                ),
+            ]),
+            check(!app.prefs.osd_off)
+                .label(tr("Kurze Einblendung am Bildschirmrand bei Stream Deck"))
+                .on_toggle(|v| edit(Edit::Osd(v))),
+            check(app.prefs.tray_popup)
+                .label(tr("Klick öffnet einen kleinen Mixer neben der Taskbar"))
+                .on_toggle(|v| edit(Edit::TrayPopup(v))),
+        ]
+        .spacing(8),
+    );
+    let look_card = card(
+        "Helligkeit",
+        column![
+            segmented(vec![
+                (
+                    "Wie Windows".into(),
+                    mode_now == "system",
+                    edit(Edit::Mode("system"))
+                ),
+                (
+                    "Hell".into(),
+                    mode_now == "light",
+                    edit(Edit::Mode("light"))
+                ),
+                (
+                    "Dunkel".into(),
+                    mode_now == "dark",
+                    edit(Edit::Mode("dark"))
+                ),
+            ]),
+            segmented(vec![
+                ("English".into(), lang_now == "en", edit(Edit::Lang("en"))),
+                ("Deutsch".into(), lang_now == "de", edit(Edit::Lang("de"))),
+            ]),
+        ]
+        .spacing(8),
+    );
+    let body = row![
+        cards(1, vec![view_card, hide_card, look_card]),
+        cards(1, vec![accent_card, signal_card, edge_card]),
+        cards(1, vec![fader_card, meter_card, extras_card]),
     ]
-    .spacing(10);
-    frame("Design".into(), 480.0, true, body.into(), no_footer())
+    .spacing(12)
+    .align_y(Vertical::Top);
+    frame("Design".into(), 1180.0, false, body.into(), no_footer())
 }
 
 pub fn tip<'a>(
@@ -1015,7 +1101,7 @@ fn custom_color(
     let head = row![
         text("Eigene Farbe").size(13).color(muted_color()),
         swatch,
-        text_input("#rrggbb", &value).on_input(on_input).width(100),
+        text_input("#rrggbb", &value).on_input(on_input).width(84),
         btn(
             if open.is_some() {
                 "Farbwähler schließen"
@@ -1026,7 +1112,7 @@ fn custom_color(
             false
         ),
     ]
-    .spacing(10)
+    .spacing(8)
     .align_y(Vertical::Center);
     match open {
         Some((_, hsv)) => column![
@@ -1392,47 +1478,60 @@ fn settings(app: &App) -> Element<'_, Message> {
             col.into()
         }
     };
-    let body = column![
-        error_line(app),
-        h3("Eingänge"),
-        inputs,
-        btn("+ Eingang", edit(Edit::InAdd), false),
-        h3("Ausgänge"),
-        outputs,
-        btn("+ Ausgang", edit(Edit::OutAdd), false),
-        mic_section(app),
-        h3("Start"),
-        check(app.autostart)
-            .label(tr("Mit Windows starten (im Tray, ohne Fenster)"))
-            .on_toggle(|v| edit(Edit::Autostart(v))),
-        h3("Faderust Kabel"),
-        cable_section,
-        h3("Stream Deck"),
-        deck_section(app),
-        h3("Debug-Modus"),
-        check(app.prefs.debug)
-            .label(tr("Messungen, Selbsttest und Protokoll einschalten"))
-            .on_toggle(|v| edit(Edit::Debug(v))),
-        hint("Aus spart Leistung: dann laufen keine Messungen (CPU je Thread, Kabel, Zeiten) und es werden keine Zeilen dafür geschrieben."),
-    ]
-    .spacing(10);
-    let body = if app.prefs.debug {
-        body.push(h3("Selbsttest")).push(
-            row![
-                hint("Prüft Geräte, Puffer, Fernsteuerung und Plugin."),
-                space().width(Length::Fill),
-                btn("Starten", Message::Open(Some(Dialog::Selftest)), false),
-                btn("Protokoll", Message::Open(Some(Dialog::Log)), false),
-            ]
-            .spacing(8)
-            .align_y(Vertical::Center),
-        )
-    } else {
-        body
+    let debug_card = {
+        let mut c = column![
+            check(app.prefs.debug)
+                .label(tr("Messungen, Selbsttest und Protokoll einschalten"))
+                .on_toggle(|v| edit(Edit::Debug(v))),
+            hint("Aus spart Leistung: dann laufen keine Messungen (CPU je Thread, Kabel, Zeiten) und es werden keine Zeilen dafür geschrieben."),
+        ]
+        .spacing(8);
+        if app.prefs.debug {
+            c = c.push(
+                row![
+                    hint("Prüft Geräte, Puffer, Fernsteuerung und Plugin."),
+                    space().width(Length::Fill),
+                    btn("Starten", Message::Open(Some(Dialog::Selftest)), false),
+                    btn("Protokoll", Message::Open(Some(Dialog::Log)), false),
+                ]
+                .spacing(8)
+                .align_y(Vertical::Center),
+            );
+        }
+        card("Debug-Modus", c)
     };
+    let left = cards(
+        3,
+        vec![
+            card(
+                "Eingänge",
+                column![inputs, btn("+ Eingang", edit(Edit::InAdd), false)].spacing(10),
+            ),
+            card(
+                "Ausgänge",
+                column![outputs, btn("+ Ausgang", edit(Edit::OutAdd), false)].spacing(10),
+            ),
+        ],
+    );
+    let right = cards(
+        2,
+        vec![
+            card("Programm-Mikro", mic_section(app)),
+            card(
+                "Start",
+                check(app.autostart)
+                    .label(tr("Mit Windows starten (im Tray, ohne Fenster)"))
+                    .on_toggle(|v| edit(Edit::Autostart(v))),
+            ),
+            card("Faderust Kabel", cable_section),
+            card("Stream Deck", deck_section(app)),
+            debug_card,
+        ],
+    );
+    let body = column![error_line(app), row![left, right].spacing(12)].spacing(10);
     frame(
         "Geräte".into(),
-        760.0,
+        1180.0,
         true,
         body.into(),
         hint("Änderungen werden automatisch gespeichert."),

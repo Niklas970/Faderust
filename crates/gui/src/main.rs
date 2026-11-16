@@ -385,6 +385,9 @@ pub enum Edit {
     ZeroMark(bool),
     ReadoutDisplay(bool),
     MatrixMeters(bool),
+    CapSquare(bool),
+    Scale(bool),
+    Glow(bool),
     Osd(bool),
     Debug(bool),
     TrayPopup(bool),
@@ -2368,6 +2371,9 @@ impl App {
             Edit::ZeroMark(on) => self.set_look(|p| p.zero_mark = on),
             Edit::ReadoutDisplay(on) => self.set_look(|p| p.readout_display = on),
             Edit::MatrixMeters(on) => self.set_look(|p| p.matrix_meters_off = !on),
+            Edit::CapSquare(on) => self.set_look(|p| p.cap_square = on),
+            Edit::Scale(on) => self.set_look(|p| p.scale_off = !on),
+            Edit::Glow(on) => self.set_look(|p| p.glow_off = !on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::Debug(on) => self.set_look(|p| p.debug = on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),
@@ -2945,6 +2951,9 @@ impl App {
             segments: self.prefs.meter_segments,
             peak: !self.prefs.peak_off,
             zero_mark: self.prefs.zero_mark,
+            square_cap: self.prefs.cap_square,
+            scale: !self.prefs.scale_off,
+            glow: !self.prefs.glow_off,
         }
     }
 

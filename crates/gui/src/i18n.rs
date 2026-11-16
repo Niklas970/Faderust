@@ -46,6 +46,13 @@ const TABLE: &[(&str, &str)] = &[
     ("Nullstrich am Fader", "0 dB line on the fader"),
     ("Wert im Display", "Value in a display"),
     ("Pegelbalken in der Matrix", "Level bars in the matrix"),
+    ("Eckige Fader-Kappe", "Square fader cap"),
+    ("Skala am Fader", "Scale beside the fader"),
+    ("Leuchten am Fader", "Glow on the fader"),
+    ("Fader", "Faders"),
+    ("Pegel", "Meters"),
+    ("Farben", "Colors"),
+    ("Fenster", "Window"),
     (
         "Ausgabegeräte pro Programm gibt es nur unter Windows.",
         "Output devices per program exist only on Windows.",
