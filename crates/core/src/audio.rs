@@ -37,6 +37,21 @@ const VISIBLE_EVERY: Duration = Duration::from_millis(250);
 /// Fader moves are saved at most this often.
 const SAVE_EVERY: Duration = Duration::from_secs(2);
 
+/// What the on-screen note shows after a remote request (the request
+/// itself came first, so the state is already the new one).
+pub enum OsdFor {
+    /// One input on one output: level or mute.
+    Cell(usize, usize),
+    /// A desk strip: its loudest output, or mute.
+    Strip(usize),
+    /// The master of an output.
+    Master(usize),
+    /// Mute of a whole input.
+    InputMute(usize),
+    MasterMute(usize),
+    Text(String, String),
+}
+
 pub enum Command {
     SetGain(usize, usize, f32),
     SetMuted(usize, usize, bool),
@@ -58,6 +73,8 @@ pub enum Command {
     /// The gains in the config changed as a whole (preset loaded).
     ApplyGains,
     Reconfigure,
+    /// Shows the on-screen note for what a remote request just changed.
+    Osd(OsdFor),
 }
 
 /// A message for the user, sent as the `notice` event.
@@ -423,7 +440,11 @@ fn run(
                                 if let Some(e) = &engine {
                                     e.matrix.set_gain_db(i, o, g.db);
                                 }
-                                host.osd(&names(&config, Some(i), Some(o)), &osd_level(g.db));
+                                host.osd(
+                                    &names(&config, Some(i), Some(o)),
+                                    &osd_level(g.db),
+                                    Some(g.db),
+                                );
                                 dirty_since.get_or_insert_with(Instant::now);
                             }
                         }
@@ -444,7 +465,11 @@ fn run(
                                 if let Some(e) = &engine {
                                     e.matrix.set_master_db(o, out.master.db);
                                 }
-                                host.osd(&out.label, &osd_level(out.master.db));
+                                host.osd(
+                                    &out.label,
+                                    &osd_level(out.master.db),
+                                    Some(out.master.db),
+                                );
                                 dirty_since.get_or_insert_with(Instant::now);
                             }
                         }
@@ -463,7 +488,11 @@ fn run(
                                     .map(|g| g.db)
                                     .fold(-120.0, f32::max);
                                 let label = c.inputs.get(i).map(|x| x.label.clone());
-                                host.osd(&label.unwrap_or_default(), &osd_level(loudest));
+                                host.osd(
+                                    &label.unwrap_or_default(),
+                                    &osd_level(loudest),
+                                    Some(loudest),
+                                );
                                 dirty_since.get_or_insert_with(Instant::now);
                             }
                         }
@@ -487,12 +516,17 @@ fn run(
                                 dirty_since.get_or_insert_with(Instant::now);
                             }
                         }
+                        Command::Osd(what) => show_osd(host.as_ref(), &config, what),
                         Command::ToggleMuted(i, o) => {
                             if let Some(g) = gain_mut(&config, i, o, |g| g.muted = !g.muted) {
                                 if let Some(e) = &engine {
                                     e.matrix.set_muted(i, o, g.muted);
                                 }
-                                host.osd(&names(&config, Some(i), Some(o)), &osd_mute(g.muted));
+                                host.osd(
+                                    &names(&config, Some(i), Some(o)),
+                                    &osd_mute(g.muted),
+                                    None,
+                                );
                                 dirty_since.get_or_insert_with(Instant::now);
                             }
                         }
@@ -983,6 +1017,58 @@ fn gain_mut(
     Some(*g)
 }
 
+/// The on-screen note for a remote request that just changed something.
+fn show_osd(host: &dyn Host, config: &Mutex<Config>, what: OsdFor) {
+    let (label, text, level) = {
+        let c = config.lock().unwrap_or_else(|e| e.into_inner());
+        let shown = |label: String, muted: bool, db: f32| {
+            if muted {
+                (label, osd_mute(true), None)
+            } else {
+                (label, osd_level(db), Some(db))
+            }
+        };
+        match what {
+            OsdFor::Cell(i, o) => {
+                let Some(g) = c.gains.get(i).and_then(|r| r.get(o)) else {
+                    return;
+                };
+                let (i, o) = (c.inputs.get(i), c.outputs.get(o));
+                let label = match (i, o) {
+                    (Some(i), Some(o)) => format!("{} → {}", i.label, o.label),
+                    _ => String::new(),
+                };
+                shown(label, g.muted, g.db)
+            }
+            OsdFor::Strip(i) => {
+                let (Some(input), Some(row)) = (c.inputs.get(i), c.gains.get(i)) else {
+                    return;
+                };
+                let loudest = row
+                    .iter()
+                    .filter(|g| !g.muted)
+                    .map(|g| g.db)
+                    .fold(-120.0, f32::max);
+                shown(input.label.clone(), input.muted, loudest)
+            }
+            OsdFor::Master(o) => {
+                let Some(out) = c.outputs.get(o) else { return };
+                shown(out.label.clone(), out.master.muted, out.master.db)
+            }
+            OsdFor::InputMute(i) => {
+                let Some(input) = c.inputs.get(i) else { return };
+                (input.label.clone(), osd_mute(input.muted), None)
+            }
+            OsdFor::MasterMute(o) => {
+                let Some(out) = c.outputs.get(o) else { return };
+                (out.label.clone(), osd_mute(out.master.muted), None)
+            }
+            OsdFor::Text(label, text) => (label, text, None),
+        }
+    };
+    host.osd(&label, &text, level);
+}
+
 /// "Input → Output" for the on-screen note.
 fn names(config: &Mutex<Config>, input: Option<usize>, output: Option<usize>) -> String {
     let c = config.lock().unwrap_or_else(|e| e.into_inner());
@@ -1263,6 +1349,64 @@ mod tests {
             assert!((dev[t] - out_dev[t]).abs() < 1.5, "device t={t}");
             assert!((prog[t] - out_prog[t]).abs() < 1.5, "program t={t}");
         }
+    }
+
+    #[test]
+    fn remote_note_shows_the_new_state() {
+        use super::{show_osd, OsdFor};
+        use crate::config::{Config, InputEntry, OutputEntry};
+        use crate::Host;
+        use std::sync::Mutex;
+        #[derive(Default)]
+        struct Rec(Mutex<Vec<(String, String, Option<f32>)>>);
+        impl Host for Rec {
+            fn state(&self, _: UiState) {}
+            fn notice(&self, _: super::Notice) {}
+            fn visible(&self) -> bool {
+                true
+            }
+            fn osd(&self, label: &str, text: &str, level: Option<f32>) {
+                self.0
+                    .lock()
+                    .unwrap()
+                    .push((label.into(), text.into(), level));
+            }
+        }
+        let mut config = Config::default();
+        config.inputs.push(InputEntry {
+            label: "Mikro".into(),
+            device: String::new(),
+            fx: Default::default(),
+            duck: Default::default(),
+            muted: false,
+        });
+        config.outputs.push(OutputEntry {
+            label: "Box".into(),
+            device: String::new(),
+            buffer_ms: 30,
+            master: Default::default(),
+            release_secs: 30,
+        });
+        config.gains = vec![vec![Gain {
+            db: -6.0,
+            muted: false,
+        }]];
+        let config = Mutex::new(config);
+        let host = Rec::default();
+        show_osd(&host, &config, OsdFor::Cell(0, 0));
+        config.lock().unwrap().gains[0][0].muted = true;
+        show_osd(&host, &config, OsdFor::Cell(0, 0));
+        config.lock().unwrap().inputs[0].muted = true;
+        show_osd(&host, &config, OsdFor::InputMute(0));
+        // Unknown strips show nothing.
+        show_osd(&host, &config, OsdFor::Master(7));
+        let seen = host.0.lock().unwrap().clone();
+        assert_eq!(seen.len(), 3);
+        assert_eq!(seen[0].0, "Mikro → Box");
+        assert_eq!(seen[0].2, Some(-6.0));
+        assert_eq!(seen[1].2, None);
+        assert_eq!(seen[2].0, "Mikro");
+        assert_eq!(seen[2].2, None);
     }
 
     #[test]

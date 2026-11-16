@@ -26,6 +26,7 @@ pub trait Host: Send + Sync + 'static {
     /// Whether the window is on screen; hidden windows get no snapshots.
     fn visible(&self) -> bool;
     /// A short on-screen note for a change made by a remote control: the
-    /// name of the strip or output and its new level (or mute state).
-    fn osd(&self, _label: &str, _text: &str) {}
+    /// name of the strip or output and its new level (or mute state);
+    /// `level` (dB) draws a bar under the text.
+    fn osd(&self, _label: &str, _text: &str, _level: Option<f32>) {}
 }
