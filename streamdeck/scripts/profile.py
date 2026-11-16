@@ -13,7 +13,7 @@ import zipfile
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 OUT = os.path.join(ROOT, "com.niklas970.faderust.sdPlugin", "Faderust.streamDeckProfile")
-PLUGIN = {"Name": "Faderust", "UUID": "com.niklas970.faderust", "Version": "0.3.5.0"}
+PLUGIN = {"Name": "Faderust", "UUID": "com.niklas970.faderust", "Version": "0.3.6.0"}
 NS = uuid.UUID("6f1d3c52-7a0e-4b57-9d2a-0f4d1e9c3a11")  # fixed, so the file is reproducible
 
 
@@ -23,9 +23,10 @@ def key(name, action, settings=None, states=1):
         "LinkedTitle": True,
         "Name": name,
         "Plugin": PLUGIN,
+        "Resources": None,
         "Settings": settings or {},
         "State": 0,
-        "States": [{} for _ in range(states)],
+        "States": [{"FontFamily": "", "FontSize": 11, "FontStyle": "", "FontUnderline": False, "OutlineThickness": 2, "ShowTitle": True, "TitleAlignment": "bottom", "TitleColor": "#ffffff"} for _ in range(states)],
         "UUID": f"com.niklas970.faderust.{action}",
     }
 
@@ -48,12 +49,23 @@ root = {
     "Device": {"Model": "20GAA9902", "UUID": ""},
     "Name": "Faderust",
     "Pages": {"Current": page, "Default": page, "Pages": [page]},
-    "Version": "2.0",
+    "Version": "3.0",
+}
+package = {
+    "AppVersion": "7.1.0",
+    "DeviceModel": "20GAA9902",
+    "FormatVersion": 1,
+    "OSType": "windows",
+    "RequiredPlugins": ["com.niklas970.faderust"],
 }
 pagefile = {"Controllers": [{"Type": "Keypad", "Actions": actions}], "Icon": "", "Name": ""}
 
 with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as z:
-    for name, data in ((f"{folder}/manifest.json", root), (f"{folder}/Profiles/{page}/manifest.json", pagefile)):
+    for name, data in (
+        ("package.json", package),
+        (f"{folder}/manifest.json", root),
+        (f"{folder}/Profiles/{page}/manifest.json", pagefile),
+    ):
         info = zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0))
         z.writestr(info, json.dumps(data, indent=2, ensure_ascii=False))
 print("wrote", os.path.relpath(OUT))
