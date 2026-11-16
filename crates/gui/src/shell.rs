@@ -120,6 +120,9 @@ pub struct Prefs {
     pub output_edge_off: bool,
     /// Debug mode: measurements, self-test and log are shown and written.
     pub debug: bool,
+    /// The same for devices and for programs on the desk.
+    pub device_edge_off: bool,
+    pub program_edge_off: bool,
     /// "de", "en" or empty for the system language.
     pub lang: String,
     /// The window stays above all others.

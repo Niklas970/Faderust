@@ -38,6 +38,10 @@ pub struct Fx {
     pub high_db: f32,
     pub gate: bool,
     pub gate_db: f32,
+    pub echo: bool,
+    pub echo_ms: f32,
+    pub echo_feedback: f32,
+    pub echo_mix: f32,
 }
 
 impl Default for Fx {
@@ -57,6 +61,10 @@ impl From<FxSettings> for Fx {
             high_db: s.high_db,
             gate: s.gate,
             gate_db: s.gate_db,
+            echo: s.echo,
+            echo_ms: s.echo_ms,
+            echo_feedback: s.echo_feedback,
+            echo_mix: s.echo_mix,
         }
     }
 }
@@ -72,6 +80,10 @@ impl From<Fx> for FxSettings {
             high_db: f.high_db,
             gate: f.gate,
             gate_db: f.gate_db,
+            echo: f.echo,
+            echo_ms: f.echo_ms,
+            echo_feedback: f.echo_feedback,
+            echo_mix: f.echo_mix,
         }
     }
 }

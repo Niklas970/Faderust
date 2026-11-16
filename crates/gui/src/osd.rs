@@ -14,18 +14,21 @@ mod imp {
     use windows::Win32::UI::WindowsAndMessaging::*;
 
     const WIDTH: i32 = 260;
-    const HEIGHT: i32 = 74;
+    const HEIGHT: i32 = 88;
     const SHOW_MS: u32 = 1400;
     const TIMER: usize = 1;
     const SHOW: u32 = WM_APP + 1;
 
-    static TEXT: Mutex<(String, String)> = Mutex::new((String::new(), String::new()));
+    /// Label, text and the level (dB) of the bar, if any.
+    type Note = (String, String, Option<f32>);
+    static TEXT: Mutex<Note> = Mutex::new((String::new(), String::new(), None));
     static WINDOW: AtomicIsize = AtomicIsize::new(0);
     static PENDING: AtomicBool = AtomicBool::new(false);
     static START: Once = Once::new();
 
-    pub fn show(label: &str, text: &str) {
-        *TEXT.lock().unwrap_or_else(|e| e.into_inner()) = (label.to_string(), text.to_string());
+    pub fn show(label: &str, text: &str, level: Option<f32>) {
+        *TEXT.lock().unwrap_or_else(|e| e.into_inner()) =
+            (label.to_string(), text.to_string(), level);
         PENDING.store(true, Ordering::Release);
         START.call_once(|| {
             let _ = std::thread::Builder::new()
@@ -141,7 +144,7 @@ mod imp {
     }
 
     unsafe fn paint(dc: HDC) {
-        let (label, text) = TEXT.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let (label, text, level) = TEXT.lock().unwrap_or_else(|e| e.into_inner()).clone();
         let rect = RECT {
             left: 0,
             top: 0,
@@ -198,11 +201,43 @@ mod imp {
                 left: 12,
                 top: 30,
                 right: WIDTH - 12,
-                bottom: HEIGHT - 6,
+                bottom: HEIGHT - 20,
             };
             let mut t = wide(&text);
             DrawTextW(dc, &mut t, &mut r, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
             SelectObject(dc, old);
+            // The level as a bar: -60 dB empty, +12 dB full.
+            if let Some(db) = level {
+                let (left, right, top, bottom) = (12, WIDTH - 12, HEIGHT - 16, HEIGHT - 10);
+                let track = CreateSolidBrush(COLORREF(0x303030));
+                FillRect(
+                    dc,
+                    &RECT {
+                        left,
+                        top,
+                        right,
+                        bottom,
+                    },
+                    track,
+                );
+                let _ = DeleteObject(track.into());
+                let fraction = ((db + 60.0) / 72.0).clamp(0.0, 1.0);
+                let fill_to = left + ((right - left) as f32 * fraction) as i32;
+                if fill_to > left {
+                    let fill = CreateSolidBrush(COLORREF(0x76e600));
+                    FillRect(
+                        dc,
+                        &RECT {
+                            left,
+                            top,
+                            right: fill_to,
+                            bottom,
+                        },
+                        fill,
+                    );
+                    let _ = DeleteObject(fill.into());
+                }
+            }
             let _ = DeleteObject(small.into());
             let _ = DeleteObject(big.into());
         }
@@ -216,13 +251,13 @@ pub fn set_enabled(on: bool) {
     ENABLED.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
-/// Shows `label` and `text` for a moment.
-pub fn show(label: &str, text: &str) {
+/// Shows `label` and `text` for a moment, with a bar for `level` (dB).
+pub fn show(label: &str, text: &str, level: Option<f32>) {
     if !ENABLED.load(std::sync::atomic::Ordering::Relaxed) {
         return;
     }
     #[cfg(windows)]
-    imp::show(label, text);
+    imp::show(label, text, level);
     #[cfg(not(windows))]
-    let _ = (label, text);
+    let _ = (label, text, level);
 }

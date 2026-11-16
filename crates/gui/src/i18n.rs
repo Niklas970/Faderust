@@ -39,7 +39,7 @@ const TABLE: &[(&str, &str)] = &[
         "A click plays the sound on the “Soundboard” strip. Set volume and outputs there.",
     ),
     ("An", "On"),
-    ("Grüner Rand an aktiven Ausgängen", "Green edge on active outputs"),
+    ("Grüner Rand bei Signal", "Green edge on signal"),
     (
         "Ausgabegeräte pro Programm gibt es nur unter Windows.",
         "Output devices per program exist only on Windows.",
@@ -162,6 +162,14 @@ const TABLE: &[(&str, &str)] = &[
         "Cuts hum and footstep rumble at the bottom.",
     ),
     ("Schwelle", "Threshold"),
+    ("Echo-Effekt", "Echo effect"),
+    ("Zeit", "Time"),
+    ("Wiederholungen", "Repeats"),
+    ("Anteil", "Amount"),
+    (
+        "Fügt der Stimme ein Echo hinzu. Wiederholungen: wie oft es nachhallt.",
+        "Adds an echo to the voice. Repeats: how long it keeps ringing.",
+    ),
     ("Selbsttest", "Self-test"),
     ("Debug-Modus", "Debug mode"),
     ("Messungen, Selbsttest und Protokoll einschalten", "Turn on measurements, self-test and log"),

@@ -160,6 +160,17 @@ fn fx(app: &App, i: usize) -> Element<'_, Message> {
         .spacing(10)
         .align_y(Vertical::Center)
     };
+    let echo_row = |name: &'static str, value: String, bar: Element<'static, Message>| {
+        row![
+            container(text(name).size(13).color(text_color())).width(150),
+            bar,
+            container(text(value).font(MONO).size(13).color(text_color()))
+                .width(70)
+                .align_right(Length::Fill),
+        ]
+        .spacing(10)
+        .align_y(Vertical::Center)
+    };
     let body = column![
         h3("Rauschfilter"),
         check(f.denoise)
@@ -244,6 +255,37 @@ fn fx(app: &App, i: usize) -> Element<'_, Message> {
             }),
         ],
         hint("Der Balken zeigt den Pegel, der Strich die Schwelle."),
+        h3("Echo"),
+        check(f.echo)
+            .label(tr("Echo-Effekt"))
+            .on_toggle(move |v| edit(Edit::Echo(i, v))),
+        echo_row(
+            "Zeit",
+            format!("{} ms", f.echo_ms.round()),
+            slider(50.0..=1000.0, f.echo_ms, move |v| edit(Edit::EchoMs(
+                i,
+                (v / 10.0).round() * 10.0
+            )))
+            .into()
+        ),
+        echo_row(
+            "Wiederholungen",
+            format!("{} %", (f.echo_feedback * 100.0).round()),
+            slider(0.0..=0.8, f.echo_feedback, move |v| edit(
+                Edit::EchoFeedback(i, (v * 20.0).round() / 20.0)
+            ))
+            .into()
+        ),
+        echo_row(
+            "Anteil",
+            format!("{} %", (f.echo_mix * 100.0).round()),
+            slider(0.0..=1.0, f.echo_mix, move |v| edit(Edit::EchoMix(
+                i,
+                (v * 20.0).round() / 20.0
+            )))
+            .into()
+        ),
+        hint("Fügt der Stimme ein Echo hinzu. Wiederholungen: wie oft es nachhallt."),
         h3("Ducking"),
         duck(app, i),
     ]
@@ -835,19 +877,19 @@ fn design(app: &App) -> Element<'_, Message> {
             app.picker,
             |t| edit(Edit::SignalHex(t)),
         ),
-        h3("Grüner Rand an aktiven Ausgängen"),
-        segmented(vec![
-            (
-                "An".into(),
-                !app.prefs.output_edge_off,
-                edit(Edit::OutputEdge(true))
-            ),
-            (
-                "Aus".into(),
-                app.prefs.output_edge_off,
-                edit(Edit::OutputEdge(false))
-            ),
-        ]),
+        h3("Grüner Rand bei Signal"),
+        row![
+            check(!app.prefs.output_edge_off)
+                .label(tr("Ausgänge"))
+                .on_toggle(|v| edit(Edit::OutputEdge(v))),
+            check(!app.prefs.device_edge_off)
+                .label(tr("Geräte"))
+                .on_toggle(|v| edit(Edit::DeviceEdge(v))),
+            check(!app.prefs.program_edge_off)
+                .label(tr("Programme"))
+                .on_toggle(|v| edit(Edit::ProgramEdge(v))),
+        ]
+        .spacing(18),
         h3("Soundboard"),
         segmented(vec![
             (

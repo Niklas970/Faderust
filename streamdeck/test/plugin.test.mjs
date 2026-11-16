@@ -237,6 +237,45 @@ test("device key sets the Windows default", async () => {
   });
 });
 
+test("all-mute key mutes every output and lights up when all are muted", async () => {
+  appear("panic", "panic", {});
+  // The state has one master unmuted: not all muted yet.
+  assert.equal((await sd.next((m) => m.event === "setState" && m.context === "panic")).payload.state, 0);
+  event("keyDown", "panic", "panic", {});
+  assert.deepEqual(await fr.next((m) => m.type === "setMasterMuted" && m.output === 0), {
+    type: "setMasterMuted",
+    output: 0,
+    muted: true,
+  });
+  assert.deepEqual(await fr.next((m) => m.type === "setMasterMuted" && m.output === 1), {
+    type: "setMasterMuted",
+    output: 1,
+    muted: true,
+  });
+});
+
+test("level key sets a strip, a single fader or a master", async () => {
+  // The strip of "Mikro" plays on both outputs.
+  const strip = { input: 0, output: -1, db: -12 };
+  appear("level", "lstrip", strip);
+  assert.equal((await sd.next((m) => m.event === "setTitle" && m.context === "lstrip")).payload.title, "Mikro\n0.0 dB");
+  event("keyDown", "level", "lstrip", strip);
+  assert.deepEqual(await fr.next((m) => m.type === "setGain" && m.output === 0), { type: "setGain", input: 0, output: 0, db: -12 });
+  assert.deepEqual(await fr.next((m) => m.type === "setGain" && m.output === 1), { type: "setGain", input: 0, output: 1, db: -12 });
+
+  const master = { input: -1, output: 1, db: -20 };
+  appear("level", "lmaster", master);
+  assert.equal((await sd.next((m) => m.event === "setTitle" && m.context === "lmaster")).payload.title, "Kopfhörer\nStumm");
+  event("keyDown", "level", "lmaster", master);
+  assert.deepEqual(await fr.next((m) => m.type === "setMasterGain"), { type: "setMasterGain", output: 1, db: -20 });
+
+  const cell = { input: 1, output: 1 };
+  appear("level", "lcell", cell);
+  await sd.next((m) => m.event === "setTitle" && m.context === "lcell");
+  event("keyDown", "level", "lcell", cell);
+  assert.deepEqual(await fr.next((m) => m.type === "setGain"), { type: "setGain", input: 1, output: 1, db: 0 });
+});
+
 test("settings panel gets the lists", async () => {
   sd.send({ event: "propertyInspectorDidAppear", action: `${UUID}.mute`, context: "mute", device: "dev" });
   await sd.next((m) => m.event === "sendToPropertyInspector");
