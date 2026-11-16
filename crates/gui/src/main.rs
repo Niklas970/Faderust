@@ -11,6 +11,7 @@
 //! `FADERUST_SHOT=out.png` saves one screenshot after a moment and exits;
 //! `FADERUST_VIEW=matrix` and `FADERUST_DIALOG=<name>` and `FADERUST_MINI=1` pick what it shows.
 
+mod cpu;
 mod dialogs;
 mod fader;
 mod files;
@@ -1152,6 +1153,8 @@ impl App {
 impl App {
     fn new() -> (Self, Task<Message>) {
         let notices = Arc::new(Mutex::new(Vec::new()));
+        #[cfg(windows)]
+        cpu::start();
         let minimized = std::env::args().any(|a| a == shell::MINIMIZED_ARG);
         let visible: shell::Visible = Arc::new(AtomicBool::new(!minimized));
         let dir = config_dir();
