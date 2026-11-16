@@ -1,7 +1,7 @@
 {
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "Name": "Faderust",
-  "Version": "0.3.3.0",
+  "Version": "0.3.4.0",
   "Author": "Niklas970",
   "Description": "Steuert den Faderust-Mixer: Fader, Stummschalten, Presets und Windows-Standardgeräte.",
   "URL": "https://github.com/Niklas970/faderust",
@@ -165,6 +165,43 @@
         {
           "Image": "imgs/actions/device/active",
           "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Alles stumm",
+      "UUID": "com.niklas970.faderust.panic",
+      "Icon": "imgs/actions/mute/icon",
+      "Tooltip": "Schaltet alle Ausgänge stumm oder wieder ein. Leuchtet, solange alle stumm sind.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "imgs/actions/mute/on",
+          "TitleAlignment": "bottom"
+        },
+        {
+          "Image": "imgs/actions/mute/off",
+          "TitleAlignment": "bottom"
+        }
+      ]
+    },
+    {
+      "Name": "Pegel setzen",
+      "UUID": "com.niklas970.faderust.level",
+      "Icon": "imgs/actions/volume/icon",
+      "Tooltip": "Setzt einen Fader auf einen festen Pegel: Streifen, ein Ausgang oder ein Master.",
+      "PropertyInspectorPath": "ui/level.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "States": [
+        {
+          "Image": "imgs/actions/volume/key",
+          "TitleAlignment": "bottom",
+          "FontSize": 11
         }
       ]
     }
