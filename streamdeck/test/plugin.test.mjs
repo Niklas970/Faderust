@@ -306,6 +306,18 @@ test("group key moves the chosen strips and masters together", async () => {
   });
 });
 
+test("select keys pick faders for a group key that uses the selection", async () => {
+  appear("select", "sel0", { target: "s0" });
+  appear("select", "selc", { target: "clear" });
+  appear("group", "gsel", { selection: true, step: 5 });
+  event("keyDown", "select", "sel0", { target: "s0" });
+  assert.equal((await sd.next((m) => m.event === "setState" && m.context === "sel0" && m.payload.state === 1)).payload.state, 1);
+  event("keyDown", "group", "gsel", { selection: true, step: 5 });
+  assert.deepEqual(await fr.next((m) => m.type === "addStripGain"), { type: "addStripGain", input: 0, delta: 5 });
+  event("keyDown", "select", "selc", { target: "clear" });
+  assert.ok(await sd.next((m) => m.event === "setState" && m.context === "sel0" && m.payload.state === 0));
+});
+
 test("keys alert while Faderust is closed", async () => {
   fr.socket.close();
   await new Promise((r) => setTimeout(r, 200));

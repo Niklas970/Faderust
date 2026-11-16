@@ -15,7 +15,8 @@ Steuert Faderust vom Elgato Stream Deck. Braucht Stream Deck 7.1 oder neuer (Win
 | **Alles stumm** | – | Schaltet alle Ausgänge stumm oder wieder ein; leuchtet, solange alle stumm sind |
 | **Pegel setzen** | – | Setzt einen Streifen, einen Fader oder einen Master auf einen festen Pegel |
 | **Lauter / Leiser** | – | Eine Taste bewegt mehrere angehakte Streifen und Master gemeinsam; positiver Schritt lauter, negativer leiser (Standard 3 dB) |
-| **Faderust-Seite** / **Zurück** | – | Öffnet eine Seite (Profil „Faderust“) für das Stream Deck mit 15 Tasten: Zurück oben links, drei Presets, Alles stumm, fünf Streifen, drei Master sowie Leiser und Lauter für alle Master. Die Presets wählt man in der Seite aus. Beim Installieren fragt die Stream-Deck-Software, ob das Profil hinzugefügt werden soll |
+| **Auswählen** | – | Wählt einen Streifen oder Master aus (leuchtet, erneut drücken hebt auf); „Auswahl leeren“ hebt alle auf. „Lauter / Leiser“ mit „Auswahl verwenden“ bewegt genau diese Fader |
+| **Faderust-Seite** / **Zurück** | – | Öffnet eine Seite (Profil „Faderust“) für das Stream Deck mit 15 Tasten: Zurück oben links, drei Presets, Alles stumm, fünf Streifen und zwei Master zum Auswählen, Auswahl leeren sowie Leiser und Lauter für die Auswahl. Die Presets wählt man in der Seite aus. Beim Installieren fragt die Stream-Deck-Software, ob das Profil hinzugefügt werden soll |
 
 Eingänge, Ausgänge, Presets und Geräte wählt man im Einstellungsfenster der Aktion aus Listen, die Faderust liefert. Läuft Faderust nicht, zeigt die Taste ein Warnzeichen.
 

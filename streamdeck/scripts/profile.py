@@ -2,8 +2,8 @@
 """Builds com.niklas970.faderust.sdPlugin/Faderust.streamDeckProfile (page for a 15-key Stream Deck).
 
 Layout (5 x 3):  Zurück | Preset | Preset | Preset | Alles stumm
-                 Streifen 1 … 5
-                 Master 1 … 3 | Leiser | Lauter (beide für alle Master)
+                 Streifen 1 … 5 (auswählen)
+                 Master 1, 2 (auswählen) | Auswahl leeren | Leiser | Lauter (wirken auf die Auswahl)
 Run: python3 scripts/profile.py
 """
 import json
@@ -34,12 +34,13 @@ actions = {"0,0": key("Zurück", "back"), "4,0": key("Alles stumm", "panic", sta
 for i in range(3):
     actions[f"{i + 1},0"] = key(f"Preset {i + 1}", "preset", {}, 2)
 for i in range(5):
-    actions[f"{i},1"] = key(f"Streifen {i + 1}", "strip", {"input": i})
-for i in range(3):
-    actions[f"{i},2"] = key(f"Master {i + 1}", "master", {"output": i})
+    actions[f"{i},1"] = key(f"Streifen {i + 1}", "select", {"target": f"s{i}"}, 2)
+for i in range(2):
+    actions[f"{i},2"] = key(f"Master {i + 1}", "select", {"target": f"m{i}"}, 2)
+actions["2,2"] = key("Auswahl leeren", "select", {"target": "clear"}, 2)
 
-actions["3,2"] = key("Leiser", "group", {"masters": [0, 1, 2, 3], "step": -3})
-actions["4,2"] = key("Lauter", "group", {"masters": [0, 1, 2, 3], "step": 3})
+actions["3,2"] = key("Leiser", "group", {"selection": True, "step": -3})
+actions["4,2"] = key("Lauter", "group", {"selection": True, "step": 3})
 
 page = str(uuid.uuid5(NS, "page")).upper()
 folder = f"{str(uuid.uuid5(NS, 'profile')).upper()}.sdProfile"

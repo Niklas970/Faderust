@@ -223,6 +223,29 @@
       ]
     },
     {
+      "Name": "Auswählen",
+      "UUID": "com.niklas970.faderust.select",
+      "Icon": "imgs/actions/strip/icon",
+      "Tooltip": "Wählt einen Streifen oder Master aus (leuchtet). „Lauter / Leiser“ mit „Auswahl verwenden“ bewegt dann die Auswahl.",
+      "PropertyInspectorPath": "ui/select.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "imgs/actions/strip/key",
+          "TitleAlignment": "bottom",
+          "FontSize": 11
+        },
+        {
+          "Image": "imgs/actions/preset/active",
+          "TitleAlignment": "bottom",
+          "FontSize": 11
+        }
+      ]
+    },
+    {
       "Name": "Faderust-Seite",
       "UUID": "com.niklas970.faderust.page",
       "Icon": "imgs/actions/preset/icon",
