@@ -1,8 +1,10 @@
 import streamDeck from "@elgato/streamdeck";
 
 import { Device } from "./actions/device";
+import { Level } from "./actions/level";
 import { Master } from "./actions/master";
 import { Mute } from "./actions/mute";
+import { Panic } from "./actions/panic";
 import { Preset } from "./actions/preset";
 import { Strip } from "./actions/strip";
 import { Volume } from "./actions/volume";
@@ -16,6 +18,8 @@ streamDeck.actions.registerAction(new Volume());
 streamDeck.actions.registerAction(new Mute());
 streamDeck.actions.registerAction(new Preset());
 streamDeck.actions.registerAction(new Device());
+streamDeck.actions.registerAction(new Panic());
+streamDeck.actions.registerAction(new Level());
 
 faderust.version = streamDeck.info.plugin.version;
 faderust.connect();

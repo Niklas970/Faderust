@@ -12,6 +12,8 @@ Steuert Faderust vom Elgato Stream Deck. Braucht Stream Deck 7.1 oder neuer (Win
 | **Stumm** | – | Eingang auf einem Ausgang, auf allen Ausgängen einzeln oder als „MUTE des Streifens“ stumm; Taste zeigt den Zustand |
 | **Preset laden** | – | Lädt ein Preset aus Faderust; leuchtet, solange die Fader dazu passen |
 | **Standardgerät** | – | Macht ein Gerät zum Windows-Standard (oder nur für Anrufe); leuchtet, solange es das ist |
+| **Alles stumm** | – | Schaltet alle Ausgänge stumm oder wieder ein; leuchtet, solange alle stumm sind |
+| **Pegel setzen** | – | Setzt einen Streifen, einen Fader oder einen Master auf einen festen Pegel |
 
 Eingänge, Ausgänge, Presets und Geräte wählt man im Einstellungsfenster der Aktion aus Listen, die Faderust liefert. Läuft Faderust nicht, zeigt die Taste ein Warnzeichen.
 
