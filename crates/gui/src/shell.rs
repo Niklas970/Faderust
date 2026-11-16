@@ -123,6 +123,17 @@ pub struct Prefs {
     /// The same for devices and for programs on the desk.
     pub device_edge_off: bool,
     pub program_edge_off: bool,
+    /// Building blocks of the look, each switched on its own.
+    /// LED segments instead of the continuous meter bar.
+    pub meter_segments: bool,
+    /// No peak mark on the meters.
+    pub peak_off: bool,
+    /// A line at 0 dB across the fader slot.
+    pub zero_mark: bool,
+    /// The dB value in a display box under the fader.
+    pub readout_display: bool,
+    /// No level bars in the matrix.
+    pub matrix_meters_off: bool,
     /// "de", "en" or empty for the system language.
     pub lang: String,
     /// The window stays above all others.

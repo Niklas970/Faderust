@@ -40,6 +40,12 @@ const TABLE: &[(&str, &str)] = &[
     ),
     ("An", "On"),
     ("Grüner Rand bei Signal", "Green edge on signal"),
+    ("Bausteine", "Building blocks"),
+    ("LED-Segmente statt Balken", "LED segments instead of bars"),
+    ("Spitzenwert-Marke", "Peak mark"),
+    ("Nullstrich am Fader", "0 dB line on the fader"),
+    ("Wert im Display", "Value in a display"),
+    ("Pegelbalken in der Matrix", "Level bars in the matrix"),
     (
         "Ausgabegeräte pro Programm gibt es nur unter Windows.",
         "Output devices per program exist only on Windows.",
