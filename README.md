@@ -148,7 +148,7 @@ Before a commit: `cargo fmt`, `cargo clippy -- -D warnings`, `cargo test`. New d
 
 ## Stream Deck
 
-The plugin in [`streamdeck/`](streamdeck/README.md) controls Faderust from the Elgato Stream Deck: faders via dial or key, mute (also all outputs at once), fixed levels, presets and the Windows default device. Double-click `com.niklas970.faderust.streamDeckPlugin` from the [Releases](https://github.com/Niklas970/faderust/releases) (Stream Deck 7.1 or newer). From then on the setup ships the plugin: under "Devices" Faderust shows whether a newer plugin version is available and opens it with one click in the Stream Deck software, which then only asks for confirmation.
+The plugin in [`streamdeck/`](streamdeck/README.md) controls Faderust from the Elgato Stream Deck: faders via dial or key, mute (also all outputs at once), fixed levels, presets, the Windows default device and a ready-made Faderust page for the 15-key Stream Deck (mute all, presets, strips, masters). Double-click `com.niklas970.faderust.streamDeckPlugin` from the [Releases](https://github.com/Niklas970/faderust/releases) (Stream Deck 7.1 or newer). From then on the setup ships the plugin: under "Devices" Faderust shows whether a newer plugin version is available and opens it with one click in the Stream Deck software, which then only asks for confirmation.
 
 ## License
 

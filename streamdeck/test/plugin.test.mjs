@@ -295,3 +295,15 @@ test("keys alert while Faderust is closed", async () => {
   event("keyDown", "preset", "p2", { name: "Spielen" });
   assert.ok(await sd.next((m) => m.event === "showAlert" && m.context === "p2"));
 });
+
+test("page key opens the Faderust profile, back returns", async () => {
+  appear("page", "pg", {});
+  event("keyDown", "page", "pg", {});
+  const open = await sd.next((m) => m.event === "switchToProfile");
+  assert.equal(open.device, "dev");
+  assert.deepEqual(open.payload, { page: 0, profile: "Faderust" });
+  appear("back", "bk", {});
+  event("keyDown", "back", "bk", {});
+  const back = await sd.next((m) => m.event === "switchToProfile");
+  assert.equal(back.payload.profile, undefined);
+});

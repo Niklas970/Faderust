@@ -148,7 +148,7 @@ Vor einem Commit: `cargo fmt`, `cargo clippy -- -D warnings`, `cargo test`. Neue
 
 ## Stream Deck
 
-Das Plugin in [`streamdeck/`](streamdeck/README.md) steuert Faderust vom Elgato Stream Deck: Fader per Drehregler oder Taste, Stummschalten (auch alle Ausgänge auf einmal), feste Pegel, Presets und Windows-Standardgerät. `com.niklas970.faderust.streamDeckPlugin` aus den [Releases](https://github.com/Niklas970/faderust/releases) doppelklicken (Stream Deck 7.1 oder neuer). Ab da liefert das Setup das Plugin mit: unter „Geräte“ zeigt Faderust, ob eine neuere Plugin-Version bereitliegt, und öffnet sie mit einem Klick in der Stream-Deck-Software, die dann nur noch um Bestätigung bittet.
+Das Plugin in [`streamdeck/`](streamdeck/README.md) steuert Faderust vom Elgato Stream Deck: Fader per Drehregler oder Taste, Stummschalten (auch alle Ausgänge auf einmal), feste Pegel, Presets, Windows-Standardgerät und eine fertige Faderust-Seite für das Stream Deck mit 15 Tasten (alles stumm, Presets, Streifen, Master). `com.niklas970.faderust.streamDeckPlugin` aus den [Releases](https://github.com/Niklas970/faderust/releases) doppelklicken (Stream Deck 7.1 oder neuer). Ab da liefert das Setup das Plugin mit: unter „Geräte“ zeigt Faderust, ob eine neuere Plugin-Version bereitliegt, und öffnet sie mit einem Klick in der Stream-Deck-Software, die dann nur noch um Bestätigung bittet.
 
 ## Lizenz
 
