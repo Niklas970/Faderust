@@ -483,8 +483,8 @@ impl Host for GuiHost {
     fn visible(&self) -> bool {
         shell::is_visible(&self.visible)
     }
-    fn osd(&self, label: &str, text: &str) {
-        osd::show(label, text);
+    fn osd(&self, label: &str, text: &str, level: Option<f32>) {
+        osd::show(label, text, level);
     }
 }
 

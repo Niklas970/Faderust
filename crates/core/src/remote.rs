@@ -14,6 +14,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
+
+use crate::audio::OsdFor;
 use tungstenite::handshake::server::{ErrorResponse, Request as Handshake, Response};
 use tungstenite::http::StatusCode;
 use tungstenite::{Message, WebSocket};
@@ -411,6 +413,17 @@ fn refuse(
 
 /// Carries out one request; `true` when the Windows devices changed.
 fn handle(state: &AppState, req: Request) -> Result<bool, String> {
+    // The on-screen note for requests that set a value (dials and steps
+    // show theirs in the audio thread).
+    let note = match &req {
+        Request::SetGain { input, output, .. } | Request::SetMuted { input, output, .. } => {
+            Some(OsdFor::Cell(*input, *output))
+        }
+        Request::SetInputMuted { input, .. } => Some(OsdFor::InputMute(*input)),
+        Request::SetMasterGain { output, .. } => Some(OsdFor::Master(*output)),
+        Request::SetMasterMuted { output, .. } => Some(OsdFor::MasterMute(*output)),
+        _ => None,
+    };
     let cmd = match req {
         Request::SetGain { input, output, db } => Command::SetGain(input, output, db),
         Request::AddGain {
@@ -429,9 +442,27 @@ fn handle(state: &AppState, req: Request) -> Result<bool, String> {
         Request::SetMasterGain { output, db } => Command::SetMasterGain(output, db),
         Request::AddMasterGain { output, delta } => Command::AddMasterGain(output, delta),
         Request::SetMasterMuted { output, muted } => Command::SetMasterMuted(output, muted),
-        Request::LoadPreset { name } => return crate::apply_preset(state, &name).map(|_| false),
+        Request::LoadPreset { name } => {
+            crate::apply_preset(state, &name)?;
+            let _ = crate::send(
+                state,
+                Command::Osd(OsdFor::Text(
+                    faderust_engine::lang::tr("Preset", "Preset"),
+                    name,
+                )),
+            );
+            return Ok(false);
+        }
         Request::SetDefaultDevice { id, communications } => {
-            return crate::set_default(&id, communications).map(|_| true)
+            crate::set_default(&id, communications)?;
+            let _ = crate::send(
+                state,
+                Command::Osd(OsdFor::Text(
+                    faderust_engine::lang::tr("Standardgerät", "Default device"),
+                    faderust_engine::lang::tr("umgestellt", "changed"),
+                )),
+            );
+            return Ok(true);
         }
         Request::Hello { plugin, .. } => {
             state
@@ -442,7 +473,11 @@ fn handle(state: &AppState, req: Request) -> Result<bool, String> {
             return Ok(false);
         }
     };
-    crate::send(state, cmd).map(|_| false)
+    crate::send(state, cmd)?;
+    if let Some(note) = note {
+        let _ = crate::send(state, Command::Osd(note));
+    }
+    Ok(false)
 }
 
 fn send(ws: &mut WebSocket<TcpStream>, push: &Push) -> Result<(), Box<dyn std::error::Error>> {
