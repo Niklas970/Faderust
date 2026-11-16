@@ -1346,17 +1346,27 @@ fn settings(app: &App) -> Element<'_, Message> {
         cable_section,
         h3("Stream Deck"),
         deck_section(app),
-        h3("Selbsttest"),
-        row![
-            hint("Prüft Geräte, Puffer, Fernsteuerung und Plugin."),
-            space().width(Length::Fill),
-            btn("Starten", Message::Open(Some(Dialog::Selftest)), false),
-            btn("Protokoll", Message::Open(Some(Dialog::Log)), false),
-        ]
-        .spacing(8)
-        .align_y(Vertical::Center),
+        h3("Debug-Modus"),
+        check(app.prefs.debug)
+            .label(tr("Messungen, Selbsttest und Protokoll einschalten"))
+            .on_toggle(|v| edit(Edit::Debug(v))),
+        hint("Aus spart Leistung: dann laufen keine Messungen (CPU je Thread, Kabel, Zeiten) und es werden keine Zeilen dafür geschrieben."),
     ]
     .spacing(10);
+    let body = if app.prefs.debug {
+        body.push(h3("Selbsttest")).push(
+            row![
+                hint("Prüft Geräte, Puffer, Fernsteuerung und Plugin."),
+                space().width(Length::Fill),
+                btn("Starten", Message::Open(Some(Dialog::Selftest)), false),
+                btn("Protokoll", Message::Open(Some(Dialog::Log)), false),
+            ]
+            .spacing(8)
+            .align_y(Vertical::Center),
+        )
+    } else {
+        body
+    };
     frame(
         "Geräte".into(),
         760.0,

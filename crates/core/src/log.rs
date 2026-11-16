@@ -5,12 +5,24 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const MAX_BYTES: u64 = 256 * 1024;
 
 static PATH: OnceLock<PathBuf> = OnceLock::new();
+/// Debug mode: the periodic measurements (CPU per thread, cable gaps,
+/// timings) only run and write while it is on.
+static DEBUG: AtomicBool = AtomicBool::new(false);
+
+pub fn set_debug(on: bool) {
+    DEBUG.store(on, Ordering::Relaxed);
+}
+
+pub fn debug() -> bool {
+    DEBUG.load(Ordering::Relaxed)
+}
 /// Bytes in the current file, to start over while the app keeps running.
 static SIZE: Mutex<u64> = Mutex::new(0);
 /// The last message and how often it came again right after, so a message

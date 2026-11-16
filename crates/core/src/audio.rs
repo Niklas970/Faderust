@@ -525,7 +525,7 @@ fn run(
             watch.enter(WAKING);
             let woke_at = Instant::now();
             let mut events = e.wake();
-            if !events.is_empty() {
+            if !events.is_empty() && log::debug() {
                 log::write(&format!("wake took {} ms", woke_at.elapsed().as_millis()));
             }
             let maintained = last_maintain.is_none_or(|t| t.elapsed() >= MAINTAIN_EVERY);
@@ -535,7 +535,7 @@ fn run(
                 events.extend(e.maintain());
                 last_maintain = Some(Instant::now());
                 // Opening a device that wakes up slowly holds this thread.
-                if started.elapsed() >= SLOW_MAINTAIN {
+                if log::debug() && started.elapsed() >= SLOW_MAINTAIN {
                     log::write(&format!(
                         "maintain took {} ms",
                         started.elapsed().as_millis()

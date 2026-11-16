@@ -118,6 +118,8 @@ pub struct Prefs {
     pub signal: String,
     /// No green edge around an output that carries signal.
     pub output_edge_off: bool,
+    /// Debug mode: measurements, self-test and log are shown and written.
+    pub debug: bool,
     /// "de", "en" or empty for the system language.
     pub lang: String,
     /// The window stays above all others.

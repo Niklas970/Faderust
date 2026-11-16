@@ -52,6 +52,12 @@ pub fn start() {
             let mut at = Instant::now();
             loop {
                 std::thread::sleep(EVERY);
+                // Only while the debug mode is on; off costs nothing.
+                if !faderust_core::log::debug() {
+                    before.clear();
+                    at = Instant::now();
+                    continue;
+                }
                 let now = windows_impl::sample();
                 let seconds = at.elapsed().as_secs_f64();
                 at = Instant::now();
