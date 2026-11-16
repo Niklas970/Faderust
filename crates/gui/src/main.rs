@@ -23,6 +23,7 @@ mod scale;
 mod shell;
 mod style;
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
@@ -200,11 +201,15 @@ pub struct App {
     pub mini: bool,
     /// Window size and pin state to restore when leaving mini mode.
     mini_prev: Option<(Size, bool)>,
-    /// The compact window was opened from the tray icon and closes when it loses focus.
-    popup: bool,
-    /// The popup switched compact mode on, so it switches it off again.
-    popup_mini: bool,
+    /// The tray popup: a window of its own (compact mixer) that closes when
+    /// it loses focus. The main window is not touched by it.
+    popup_id: Option<window::Id>,
     popup_at: Option<Instant>,
+    /// The main window was hidden when the popup opened, and goes back to
+    /// hidden when it closes (the engine only sends levels while shown).
+    popup_hid_main: bool,
+    /// Set while the popup's view is built: the strips use the narrow layout.
+    popup_draw: Cell<bool>,
     /// Strips shown when the compact window was last sized.
     mini_count: usize,
     /// Logical window size the user chose, restored after a monitor with a
@@ -414,19 +419,23 @@ pub enum Message {
     DismissNotice,
     TogglePin,
     CloseRequested,
+    /// A window asked to close (the popup closes, the main window hides).
+    WindowClose(window::Id),
+    ClosePopup,
+    PopupOpened(window::Id),
     Minimize,
     ToggleMax,
     Drag,
     /// Selecting in the log.
     LogAction(iced::widget::text_editor::Action),
     /// The window got another size (logical).
-    Resized(Size),
+    Resized(window::Id, Size),
     /// The window lost focus (closes the tray popup).
-    Unfocused,
+    Unfocused(window::Id),
     /// Tray popup: the screen size, to place the window at its corner.
     PopupAt(Option<Size>),
     /// The window moved to a monitor with another scaling.
-    Rescaled,
+    Rescaled(window::Id),
     /// Start resizing the window from an edge or corner.
     Resize(window::Direction),
     Quit,
@@ -501,8 +510,8 @@ impl Host for GuiHost {
     fn visible(&self) -> bool {
         shell::is_visible(&self.visible)
     }
-    fn osd(&self, label: &str, text: &str) {
-        osd::show(label, text);
+    fn osd(&self, label: &str, text: &str, level: Option<f32>) {
+        osd::show(label, text, level);
     }
 }
 
@@ -904,7 +913,12 @@ impl App {
 
     /// Narrow strips: compact mode.
     fn tight(&self) -> bool {
-        self.mini
+        self.is_mini()
+    }
+
+    /// The narrow layout: compact mode, or the tray popup being drawn.
+    fn is_mini(&self) -> bool {
+        self.mini || self.popup_draw.get()
     }
 
     /// Closing the window keeps the mixer running in the tray.
@@ -916,39 +930,71 @@ impl App {
         }
     }
 
-    /// Opens the compact mixer at the tray icon, or closes it again.
+    /// Opens the compact mixer next to the tray icon in a window of its
+    /// own, or closes it again. The main window stays as it is.
     #[cfg_attr(not(windows), allow(dead_code))]
     fn toggle_popup(&mut self) -> Task<Message> {
-        if self.popup {
+        if self.popup_id.is_some() {
             return self.close_popup();
         }
-        self.popup = true;
         self.popup_at = Some(Instant::now());
-        self.popup_mini = !self.mini;
-        let enter = if self.mini {
-            Task::none()
-        } else {
-            self.handle(Message::ToggleMini)
-        };
-        let place = match self.win_id {
+        match self.win_id {
             Some(id) => window::monitor_size(id).map(Message::PopupAt),
-            None => Task::none(),
+            None => Task::done(Message::PopupAt(None)),
+        }
+    }
+
+    fn open_popup(&mut self, screen: Option<Size>) -> Task<Message> {
+        if self.popup_id.is_some() {
+            return Task::none();
+        }
+        // Bottom right, above the taskbar.
+        let screen = screen.unwrap_or(Size::new(1920.0, 1080.0));
+        let size = Size::new(Self::mini_width(self.shown_count()), 360.0);
+        let position = Point::new(
+            (screen.width - size.width - 12.0).max(0.0),
+            (screen.height - size.height - 56.0).max(0.0),
+        );
+        #[allow(unused_mut)]
+        let mut settings = window::Settings {
+            size,
+            position: window::Position::Specific(position),
+            resizable: false,
+            decorations: false,
+            level: window::Level::AlwaysOnTop,
+            exit_on_close_request: false,
+            icon: window::icon::from_file_data(LOGO, None).ok(),
+            ..window::Settings::default()
         };
-        Task::batch([self.show(), enter, place])
+        // No taskbar button for the popup.
+        #[cfg(windows)]
+        {
+            settings.platform_specific.skip_taskbar = true;
+        }
+        let (id, open) = window::open(settings);
+        self.popup_id = Some(id);
+        self.popup_at = Some(Instant::now());
+        // The engine only sends levels while a window is shown.
+        self.popup_hid_main = !self.visible.swap(true, Ordering::Relaxed);
+        self.clear_caches();
+        open.map(Message::PopupOpened)
     }
 
     fn close_popup(&mut self) -> Task<Message> {
-        self.popup = false;
-        let leave = if self.mini && self.popup_mini {
-            self.handle(Message::ToggleMini)
-        } else {
-            Task::none()
+        let Some(id) = self.popup_id.take() else {
+            return Task::none();
         };
-        Task::batch([leave, self.hide()])
+        if self.popup_hid_main {
+            self.visible.store(false, Ordering::Relaxed);
+        }
+        self.popup_hid_main = false;
+        self.clear_caches();
+        window::close(id)
     }
 
     fn show(&mut self) -> Task<Message> {
         self.visible.store(true, Ordering::Relaxed);
+        self.popup_hid_main = false;
         match self.win_id {
             Some(id) => Task::batch([
                 window::set_mode(id, window::Mode::Windowed),
@@ -1209,9 +1255,10 @@ impl App {
             },
             mini: std::env::var_os("FADERUST_MINI").is_some(),
             mini_prev: None,
-            popup: false,
-            popup_mini: false,
+            popup_id: None,
             popup_at: None,
+            popup_hid_main: false,
+            popup_draw: Cell::new(false),
             mini_count: 0,
             size_keep: Some(Size::new(1400.0, 860.0)),
             rescaled_at: None,
@@ -1282,7 +1329,9 @@ impl App {
         };
         app.refresh_presets();
         app.refresh_sounds();
-        let mut tasks = vec![app.open(dialog), window::latest().map(Message::WinId)];
+        let (main_id, open) = window::open(main_window());
+        app.win_id = Some(main_id);
+        let mut tasks = vec![app.open(dialog), open.map(|id| Message::WinId(Some(id)))];
         if hide_closed(app.hide_after) {
             tasks.push(app.load_apps());
         }
@@ -1592,23 +1641,24 @@ impl App {
                 }
             }
             Message::DismissNotice => self.notice = None,
-            Message::Unfocused => {
+            Message::Unfocused(id) => {
                 // Not right after opening: the window is still taking focus.
                 let fresh = self
                     .popup_at
                     .is_some_and(|t| t.elapsed() < Duration::from_millis(400));
-                if self.popup && !fresh {
+                if self.popup_id == Some(id) && !fresh {
                     return self.close_popup();
                 }
             }
-            Message::PopupAt(screen) => {
-                if let (Some(id), Some(screen)) = (self.win_id, screen) {
-                    // Bottom right, above the taskbar.
-                    let width = Self::mini_width(self.shown_count());
-                    let x = (screen.width - width - 12.0).max(0.0);
-                    let y = (screen.height - 360.0 - 56.0).max(0.0);
-                    return window::move_to(id, Point::new(x, y));
-                }
+            Message::PopupAt(screen) => return self.open_popup(screen),
+            Message::PopupOpened(_) => {}
+            Message::ClosePopup => return self.close_popup(),
+            Message::WindowClose(id) => {
+                return if self.popup_id == Some(id) {
+                    self.close_popup()
+                } else {
+                    self.hide()
+                };
             }
             Message::ToggleMini => {
                 if self.mini {
@@ -1682,7 +1732,10 @@ impl App {
                     return window::drag_resize(id, direction);
                 }
             }
-            Message::Resized(size) => {
+            Message::Resized(id, size) => {
+                if Some(id) != self.win_id {
+                    return Task::none();
+                }
                 // Sizes during a scaling change are Windows' rounding, not a wish.
                 // (A minimised window reports no size at all.)
                 if !self.mini && size.width >= 200.0 && size.height >= 200.0 {
@@ -1698,7 +1751,10 @@ impl App {
                     }
                 }
             }
-            Message::Rescaled => {
+            Message::Rescaled(id) => {
+                if Some(id) != self.win_id {
+                    return Task::none();
+                }
                 let now = Instant::now();
                 if self.rescaled_at.is_none() {
                     self.burst_from = Some(now);
@@ -2946,9 +3002,9 @@ impl App {
             kind: Kind::Input(i),
             post_fader: false,
             narrow,
-            labels: !self.mini,
+            labels: !self.is_mini(),
         })
-        .width(if self.mini {
+        .width(if self.is_mini() {
             78.0
         } else if narrow {
             104.0
@@ -2991,7 +3047,7 @@ impl App {
             .spacing(4)
             .into()
         } else {
-            if self.mini {
+            if self.is_mini() {
                 space().height(0).into()
             } else {
                 small("Effekte", Message::Open(Some(Dialog::Fx(i))), 72.0).into()
@@ -3025,9 +3081,9 @@ impl App {
             column![
                 top,
                 Self::name_label(&s.label),
-                space().height(if self.mini { 0 } else { 14 }),
+                space().height(if self.is_mini() { 0 } else { 14 }),
                 fader,
-                if self.mini {
+                if self.is_mini() {
                     Element::from(space().height(0))
                 } else {
                     Self::readout(s.db, s.muted)
@@ -3038,7 +3094,7 @@ impl App {
             .spacing(8)
             .align_x(Horizontal::Center)
             .into(),
-            if self.mini {
+            if self.is_mini() {
                 124.0
             } else if narrow {
                 126.0
@@ -3061,9 +3117,9 @@ impl App {
             kind: Kind::Master(o),
             post_fader: true,
             narrow: self.tight(),
-            labels: !self.mini,
+            labels: !self.is_mini(),
         })
-        .width(if self.mini {
+        .width(if self.is_mini() {
             78.0
         } else if self.tight() {
             104.0
@@ -3113,18 +3169,18 @@ impl App {
                     Self::note(&m.note, m.note_on)
                 },
                 fader,
-                if self.mini {
+                if self.is_mini() {
                     Element::from(space().height(0))
                 } else {
                     Self::readout(m.db, m.muted)
                 },
                 Self::mute_button(m.muted, Message::MasterMute(o), "MUTE"),
-                space().height(if self.mini { 0 } else { 24 }),
+                space().height(if self.is_mini() { 0 } else { 24 }),
             ]
             .spacing(8)
             .align_x(Horizontal::Center)
             .into(),
-            if self.mini {
+            if self.is_mini() {
                 124.0
             } else if self.tight() {
                 126.0
@@ -3489,6 +3545,85 @@ impl App {
         .into()
     }
 
+    fn view_of(&self, id: window::Id) -> Element<'_, Message> {
+        if self.popup_id == Some(id) {
+            self.popup_view()
+        } else {
+            self.view()
+        }
+    }
+
+    /// The tray popup: slim bar and the narrow desk, nothing of the main window.
+    fn popup_view(&self) -> Element<'_, Message> {
+        self.popup_draw.set(true);
+        let body = self.desk();
+        self.popup_draw.set(false);
+        let slim = container(
+            row![
+                image(self.logo.clone())
+                    .width(16)
+                    .height(16)
+                    .border_radius(2),
+                space().width(Length::Fill),
+                button(
+                    Canvas::new(icons::Icon {
+                        glyph: icons::Glyph::WinClose,
+                        color: text_color(),
+                        on: false,
+                    })
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+                )
+                .width(34)
+                .height(Length::Fill)
+                .padding(0)
+                .on_press(Message::ClosePopup)
+                .style(|_, status| button::Style {
+                    background: matches!(status, button::Status::Hovered)
+                        .then(|| Background::Color(rgb(196, 43, 28))),
+                    text_color: text_color(),
+                    border: Border::default(),
+                    ..button::Style::default()
+                }),
+            ]
+            .align_y(Vertical::Center),
+        )
+        .padding(iced::Padding::default().left(6))
+        .height(26)
+        .width(Length::Fill)
+        .style(|_| container::Style {
+            background: Some(Background::Color(panel())),
+            border: Border {
+                color: border(),
+                width: 1.0,
+                ..Border::default()
+            },
+            ..container::Style::default()
+        });
+        let page = container(column![
+            slim,
+            container(body)
+                .padding(10)
+                .width(Length::Fill)
+                .height(Length::Fill),
+        ])
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(|_| container::Style {
+            background: Some(Background::Color(bg())),
+            ..container::Style::default()
+        });
+        container(page)
+            .padding(1)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(|_| container::Style {
+                background: Some(Background::Color(frame_color())),
+                ..container::Style::default()
+            })
+            .into()
+    }
+
     fn view(&self) -> Element<'_, Message> {
         let body = match self.view {
             View::Desk => self.desk(),
@@ -3678,7 +3813,7 @@ impl App {
     fn subscription(&self) -> Subscription<Message> {
         let moving = self.strips.iter().any(|s| gliding(s.pos, s.db))
             || self.outs.iter().any(|m| gliding(m.pos, m.db));
-        let every = if shell::is_visible(&self.visible) {
+        let every = if shell::is_visible(&self.visible) || self.popup_id.is_some() {
             // Faster while a fader glides, so the movement is fluid.
             if moving {
                 11
@@ -3699,11 +3834,13 @@ impl App {
         Subscription::batch([
             iced::time::every(Duration::from_millis(every)).map(Message::Frame),
             poll,
-            window::close_requests().map(|_| Message::CloseRequested),
-            iced::event::listen_with(|event, _, _| match event {
-                iced::Event::Window(window::Event::Resized(size)) => Some(Message::Resized(size)),
-                iced::Event::Window(window::Event::Rescaled(_)) => Some(Message::Rescaled),
-                iced::Event::Window(window::Event::Unfocused) => Some(Message::Unfocused),
+            window::close_requests().map(Message::WindowClose),
+            iced::event::listen_with(|event, _, id| match event {
+                iced::Event::Window(window::Event::Resized(size)) => {
+                    Some(Message::Resized(id, size))
+                }
+                iced::Event::Window(window::Event::Rescaled(_)) => Some(Message::Rescaled(id)),
+                iced::Event::Window(window::Event::Unfocused) => Some(Message::Unfocused(id)),
                 _ => None,
             }),
         ])
@@ -3795,22 +3932,25 @@ fn main() -> iced::Result {
         Ok(rx) => *INSTANCE.lock().unwrap_or_else(|e| e.into_inner()) = Some(rx),
         Err(()) => return Ok(()),
     }
-    let minimized = std::env::args().any(|a| a == shell::MINIMIZED_ARG);
-    iced::application(App::new, App::update, App::view)
+    iced::daemon(App::new, App::update, App::view_of)
         .subscription(App::subscription)
-        .theme(theme)
-        .window(window::Settings {
-            size: Size::new(1400.0, 860.0),
-            min_size: Some(Size::new(480.0, 420.0)),
-            icon: window::icon::from_file_data(LOGO, None).ok(),
-            // The title bar is drawn by the app; closing goes to the tray.
-            decorations: false,
-            visible: !minimized,
-            exit_on_close_request: false,
-            ..window::Settings::default()
-        })
-        .title("Faderust")
+        .theme(|app: &App, _| theme(app))
+        .title(|_: &App, _| "Faderust".to_string())
         .run()
+}
+
+/// The main window. The title bar is drawn by the app; closing goes to the tray.
+fn main_window() -> window::Settings {
+    let minimized = std::env::args().any(|a| a == shell::MINIMIZED_ARG);
+    window::Settings {
+        size: Size::new(1400.0, 860.0),
+        min_size: Some(Size::new(480.0, 420.0)),
+        icon: window::icon::from_file_data(LOGO, None).ok(),
+        decorations: false,
+        visible: !minimized,
+        exit_on_close_request: false,
+        ..window::Settings::default()
+    }
 }
 
 #[cfg(test)]
