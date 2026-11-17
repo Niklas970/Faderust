@@ -1,10 +1,8 @@
-## What's new in 0.8.3
+## What's new in 0.8.4
 
-- **Settings in a wide card layout:** "Design" and "Devices" show their options as cards side by side instead of one long list
-- **More design building blocks** under "Design > Fader": square cap, scale, glow, cap in the accent colour, thin track, console cap (black with grip ridges), raised panels, meters in one colour, value in the cap or in a display, and a free colour for the display
-- **Effects dialog as cards:** the echo is set by style (Slapback, Room, Hall, Wide) instead of percent, and the EQ is a classic vertical equalizer
-- **Test versions (optional):** with "Test versions" under "Devices", Faderust can update itself to test builds of the project
-- **CPU log** names every thread and shows the kernel share, so a spike (for example after sleep) can be traced
+- **Test versions card** under "Devices > Debug": shows your current version or test build and has a "Search now" button
+- **One test build per branch:** pick the branch in the app and it updates itself to that build, with no download and no release
+- **Test build workflow** on GitHub (Actions > "Test build") publishes the build of the chosen branch as a signed test release
 
 ## Installation
 
@@ -16,10 +14,8 @@ All features and a guide are in the [README](https://github.com/Niklas970/faderu
 
 ---
 
-## Neu in 0.8.3
+## Neu in 0.8.4
 
-- **Einstellungen in breiten Karten:** „Design“ und „Geräte“ zeigen ihre Optionen als Karten nebeneinander statt als lange Liste
-- **Mehr Design-Bausteine** unter „Design > Fader“: eckige Kappe, Skala, Leuchten, Kappe in Akzentfarbe, schmale Bahn, Konsolen-Kappe (schwarz mit Griffrillen), erhabene Platten, einfarbige Pegel, Wert in der Kappe oder in einem Display und eine freie Farbe für das Display
-- **Effekte-Dialog als Karten:** das Echo wählst du nach Stil (Slapback, Raum, Hall, Weit) statt in Prozent, und der EQ ist ein klassischer senkrechter Equalizer
-- **Testversionen (optional):** mit „Testversionen“ unter „Geräte“ kann sich Faderust selbst auf Test-Builds des Projekts aktualisieren
-- **CPU-Protokoll** benennt jeden Thread und zeigt den Kernel-Anteil, damit sich eine Spitze (zum Beispiel nach dem Ruhemodus) zuordnen lässt
+- **Karte „Testversionen“** unter „Geräte > Debug“: zeigt deine aktuelle Version oder den Test-Build und hat einen Knopf „Jetzt suchen“
+- **Ein Test-Build pro Branch:** den Branch in der App auswählen, und Faderust aktualisiert sich selbst darauf, ohne Download und ohne Release
+- **Test-Build-Workflow** auf GitHub (Actions > „Test build“) veröffentlicht den Build des gewählten Branches als signierten Test-Release
