@@ -1071,12 +1071,7 @@ fn design(app: &App) -> Element<'_, Message> {
                 app.picker,
                 |t| edit(Edit::LcdHex(t)),
             ),
-            row![
-                btn("Standard", edit(Edit::Lcd(String::new())), !lcd_custom),
-                hint("Gilt für „Wert im Display“."),
-            ]
-            .spacing(10)
-            .align_y(Vertical::Center),
+            btn("Standard", edit(Edit::Lcd(String::new())), !lcd_custom),
         ]
         .spacing(10),
     );
