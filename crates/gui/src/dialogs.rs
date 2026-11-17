@@ -1071,7 +1071,6 @@ fn design(app: &App) -> Element<'_, Message> {
                 app.picker,
                 |t| edit(Edit::LcdHex(t)),
             ),
-            btn("Standard", edit(Edit::Lcd(String::new())), !lcd_custom),
         ]
         .spacing(10),
     );
