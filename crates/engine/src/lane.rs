@@ -11,6 +11,7 @@ use rubato::{
 };
 
 use crate::drift::{DriftController, MAX_CORRECTION};
+use crate::stretch::{Stretcher, NEEDS};
 use crate::BUS_CHANNELS;
 
 /// Output frames the resampler produces per step.
@@ -22,6 +23,12 @@ const GAIN_SMOOTHING_S: f32 = 0.01;
 const BACKLOG_TARGETS: usize = 3;
 /// Below this applied gain a muted lane counts as silent.
 const SILENT_GAIN: f32 = 1e-5;
+/// Speed at which a backlog is played off, see [`Lane::catch_up`].
+const CATCH_UP_SPEED: f32 = 1.08;
+/// Frames of silence kept in front of the sound a waiting lane holds.
+const LEAD_FRAMES: usize = 480;
+/// Samples below this (−60 dBFS) are silence.
+const QUIET: f32 = 0.001;
 
 /// Counters for one lane, readable from any thread.
 #[derive(Debug, Default)]
@@ -50,7 +57,8 @@ pub struct LaneSpec {
 /// the UI can keep one handle per (input, output) pair.
 pub fn lane(spec: LaneSpec, stats: Arc<LaneStats>) -> (Producer<f32>, Lane) {
     let target_frames = (spec.input_rate as u64 * spec.target_ms as u64 / 1000).max(1) as usize;
-    let capacity_frames = (target_frames * 4).max(spec.input_rate as usize / 2);
+    // Room for the sound that arrives while an output reopens (1.5 s).
+    let capacity_frames = (target_frames * 4).max(spec.input_rate as usize * 3 / 2);
     let (producer, consumer) = RingBuffer::new(capacity_frames * BUS_CHANNELS);
 
     let ratio = spec.output_rate as f64 / spec.input_rate as f64;
@@ -97,6 +105,9 @@ pub fn lane(spec: LaneSpec, stats: Arc<LaneStats>) -> (Producer<f32>, Lane) {
         primed: false,
         gain: 0.0,
         stats,
+        spec,
+        catch_up: false,
+        stretcher: Box::new(Stretcher::new()),
     };
     (producer, lane)
 }
@@ -117,9 +128,46 @@ pub struct Lane {
     primed: bool,
     gain: f32,
     stats: Arc<LaneStats>,
+    spec: LaneSpec,
+    /// Plays a backlog off faster, see [`Lane::catch_up`].
+    catch_up: bool,
+    stretcher: Box<Stretcher>,
 }
 
 impl Lane {
+    /// The spec this lane was made with.
+    pub fn spec(&self) -> LaneSpec {
+        self.spec
+    }
+
+    /// Marks a lane that waited for its output (see [`Lane::skip_leading_silence`]):
+    /// the sound that gathered meanwhile is not cut but played a little
+    /// faster, without a change of pitch, until the lane is in step again.
+    pub fn catch_up(&mut self) {
+        self.catch_up = true;
+    }
+
+    /// For a lane nobody plays yet: drops the silence before the first sound,
+    /// so what waits is the sound itself and not the quiet before it.
+    pub fn skip_leading_silence(&mut self) {
+        let slots = self.consumer.slots();
+        if slots / BUS_CHANNELS <= LEAD_FRAMES {
+            return;
+        }
+        let Ok(chunk) = self.consumer.read_chunk(slots) else {
+            return;
+        };
+        let (a, b) = chunk.as_slices();
+        let first = a
+            .iter()
+            .chain(b)
+            .position(|v| v.abs() > QUIET)
+            .map_or(slots, |i| i / BUS_CHANNELS * BUS_CHANNELS);
+        let keep = LEAD_FRAMES * BUS_CHANNELS;
+        let drop = first.saturating_sub(keep).min(slots - keep);
+        chunk.commit(drop);
+    }
+
     /// Mixes the next `out.len() / 2` frames into `out` (interleaved stereo),
     /// moving the applied gain smoothly towards `target_gain`.
     pub fn render_add(&mut self, out: &mut [f32], target_gain: f32) {
@@ -184,8 +232,20 @@ impl Lane {
     }
 
     fn next_chunk(&mut self) {
-        let mut fill = self.consumer.slots() / BUS_CHANNELS;
-        if fill > self.target_frames * BACKLOG_TARGETS {
+        let held = self.stretcher.pending();
+        let mut fill = self.consumer.slots() / BUS_CHANNELS + held;
+        // The stretcher needs some input to end cleanly, so the backlog limit
+        // is not lower than this.
+        let limit = (self.target_frames * BACKLOG_TARGETS).max(2 * NEEDS);
+        // Stops below the limit: ending adds a few frames, and the rest of the
+        // backlog is no reason to cut.
+        if self.catch_up && fill + 1024 <= limit {
+            self.catch_up = false;
+            self.stretcher.finish(&mut self.consumer);
+            self.controller.reset();
+            fill = self.consumer.slots() / BUS_CHANNELS + self.stretcher.pending();
+        }
+        if !self.catch_up && held == 0 && fill > limit {
             self.trim_to_target(fill);
             fill = self.target_frames;
             self.controller.reset();
@@ -200,7 +260,11 @@ impl Lane {
             self.controller.reset();
         }
 
-        let rel = self.controller.update(fill, self.chunk_dt_s);
+        let rel = if self.catch_up {
+            1.0
+        } else {
+            self.controller.update(fill, self.chunk_dt_s)
+        };
         self.stats
             .correction_ppm
             .store(((rel - 1.0) * 1e6).round() as i32, Relaxed);
@@ -217,13 +281,35 @@ impl Lane {
 
         let samples = needed * BUS_CHANNELS;
         // Never panic in the audio callback: silence is the fallback.
-        let Ok(chunk) = self.consumer.read_chunk(samples) else {
-            return self.silence();
-        };
-        let (a, b) = chunk.as_slices();
-        self.in_buf[..a.len()].copy_from_slice(a);
-        self.in_buf[a.len()..samples].copy_from_slice(b);
-        chunk.commit_all();
+        if self.catch_up {
+            let got = self.stretcher.pull(
+                &mut self.consumer,
+                &mut self.in_buf[..samples],
+                CATCH_UP_SPEED,
+            );
+            if got < needed {
+                self.primed = false;
+                self.stats.underruns.fetch_add(1, Relaxed);
+                return self.silence();
+            }
+        } else if self.stretcher.has_raw() {
+            let got = self
+                .stretcher
+                .read_raw(&mut self.consumer, &mut self.in_buf[..samples]);
+            if got < needed {
+                self.primed = false;
+                self.stats.underruns.fetch_add(1, Relaxed);
+                return self.silence();
+            }
+        } else {
+            let Ok(chunk) = self.consumer.read_chunk(samples) else {
+                return self.silence();
+            };
+            let (a, b) = chunk.as_slices();
+            self.in_buf[..a.len()].copy_from_slice(a);
+            self.in_buf[a.len()..samples].copy_from_slice(b);
+            chunk.commit_all();
+        }
 
         let Ok(input) = InterleavedSlice::new(&self.in_buf[..samples], BUS_CHANNELS, needed) else {
             return self.silence();
@@ -299,6 +385,58 @@ mod tests {
         lane.render_add(&mut out, 1.0);
         let last = out[out.len() - 1];
         assert!((last - 0.5).abs() < 0.05, "last sample {last}");
+    }
+
+    fn push_sine(producer: &mut Producer<f32>, from: usize, frames: usize) {
+        for n in from..from + frames {
+            let v = 0.5 * (2.0 * std::f32::consts::PI * 440.0 * n as f32 / RATE as f32).sin();
+            producer.push(v).unwrap();
+            producer.push(v).unwrap();
+        }
+    }
+
+    #[test]
+    fn skips_the_silence_before_the_sound_but_keeps_a_lead() {
+        let (mut producer, mut lane, _) = test_lane();
+        push_frames(&mut producer, 10_000, 0.0);
+        push_frames(&mut producer, 100, 0.5);
+        lane.skip_leading_silence();
+        let left = lane.consumer.slots() / BUS_CHANNELS;
+        assert_eq!(left, LEAD_FRAMES + 100);
+    }
+
+    #[test]
+    fn a_lane_that_waited_plays_its_backlog_without_losing_any_of_it() {
+        let (mut producer, mut lane, stats) = test_lane();
+        // Half a second of sound gathered while the output reopened.
+        let backlog = 24_000;
+        push_sine(&mut producer, 0, backlog);
+        lane.catch_up();
+        let mut out = Vec::new();
+        let mut block = vec![0.0; 128 * BUS_CHANNELS];
+        let mut pushed = backlog;
+        // The sound goes on in real time while it catches up.
+        for _ in 0..2_200 {
+            push_sine(&mut producer, pushed, 128);
+            pushed += 128;
+            lane.render_add(&mut block, 1.0);
+            out.extend_from_slice(&block);
+            block.fill(0.0);
+        }
+        // No cut: the backlog was not dropped, no underrun after priming.
+        assert_eq!(stats.dropped_frames.load(Relaxed), 0);
+        assert_eq!(stats.underruns.load(Relaxed), 0);
+        assert!(!lane.catch_up, "caught up");
+        // About 6 s later the fill is back near the target.
+        assert!(stats.fill_frames.load(Relaxed) <= 2 * NEEDS as u64);
+        // Pitch unchanged throughout.
+        let left: Vec<f32> = out.chunks_exact(BUS_CHANNELS).map(|f| f[0]).collect();
+        let crossings = left
+            .windows(2)
+            .filter(|w| w[0] < 0.0 && w[1] >= 0.0)
+            .count();
+        let hz = crossings as f32 / left.len() as f32 * RATE as f32;
+        assert!((hz - 440.0).abs() < 12.0, "pitch {hz}");
     }
 
     #[test]
