@@ -4074,6 +4074,7 @@ fn tray_icon() -> Option<shell::tray::Tray> {
 }
 
 fn main() -> iced::Result {
+    cpu::name_this_thread("faderust-gui");
     // A second start only brings the running window to the front.
     match shell::single_instance() {
         Ok(rx) => *INSTANCE.lock().unwrap_or_else(|e| e.into_inner()) = Some(rx),
