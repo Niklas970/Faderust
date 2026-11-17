@@ -383,9 +383,9 @@ impl Fader<'_> {
         let (cw0, ch0) = if wide { (68.0, 44.0) } else { (40.0, 40.0) };
         let (cw, ch) = if self.parts.small_cap {
             if wide {
-                (44.0, 24.0)
+                (46.0, 32.0)
             } else {
-                (34.0, 22.0)
+                (34.0, 28.0)
             }
         } else {
             (cw0, ch0)
@@ -397,7 +397,7 @@ impl Fader<'_> {
         let radius = if self.parts.square_cap {
             CAP_RADIUS_SQUARE
         } else if self.parts.small_cap {
-            6.0
+            3.0
         } else {
             CAP_RADIUS
         };
@@ -422,7 +422,14 @@ impl Fader<'_> {
                 }),
             );
         }
-        let (c0, c1, c2, c3) = if self.parts.accent_cap && !off {
+        let (c0, c1, c2, c3) = if self.parts.small_cap && !self.parts.accent_cap {
+            (
+                rgb(74, 78, 84),
+                rgb(44, 47, 52),
+                rgb(30, 32, 36),
+                rgb(40, 43, 47),
+            )
+        } else if self.parts.accent_cap && !off {
             (
                 mix(accent(), Color::WHITE, 0.25),
                 accent(),
@@ -442,7 +449,15 @@ impl Fader<'_> {
             .add_stop(0.45, c1)
             .add_stop(0.55, c2)
             .add_stop(1.0, c3);
-        let edge = if off { rgb(85, 90, 97) } else { accent() };
+        let console = self.parts.small_cap;
+        let edge = if off {
+            rgb(85, 90, 97)
+        } else if console && !self.parts.accent_cap {
+            // A console cap is black plastic; the accent stays in the index line.
+            rgb(18, 19, 21)
+        } else {
+            accent()
+        };
         f.fill(&cap, Fill::from(edge));
         f.fill(
             &inner,
@@ -466,7 +481,25 @@ impl Fader<'_> {
                 accent_light()
             },
         );
-        if !self.parts.cap_value || self.parts.small_cap {
+        if self.parts.small_cap {
+            // Light edge along the top, like a bevel.
+            f.fill_rectangle(
+                Point::new(cx + 3.0 + radius, cy + 1.0),
+                Size::new(cw - 6.0 - 2.0 * radius, 1.0),
+                rgb(150, 156, 164),
+            );
+            // Grip ridges like on a console fader: a dark groove with a light
+            // edge below it, two above and two below the index line.
+            let gx = cx + 6.0;
+            let gw = cw - 12.0;
+            for k in [-2.0_f32, -1.0, 1.0, 2.0] {
+                let y = cap_y + k * 4.5 - k.signum() * 1.5;
+                f.fill_rectangle(Point::new(gx, y - 1.0), Size::new(gw, 1.0), rgb(14, 15, 17));
+                f.fill_rectangle(Point::new(gx, y), Size::new(gw, 1.0), rgb(120, 126, 134));
+            }
+            return;
+        }
+        if !self.parts.cap_value {
             return;
         }
         let win = Path::rounded_rectangle(

@@ -154,8 +154,8 @@ pub struct Prefs {
     pub small_cap: bool,
     /// Strips as raised panels.
     pub relief: bool,
-    /// Value display in LCD teal.
-    pub lcd_tint: bool,
+    /// Colour of the value display as "#rrggbb"; empty is the signal colour.
+    pub lcd_color: String,
     /// "de", "en" or empty for the system language.
     pub lang: String,
     /// The window stays above all others.
