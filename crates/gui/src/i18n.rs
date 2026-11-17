@@ -46,6 +46,7 @@ const TABLE: &[(&str, &str)] = &[
     ("Nullstrich am Fader", "0 dB line on the fader"),
     ("Wert im Display", "Value in a display"),
     ("Pegelbalken in der Matrix", "Level bars in the matrix"),
+    ("Regler ziehen: ±12 dB in Schritten von 0,5.", "Drag a fader: ±12 dB in steps of 0.5."),
     ("Slapback", "Slapback"),
     ("Raum", "Room"),
     ("Hall", "Hall"),

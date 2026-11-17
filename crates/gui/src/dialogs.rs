@@ -4,13 +4,18 @@
 use crate::i18n::{text, tr};
 use crate::style::{check, input as text_input, look_text, pick as pick_list, scroll, Look};
 use iced::alignment::Vertical;
-use iced::widget::{button, column, container, mouse_area, opaque, row, slider, space};
+use iced::widget::{
+    button, column, container, mouse_area, opaque, row, slider, space, vertical_slider,
+};
 use iced::{Background, Border, Color, Element, Length};
 
 use crate::style::*;
 use faderust_core::names::device_label;
 
 use crate::{App, Dialog, Edit, Message, Target, HIDE_AFTER, RELEASE};
+
+/// Height of the equaliser faders in px.
+const EQ_H: f32 = 150.0;
 
 fn edit(e: Edit) -> Message {
     Message::Edit(e)
@@ -185,22 +190,42 @@ fn fx(app: &App, i: usize) -> Element<'_, Message> {
         return frame("Effekte".into(), 1040.0, false, hint("Lade …"), no_footer());
     };
     let lit = (strip.shown + 90.0).clamp(1.0, 89.0) as u16;
+    // One band of the equaliser: value on top, the fader, frequency below.
     let band = |b: usize, name: &'static str, hz: &'static str| {
-        row![
-            container(text(format!("{name} {hz}")).size(13).color(text_color())).width(150),
-            slider(-12.0..=12.0, f.eq[b], move |v| edit(Edit::Eq(i, b, v))).step(0.5_f32),
-            container(
-                text(format!("{:+.1} dB", f.eq[b]))
-                    .font(MONO)
-                    .size(13)
-                    .color(text_color())
-            )
-            .width(70)
-            .align_right(Length::Fill),
+        column![
+            text(format!("{:+.1}", f.eq[b]))
+                .font(MONO)
+                .size(13)
+                .color(text_color()),
+            vertical_slider(-12.0..=12.0, f.eq[b], move |v| edit(Edit::Eq(i, b, v)))
+                .step(0.5_f32)
+                .height(EQ_H),
+            text(tr(name)).size(13).color(text_color()),
+            text(hz).font(MONO).size(11).color(muted_color()),
         ]
-        .spacing(10)
-        .align_y(Vertical::Center)
+        .spacing(6)
+        .align_x(iced::alignment::Horizontal::Center)
+        .width(Length::FillPortion(1))
     };
+    // Scale on the left, like a hardware equaliser.
+    let eq_scale = column![
+        space().height(24),
+        column(["+12", "+6", "0", "-6", "-12"].into_iter().map(|t| {
+            text(t)
+                .font(MONO)
+                .size(11)
+                .color(if t == "0" {
+                    text_color()
+                } else {
+                    muted_color()
+                })
+                .into()
+        }))
+        .height(EQ_H)
+        .width(30)
+        .align_x(iced::alignment::Horizontal::Right)
+        .spacing((EQ_H - 5.0 * 14.0) / 4.0),
+    ];
     let echo_row = |name: &'static str, value: String, bar: Element<'static, Message>| {
         row![
             container(text(name).size(13).color(text_color())).width(150),
@@ -357,11 +382,16 @@ fn fx(app: &App, i: usize) -> Element<'_, Message> {
         "EQ",
         column![
             eq_style,
-            band(0, "Bass", "120 Hz"),
-            band(1, "Präsenz", "3 kHz"),
-            band(2, "Höhen", "8 kHz"),
+            row![
+                eq_scale,
+                band(0, "Bass", "120 Hz"),
+                band(1, "Präsenz", "3 kHz"),
+                band(2, "Höhen", "8 kHz"),
+            ]
+            .spacing(8),
+            hint("Regler ziehen: ±12 dB in Schritten von 0,5."),
         ]
-        .spacing(8),
+        .spacing(10),
     );
     let gate_card = card(
         "Gate",
