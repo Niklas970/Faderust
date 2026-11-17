@@ -76,7 +76,6 @@ const TABLE: &[(&str, &str)] = &[
         "Style sets everything at once. Below you can change spacing, repeats and loudness of the echo one by one.",
     ),
     ("Standard", "Default"),
-    ("Gilt für „Wert im Display“.", "Applies to “Value in a display”."),
     ("Display-Farbe", "Display colour"),
     ("Eckige Fader-Kappe", "Square fader cap"),
     ("Skala am Fader", "Scale beside the fader"),
