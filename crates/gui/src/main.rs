@@ -238,6 +238,8 @@ pub struct App {
     pub picker: Option<(Target, (f32, f32, f32))>,
     pub signal_input: Option<String>,
     pub lcd_input: Option<String>,
+    /// Drawing cache of the sample strips in the design dialog.
+    pub preview_cache: canvas::Cache,
     logo: image::Handle,
     #[cfg(windows)]
     tray: Option<shell::tray::Tray>,
@@ -898,6 +900,7 @@ impl App {
     }
 
     fn clear_caches(&self) {
+        self.preview_cache.clear();
         for s in &self.strips {
             s.cache.clear();
         }
@@ -1322,6 +1325,7 @@ impl App {
             picker: None,
             signal_input: None,
             lcd_input: None,
+            preview_cache: canvas::Cache::new(),
             logo: image::Handle::from_bytes(LOGO),
             #[cfg(windows)]
             tray: tray_icon(),
@@ -3289,6 +3293,47 @@ impl App {
             },
             !edge_off && !s.muted && s.shown > -60.0,
         )
+    }
+
+    /// A sample strip with the current look, for
+    /// the design dialog: each switch shows its effect right there.
+    pub fn preview(&self) -> Element<'_, Message> {
+        let sample = |db: f32, level: f32, peak: f32, post: bool| {
+            let fader = Canvas::new(Fader {
+                cache: &self.preview_cache,
+                db,
+                pos: scale::to_pos(db),
+                muted: false,
+                level,
+                peak,
+                kind: Kind::Preview,
+                parts: self.parts(),
+                post_fader: post,
+                narrow: false,
+                labels: true,
+            })
+            .width(STRIP_W)
+            .height(Length::Fill);
+            self.card(
+                column![
+                    fader,
+                    self.readout(db, false),
+                    Self::mute_button(false, Message::Open(Some(Dialog::Design)), "MUTE"),
+                ]
+                .spacing(8)
+                .align_x(Horizontal::Center)
+                .into(),
+                164.0,
+                !(if post {
+                    self.prefs.output_edge_off
+                } else {
+                    self.prefs.device_edge_off
+                }),
+            )
+        };
+        row![sample(-6.0, -16.0, -9.0, false)]
+            .height(Length::Fixed(390.0))
+            .into()
     }
 
     fn master(&self, o: usize) -> Element<'_, Message> {
