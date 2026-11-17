@@ -191,6 +191,7 @@ fn build(config: &Config, skip: Option<&str>) -> Option<Engine<CpalBackend>> {
                 buffer_ms: o.buffer_ms,
                 release_after: (o.release_secs > 0)
                     .then(|| Duration::from_secs(o.release_secs.into())),
+                release_wired: o.release_wired,
             })
             .collect(),
     };
@@ -1386,6 +1387,7 @@ mod tests {
             buffer_ms: 30,
             master: Default::default(),
             release_secs: 30,
+            release_wired: false,
         });
         config.gains = vec![vec![Gain {
             db: -6.0,
