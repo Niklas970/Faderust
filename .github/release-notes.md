@@ -1,9 +1,10 @@
-## What's new in 0.8.2
+## What's new in 0.8.3
 
-- **New matrix view:** outputs and inputs as cards with level bar, master and mute, every cell with its own fader, value and routing
-- **Design building blocks,** each switchable on its own under "Design": LED segments instead of bars, peak mark, zero line on the fader, value in a display, level bars in the matrix
-- **Echo sliders** now move smoothly (before only "off" or "full")
-- **Stream Deck plugin 0.3.6:** the Faderust profile is now written in the format of a Stream Deck export and offered during plugin setup
+- **Settings in a wide card layout:** "Design" and "Devices" show their options as cards side by side instead of one long list
+- **More design building blocks** under "Design > Fader": square cap, scale, glow, cap in the accent colour, thin track, console cap (black with grip ridges), raised panels, meters in one colour, value in the cap or in a display, and a free colour for the display
+- **Effects dialog as cards:** the echo is set by style (Slapback, Room, Hall, Wide) instead of percent, and the EQ is a classic vertical equalizer
+- **Test versions (optional):** with "Test versions" under "Devices", Faderust can update itself to test builds of the project
+- **CPU log** names every thread and shows the kernel share, so a spike (for example after sleep) can be traced
 
 ## Installation
 
@@ -15,9 +16,10 @@ All features and a guide are in the [README](https://github.com/Niklas970/faderu
 
 ---
 
-## Neu in 0.8.2
+## Neu in 0.8.3
 
-- **Neue Matrix-Ansicht:** Ausgänge und Eingänge als Karten mit Pegelbalken, Master und Stumm, jede Zelle mit eigenem Fader, Wert und Routing
-- **Design-Bausteine,** einzeln unter „Design“ schaltbar: LED-Segmente statt Balken, Spitzenwert-Marke, Nullstrich am Fader, Wert im Display, Pegelbalken in der Matrix
-- **Echo-Regler** laufen jetzt stufenlos (vorher nur „aus“ oder „voll“)
-- **Stream-Deck-Plugin 0.3.6:** das Faderust-Profil wird jetzt im Format eines Stream-Deck-Exports geschrieben und beim Plugin-Setup angeboten
+- **Einstellungen in breiten Karten:** „Design“ und „Geräte“ zeigen ihre Optionen als Karten nebeneinander statt als lange Liste
+- **Mehr Design-Bausteine** unter „Design > Fader“: eckige Kappe, Skala, Leuchten, Kappe in Akzentfarbe, schmale Bahn, Konsolen-Kappe (schwarz mit Griffrillen), erhabene Platten, einfarbige Pegel, Wert in der Kappe oder in einem Display und eine freie Farbe für das Display
+- **Effekte-Dialog als Karten:** das Echo wählst du nach Stil (Slapback, Raum, Hall, Weit) statt in Prozent, und der EQ ist ein klassischer senkrechter Equalizer
+- **Testversionen (optional):** mit „Testversionen“ unter „Geräte“ kann sich Faderust selbst auf Test-Builds des Projekts aktualisieren
+- **CPU-Protokoll** benennt jeden Thread und zeigt den Kernel-Anteil, damit sich eine Spitze (zum Beispiel nach dem Ruhemodus) zuordnen lässt
