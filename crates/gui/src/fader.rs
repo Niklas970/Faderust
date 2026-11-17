@@ -32,6 +32,33 @@ impl Kind {
     }
 }
 
+/// Colour of the meter at a height (0..1): signal, amber and clip, or the
+/// signal colour alone when the block "one colour" is on.
+fn band_color(one: bool, at: f32) -> Color {
+    if one || at < 0.72 {
+        signal()
+    } else if at < 0.80 {
+        mix(signal(), amber(), 0.5)
+    } else if at < 0.90 {
+        amber()
+    } else if at < 0.95 {
+        mix(amber(), danger(), 0.5)
+    } else {
+        danger()
+    }
+}
+
+/// The solid bands of a continuous meter, as (from, to, colour).
+fn zones(one: bool) -> [(f32, f32, Color); 5] {
+    [
+        (0.0, 0.72, band_color(one, 0.0)),
+        (0.72, 0.80, band_color(one, 0.76)),
+        (0.80, 0.90, band_color(one, 0.85)),
+        (0.90, 0.95, band_color(one, 0.925)),
+        (0.95, 1.0, band_color(one, 1.0)),
+    ]
+}
+
 /// Building blocks of the fader that the design dialog switches on and off.
 #[derive(Clone, Copy)]
 pub struct Parts {
@@ -47,6 +74,12 @@ pub struct Parts {
     pub scale: bool,
     /// Glow around the accent bar.
     pub glow: bool,
+    /// The meter in the signal colour only, without amber and red.
+    pub one_color: bool,
+    /// Cap in the accent colour instead of graphite.
+    pub accent_cap: bool,
+    /// The dB value in the cap.
+    pub cap_value: bool,
 }
 
 /// Fader track, scale, cap and LED meter of one strip in a single canvas.
@@ -366,11 +399,26 @@ impl Fader<'_> {
                 }),
             );
         }
+        let (c0, c1, c2, c3) = if self.parts.accent_cap && !off {
+            (
+                mix(accent(), Color::WHITE, 0.25),
+                accent(),
+                mix(accent(), Color::BLACK, 0.2),
+                mix(accent(), Color::BLACK, 0.1),
+            )
+        } else {
+            (
+                rgb(85, 89, 95),
+                rgb(47, 51, 56),
+                rgb(35, 38, 42),
+                rgb(51, 55, 60),
+            )
+        };
         let body = canvas::gradient::Linear::new(Point::new(0.0, cy), Point::new(0.0, cy + ch))
-            .add_stop(0.0, rgb(85, 89, 95))
-            .add_stop(0.45, rgb(47, 51, 56))
-            .add_stop(0.55, rgb(35, 38, 42))
-            .add_stop(1.0, rgb(51, 55, 60));
+            .add_stop(0.0, c0)
+            .add_stop(0.45, c1)
+            .add_stop(0.55, c2)
+            .add_stop(1.0, c3);
         let edge = if off { rgb(85, 90, 97) } else { accent() };
         f.fill(&cap, Fill::from(edge));
         f.fill(
@@ -395,6 +443,9 @@ impl Fader<'_> {
                 accent_light()
             },
         );
+        if !self.parts.cap_value {
+            return;
+        }
         let win = Path::rounded_rectangle(
             Point::new(cx + cw / 2.0 - win_w / 2.0, cap_y - 10.0),
             Size::new(win_w, 20.0),
@@ -442,19 +493,8 @@ impl Fader<'_> {
         let lit = if self.muted { 0.0 } else { frac_of(self.level) };
         let inner = h - 2.0;
         let base = top + h - 1.0;
-        let band = |at: f32| {
-            if at < 0.72 {
-                signal()
-            } else if at < 0.80 {
-                mix(signal(), amber(), 0.5)
-            } else if at < 0.90 {
-                amber()
-            } else if at < 0.95 {
-                mix(amber(), danger(), 0.5)
-            } else {
-                danger()
-            }
-        };
+        let one = self.parts.one_color;
+        let band = |at: f32| band_color(one, at);
         if self.parts.segments {
             // LED segments: 4 px lit, 2 px gap, coloured by height.
             let n = (inner / 6.0).floor().max(1.0) as usize;
@@ -490,13 +530,7 @@ impl Fader<'_> {
         }
         // One continuous bar; signal, amber and clip colours by height.
         // Solid bands, because gradients draw wrongly on some graphics drivers.
-        for (from, to, color) in [
-            (0.0_f32, 0.72_f32, signal()),
-            (0.72, 0.80, mix(signal(), amber(), 0.5)),
-            (0.80, 0.90, amber()),
-            (0.90, 0.95, mix(amber(), danger(), 0.5)),
-            (0.95, 1.0, danger()),
-        ] {
+        for (from, to, color) in zones(one) {
             let (lo, hi) = (from.min(lit), to.min(lit));
             if hi - lo > 0.0005 {
                 f.fill_rectangle(
@@ -529,6 +563,7 @@ pub struct HMeter {
     pub peak: Option<f32>,
     pub muted: bool,
     pub segments: bool,
+    pub one_color: bool,
 }
 
 impl HMeter {
@@ -553,19 +588,8 @@ impl canvas::Program<Message> for HMeter {
         let (w, h) = (bounds.width, bounds.height);
         f.fill_rectangle(Point::ORIGIN, Size::new(w, h), well());
         let lit = if self.muted { 0.0 } else { self.frac };
-        let band = |at: f32| {
-            if at < 0.72 {
-                signal()
-            } else if at < 0.80 {
-                mix(signal(), amber(), 0.5)
-            } else if at < 0.90 {
-                amber()
-            } else if at < 0.95 {
-                mix(amber(), danger(), 0.5)
-            } else {
-                danger()
-            }
-        };
+        let one = self.one_color;
+        let band = |at: f32| band_color(one, at);
         if self.segments {
             let n = (w / 5.0).floor().max(1.0) as usize;
             let seg = w / n as f32;
@@ -580,13 +604,7 @@ impl canvas::Program<Message> for HMeter {
                 }
             }
         } else {
-            for (from, to, color) in [
-                (0.0_f32, 0.72_f32, signal()),
-                (0.72, 0.80, mix(signal(), amber(), 0.5)),
-                (0.80, 0.90, amber()),
-                (0.90, 0.95, mix(amber(), danger(), 0.5)),
-                (0.95, 1.0, danger()),
-            ] {
+            for (from, to, color) in zones(one) {
                 let (lo, hi) = (from.min(lit), to.min(lit));
                 if hi - lo > 0.0005 {
                     f.fill_rectangle(Point::new(w * lo, 0.0), Size::new(w * (hi - lo), h), color);

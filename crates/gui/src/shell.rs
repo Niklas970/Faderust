@@ -140,6 +140,12 @@ pub struct Prefs {
     pub scale_off: bool,
     /// No glow around the accent bar of the fader.
     pub glow_off: bool,
+    /// The meters in the signal colour only.
+    pub one_color: bool,
+    /// Fader caps in the accent colour.
+    pub accent_cap: bool,
+    /// No dB value in the fader cap.
+    pub cap_value_off: bool,
     /// "de", "en" or empty for the system language.
     pub lang: String,
     /// The window stays above all others.

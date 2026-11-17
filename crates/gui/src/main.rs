@@ -388,6 +388,9 @@ pub enum Edit {
     CapSquare(bool),
     Scale(bool),
     Glow(bool),
+    OneColor(bool),
+    AccentCap(bool),
+    CapValue(bool),
     Osd(bool),
     Debug(bool),
     TrayPopup(bool),
@@ -2374,6 +2377,9 @@ impl App {
             Edit::CapSquare(on) => self.set_look(|p| p.cap_square = on),
             Edit::Scale(on) => self.set_look(|p| p.scale_off = !on),
             Edit::Glow(on) => self.set_look(|p| p.glow_off = !on),
+            Edit::OneColor(on) => self.set_look(|p| p.one_color = on),
+            Edit::AccentCap(on) => self.set_look(|p| p.accent_cap = on),
+            Edit::CapValue(on) => self.set_look(|p| p.cap_value_off = !on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::Debug(on) => self.set_look(|p| p.debug = on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),
@@ -2954,6 +2960,9 @@ impl App {
             square_cap: self.prefs.cap_square,
             scale: !self.prefs.scale_off,
             glow: !self.prefs.glow_off,
+            one_color: self.prefs.one_color,
+            accent_cap: self.prefs.accent_cap,
+            cap_value: !self.prefs.cap_value_off,
         }
     }
 
@@ -3429,6 +3438,7 @@ impl App {
             peak,
             muted,
             segments: self.prefs.meter_segments,
+            one_color: self.prefs.one_color,
         })
         .width(Length::Fill)
         .height(6)

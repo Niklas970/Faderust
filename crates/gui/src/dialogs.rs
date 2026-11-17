@@ -963,6 +963,12 @@ fn design(app: &App) -> Element<'_, Message> {
             check(!app.prefs.glow_off)
                 .label(tr("Leuchten am Fader"))
                 .on_toggle(|v| edit(Edit::Glow(v))),
+            check(app.prefs.accent_cap)
+                .label(tr("Kappe in Akzentfarbe"))
+                .on_toggle(|v| edit(Edit::AccentCap(v))),
+            check(!app.prefs.cap_value_off)
+                .label(tr("Wert in der Kappe"))
+                .on_toggle(|v| edit(Edit::CapValue(v))),
             check(app.prefs.readout_display)
                 .label(tr("Wert im Display"))
                 .on_toggle(|v| edit(Edit::ReadoutDisplay(v))),
@@ -975,6 +981,9 @@ fn design(app: &App) -> Element<'_, Message> {
             check(app.prefs.meter_segments)
                 .label(tr("LED-Segmente statt Balken"))
                 .on_toggle(|v| edit(Edit::MeterSegments(v))),
+            check(app.prefs.one_color)
+                .label(tr("Pegel einfarbig"))
+                .on_toggle(|v| edit(Edit::OneColor(v))),
             check(!app.prefs.peak_off)
                 .label(tr("Spitzenwert-Marke"))
                 .on_toggle(|v| edit(Edit::PeakMark(v))),
@@ -1037,9 +1046,9 @@ fn design(app: &App) -> Element<'_, Message> {
         .spacing(8),
     );
     let body = row![
-        cards(1, vec![view_card, hide_card, look_card]),
+        cards(1, vec![view_card, hide_card, look_card, extras_card]),
         cards(1, vec![accent_card, signal_card, edge_card]),
-        cards(1, vec![fader_card, meter_card, extras_card]),
+        cards(1, vec![fader_card, meter_card]),
     ]
     .spacing(12)
     .align_y(Vertical::Top);
