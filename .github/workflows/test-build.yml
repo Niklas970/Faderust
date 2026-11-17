@@ -1,11 +1,12 @@
 name: Test build
 
 # Builds the branch you pick (Run workflow, "Use workflow from") as a signed
-# setup and publishes it as the pre-release "test-<branch>" (one per branch,
-# each run replaces the previous one of its branch). Faderust lists them when
-# "Testversionen" is on in the Devices dialog; you pick the branch there and
-# it updates itself: no download, no version bump, no release. Normal users
-# never see it (pre-releases are not "latest").
+# setup and pushes it to the package ghcr.io/niklas970/faderust-test under the
+# tag "<branch>" (one per branch, each run replaces the previous one of its
+# branch). Faderust lists the tags when "Testversionen" is on in the Devices
+# dialog; you pick the branch there and it updates itself: no download, no
+# version bump, no release, nothing on the releases page. A real release
+# deletes the package again (release.yml).
 on:
   workflow_dispatch:
 
@@ -77,41 +78,36 @@ jobs:
           path: release/*
           if-no-files-found: error
 
-  # Separate job so only it can write to the repository.
+  # Separate job so only it can write to the package.
   publish:
     needs: installer
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: test-files
           path: release
-      - name: Publish the rolling test release
+      - uses: oras-project/setup-oras@v1
+      - name: Push the build to the test package
         env:
           GH_TOKEN: ${{ github.token }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          # Branch name as a tag: "claude/x y" becomes "test-claude-x-y".
-          tag="test-$(printf '%s' "$REF_NAME" | tr -c 'A-Za-z0-9._-' '-')"
+          # Branch name as a tag: "claude/x y" becomes "claude-x-y".
+          tag=$(printf '%s' "$REF_NAME" | tr -c 'A-Za-z0-9._-' '-' | sed -E 's/^[^A-Za-z0-9]+//' | cut -c1-120)
+          echo "$GH_TOKEN" | oras login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           cd release
           setup=$(ls *-setup.exe)
-          build=$(cat build.txt)
-          # Same file name for every build: the updater downloads by manifest.
-          jq -n \
-            --arg version "$(grep -m1 '^version' "$GITHUB_WORKSPACE/Cargo.toml" | sed -E 's/.*"(.*)".*/\1/')" \
-            --arg build "$build" \
-            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --arg sig "$(cat "$setup.sig")" \
-            --arg url "https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$setup" \
-            '{version: $version, build: $build, pub_date: $date, notes: "", platforms: {"windows-x86_64": {signature: $sig, url: $url}}}' \
-            > latest-test.json
-          gh release delete "$tag" --cleanup-tag --yes || true
-          gh release create "$tag" "$setup" "$setup.sig" latest-test.json \
-            --title "Test build $build" \
-            --notes "Test build of branch \`$REF_NAME\` ($GITHUB_SHA). For trying changes only: turn on \"Testversionen\" in Faderust and pick this branch." \
-            --prerelease \
-            --latest=false \
-            --target "$GITHUB_SHA"
+          # One tag per branch; a new run replaces the previous build. The
+          # app reads version and build from the annotations.
+          oras push "ghcr.io/niklas970/faderust-test:$tag" \
+            --artifact-type application/vnd.faderust.test \
+            --annotation "version=$(grep -m1 '^version' "$GITHUB_WORKSPACE/Cargo.toml" | sed -E 's/.*"(.*)".*/\1/')" \
+            --annotation "build=$(cat build.txt)" \
+            --annotation "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --annotation "org.opencontainers.image.description=Faderust test builds, one tag per branch" \
+            "$setup" "$setup.sig"

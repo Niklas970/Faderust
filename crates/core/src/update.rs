@@ -13,41 +13,101 @@ use crate::remote::is_newer;
 /// Where the latest release lists its setup and signature.
 const ENDPOINT: &str = "https://github.com/Niklas970/faderust/releases/latest/download/latest.json";
 
-/// Every run of the "Test build" workflow publishes a pre-release `test-<branch>`
-/// (replacing the previous one of that branch); the app lists them to choose from.
-const RELEASES: &str = "https://api.github.com/repos/Niklas970/faderust/releases?per_page=50";
-const TEST_PREFIX: &str = "test-";
+/// Every run of the "Test build" workflow pushes the build to this package
+/// (GitHub container registry) under the tag `<branch>`, replacing the
+/// previous one of that branch. A real release deletes the package again.
+const REGISTRY: &str = "https://ghcr.io/v2/niklas970/faderust-test";
+const TOKEN_URL: &str =
+    "https://ghcr.io/token?service=ghcr.io&scope=repository:niklas970/faderust-test:pull";
+const MANIFEST_TYPE: &str = "application/vnd.oci.image.manifest.v1+json";
+const TITLE: &str = "org.opencontainers.image.title";
 
-/// A test build to choose from: the pre-release of one branch.
+/// A test build to choose from: the tag of one branch in the package.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestBuild {
-    /// The release tag, `test-<branch>`.
     pub tag: String,
 }
 
 impl std::fmt::Display for TestBuild {
     /// The branch name, as shown in the list.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.tag.strip_prefix(TEST_PREFIX).unwrap_or(&self.tag))
+        f.write_str(&self.tag)
     }
 }
 
-/// The test builds in a `releases` listing of the GitHub API.
-pub fn parse_test_list(json: &str) -> Result<Vec<TestBuild>, String> {
-    let list: Vec<serde_json::Value> = serde_json::from_str(json).map_err(|e| e.to_string())?;
-    Ok(list
-        .iter()
-        .filter(|r| r["prerelease"].as_bool() == Some(true))
-        .filter_map(|r| r["tag_name"].as_str())
-        .filter(|t| t.starts_with(TEST_PREFIX))
+/// The tags of a registry `tags/list` answer.
+pub fn parse_tag_list(json: &str) -> Result<Vec<TestBuild>, String> {
+    let v: serde_json::Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    Ok(v["tags"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|t| t.as_str()))
+        .into_iter()
+        .flatten()
         .map(|t| TestBuild { tag: t.into() })
         .collect())
 }
 
-/// Asks GitHub which test builds exist.
+/// An anonymous pull token of the (public) package.
+fn registry_token() -> Result<String, String> {
+    let body = fetch(&["--max-time", "20", TOKEN_URL])?;
+    let v: serde_json::Value = serde_json::from_slice(&body).map_err(|e| e.to_string())?;
+    v["token"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| "no registry token".to_string())
+}
+
+fn registry_get(token: &str, path: &str, accept: bool) -> Result<Vec<u8>, String> {
+    let auth = format!("Authorization: Bearer {token}");
+    let url = format!("{REGISTRY}/{path}");
+    let mut args = vec!["--max-time", "20", "-H", &auth];
+    let accept_header = format!("Accept: {MANIFEST_TYPE}");
+    if accept {
+        args.extend(["-H", &accept_header]);
+    }
+    args.push(&url);
+    fetch(&args)
+}
+
+/// Asks the registry which test builds exist.
 pub fn list_tests() -> Result<Vec<TestBuild>, String> {
-    let body = fetch(&["--max-time", "20", RELEASES])?;
-    parse_test_list(&String::from_utf8_lossy(&body))
+    let token = registry_token()?;
+    let body = registry_get(&token, "tags/list", false)?;
+    parse_tag_list(&String::from_utf8_lossy(&body))
+}
+
+/// A test build's manifest: which build it is and where its files are.
+#[derive(Debug, PartialEq, Eq)]
+struct OciBuild {
+    version: String,
+    build: String,
+    setup: String,
+    sig: String,
+}
+
+fn parse_oci(json: &str) -> Result<OciBuild, String> {
+    let v: serde_json::Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    let layer = |suffix: &str| {
+        v["layers"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|l| {
+                l["annotations"][TITLE]
+                    .as_str()
+                    .is_some_and(|t| t.ends_with(suffix))
+            })
+            .and_then(|l| l["digest"].as_str())
+            .map(str::to_string)
+            .ok_or_else(|| format!("test build without {suffix}"))
+    };
+    let note = |k: &str| v["annotations"][k].as_str().unwrap_or("").to_string();
+    Ok(OciBuild {
+        version: note("version"),
+        build: note("build"),
+        setup: layer("-setup.exe")?,
+        sig: layer("-setup.exe.sig")?,
+    })
 }
 
 /// Identifies this build for the test channel ("<run>-<commit>", set by the
@@ -69,6 +129,8 @@ pub struct Update {
     /// Set for a test build: which one ("<run>-<commit>").
     pub build: String,
     url: String,
+    /// The setup lies in the test package: the download needs a pull token.
+    registry: bool,
     /// The `.sig` file's content (base64 of the minisign signature).
     signature: String,
 }
@@ -76,9 +138,6 @@ pub struct Update {
 #[derive(Deserialize)]
 struct Manifest {
     version: String,
-    /// Only the test channel's manifest has one.
-    #[serde(default)]
-    build: String,
     platforms: std::collections::HashMap<String, Platform>,
 }
 
@@ -109,15 +168,6 @@ pub fn parse_manifest(json: &str, current: &str) -> Result<Option<Update>, Strin
     offer(m)
 }
 
-/// The test build `json` offers, if it is another build than `own`.
-pub fn parse_test_manifest(json: &str, own: &str) -> Result<Option<Update>, String> {
-    let m: Manifest = serde_json::from_str(json).map_err(|e| e.to_string())?;
-    if m.build.is_empty() || m.build == own {
-        return Ok(None);
-    }
-    offer(m)
-}
-
 fn offer(m: Manifest) -> Result<Option<Update>, String> {
     let p = m
         .platforms
@@ -125,8 +175,9 @@ fn offer(m: Manifest) -> Result<Option<Update>, String> {
         .ok_or_else(|| format!("no setup for {PLATFORM}"))?;
     Ok(Some(Update {
         version: m.version.trim_start_matches('v').to_string(),
-        build: m.build.clone(),
+        build: String::new(),
         url: p.url.clone(),
+        registry: false,
         signature: p.signature.clone(),
     }))
 }
@@ -157,13 +208,23 @@ fn fetch(args: &[&str]) -> Result<Vec<u8>, String> {
 pub fn check(current: &str, test: Option<&str>) -> Result<Option<Update>, String> {
     let body = fetch(&["--max-time", "20", ENDPOINT])?;
     let release = parse_manifest(&String::from_utf8_lossy(&body), current)?;
-    let Some(tag) = test.filter(|t| release.is_none() && t.starts_with(TEST_PREFIX)) else {
+    let Some(tag) = test.filter(|t| release.is_none() && !t.is_empty()) else {
         return Ok(release);
     };
-    let url =
-        format!("https://github.com/Niklas970/faderust/releases/download/{tag}/latest-test.json");
-    let body = fetch(&["--max-time", "20", &url])?;
-    parse_test_manifest(&String::from_utf8_lossy(&body), own_build())
+    let token = registry_token()?;
+    let m = registry_get(&token, &format!("manifests/{tag}"), true)?;
+    let b = parse_oci(&String::from_utf8_lossy(&m))?;
+    if b.build.is_empty() || b.build == own_build() {
+        return Ok(None);
+    }
+    let sig = registry_get(&token, &format!("blobs/{}", b.sig), false)?;
+    Ok(Some(Update {
+        version: b.version,
+        build: b.build,
+        url: format!("{REGISTRY}/blobs/{}", b.setup),
+        registry: true,
+        signature: String::from_utf8_lossy(&sig).trim().to_string(),
+    }))
 }
 
 fn b64_text(s: &str) -> Result<String, String> {
@@ -205,7 +266,12 @@ pub fn install(update: &Update) -> Result<(), String> {
     if !cfg!(windows) {
         return Err("Updates gibt es nur unter Windows / Updates are Windows only".into());
     }
-    let data = fetch(&[&update.url])?;
+    let data = if update.registry {
+        let auth = format!("Authorization: Bearer {}", registry_token()?);
+        fetch(&["-H", &auth, &update.url])?
+    } else {
+        fetch(&[&update.url])?
+    };
     verify(&data, &update.signature)?;
     let path = setup_path(&update.version);
     std::fs::create_dir_all(path.parent().unwrap_or(&path)).map_err(|e| e.to_string())?;
@@ -231,25 +297,27 @@ mod tests {
     }
 
     #[test]
-    fn a_test_build_is_offered_when_it_is_another_build() {
-        let json = MANIFEST.replace(
-            "\"version\":\"0.7.0\"",
-            "\"version\":\"0.7.0\",\"build\":\"12-abc1234\"",
-        );
-        let u = parse_test_manifest(&json, "11-def5678").unwrap().unwrap();
-        assert_eq!(u.label(), "0.7.0 Test 12-abc1234");
-        assert!(parse_test_manifest(&json, "12-abc1234").unwrap().is_none());
-        // A manifest of a release has no build: never a test build.
-        assert!(parse_test_manifest(MANIFEST, "").unwrap().is_none());
+    fn test_builds_are_the_tags_of_the_package() {
+        let list =
+            parse_tag_list(r#"{"name":"niklas970/faderust-test","tags":["claude-x","main"]}"#)
+                .unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].to_string(), "claude-x");
+        assert_eq!(list[1].tag, "main");
+        // A package without tags answers with null.
+        assert!(parse_tag_list(r#"{"tags":null}"#).unwrap().is_empty());
     }
 
     #[test]
-    fn test_builds_are_the_prereleases_named_test() {
-        let json = r#"[{"tag_name":"v0.8.3","prerelease":false},{"tag_name":"test-claude-x","prerelease":true},{"tag_name":"test-main","prerelease":true},{"tag_name":"test-fake","prerelease":false}]"#;
-        let list = parse_test_list(json).unwrap();
-        assert_eq!(list.len(), 2);
-        assert_eq!(list[0].to_string(), "claude-x");
-        assert_eq!(list[1].tag, "test-main");
+    fn a_test_manifest_names_build_and_files() {
+        let json = r#"{"annotations":{"version":"0.8.4","build":"12-abc1234"},"layers":[
+            {"digest":"sha256:aa","annotations":{"org.opencontainers.image.title":"Faderust_0.8.4_x64-setup.exe"}},
+            {"digest":"sha256:bb","annotations":{"org.opencontainers.image.title":"Faderust_0.8.4_x64-setup.exe.sig"}}]}"#;
+        let b = parse_oci(json).unwrap();
+        assert_eq!(b.build, "12-abc1234");
+        assert_eq!(b.setup, "sha256:aa");
+        assert_eq!(b.sig, "sha256:bb");
+        assert!(parse_oci(r#"{"layers":[]}"#).is_err());
     }
 
     #[test]

@@ -108,6 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -138,3 +139,13 @@ jobs:
             --notes-file "$GITHUB_WORKSPACE/.github/release-notes.md" \
             --target "$GITHUB_SHA" \
             --latest
+      # A real version replaces all test builds: empty the test package (and
+      # remove test pre-releases of the earlier setup, if any are left).
+      - name: Clean up test builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X DELETE /users/niklas970/packages/container/faderust-test || echo "no test package to delete"
+          for tag in $(gh release list --json tagName,isPrerelease --jq '.[] | select(.isPrerelease and (.tagName | startswith("test-"))) | .tagName'); do
+            gh release delete "$tag" --cleanup-tag --yes || true
+          done
