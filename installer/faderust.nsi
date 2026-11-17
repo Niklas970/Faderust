@@ -93,8 +93,8 @@ Function .onInstSuccess
   ${GetParameters} $R0
   ${GetOptions} $R0 "/UPDATE" $R1
   ${IfNot} ${Errors}
-    ; After an in-app update: back up, in the tray like before.
-    Exec '"$INSTDIR\faderust.exe" --minimized'
+    ; After an in-app update: Faderust starts again by itself, window open.
+    Exec '"$INSTDIR\faderust.exe"'
   ${EndIf}
 FunctionEnd
 

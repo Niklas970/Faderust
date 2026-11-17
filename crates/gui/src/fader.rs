@@ -16,6 +16,8 @@ use crate::Message;
 pub enum Kind {
     Input(usize),
     Master(usize),
+    /// The sample in the design dialog: draws only, sets nothing.
+    Preview,
 }
 
 /// Corner radius of the fader cap in px.
@@ -28,6 +30,7 @@ impl Kind {
         match self {
             Kind::Input(i) => Message::Level(i, db),
             Kind::Master(o) => Message::Master(o, db),
+            Kind::Preview => Message::Open(None),
         }
     }
 }
@@ -156,6 +159,9 @@ impl canvas::Program<Message> for Fader<'_> {
         cursor: mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
         use iced::Event::Mouse;
+        if matches!(self.kind, Kind::Preview) {
+            return None;
+        }
         let pos = scale::to_pos(self.db);
         let set = |db: f32| canvas::Action::publish(self.kind.message(scale::clamp(db)));
         match event {

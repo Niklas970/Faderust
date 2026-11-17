@@ -18,6 +18,8 @@ const TABLE: &[(&str, &str)] = &[
     ("Alles in Ordnung", "Everything is fine"),
     ("Andere", "Others"),
     ("Ansicht", "View"),
+    ("Vorschau", "Preview"),
+    ("Zeigt jede Änderung sofort: Probier die Schalter einfach aus.", "Shows every change right away: just try the switches."),
     ("Anzahl Kabel", "Number of cables"),
     ("Aufnahme", "Recording"),
     ("Absenkung", "Reduction"),

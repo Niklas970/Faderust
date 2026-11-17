@@ -1201,14 +1201,23 @@ fn design(app: &App) -> Element<'_, Message> {
         ]
         .spacing(8),
     );
+    let preview_card = card(
+        "Vorschau",
+        column![
+            container(app.preview()).center_x(Length::Fill),
+            hint("Zeigt jede Änderung sofort: Probier die Schalter einfach aus."),
+        ]
+        .spacing(8),
+    );
     let body = row![
+        cards(1, vec![preview_card]),
         cards(1, vec![view_card, hide_card, look_card, extras_card]),
         cards(1, vec![accent_card, signal_card, lcd_card, edge_card]),
         cards(1, vec![fader_card, meter_card]),
     ]
     .spacing(12)
     .align_y(Vertical::Top);
-    frame("Design".into(), 1180.0, false, body.into(), no_footer())
+    frame("Design".into(), 1500.0, false, body.into(), no_footer())
 }
 
 pub fn tip<'a>(
