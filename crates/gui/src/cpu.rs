@@ -12,31 +12,59 @@ use std::collections::HashMap;
 pub struct Sample {
     pub id: u32,
     pub name: String,
+    /// Kernel and user time together.
     pub ticks: u64,
+    /// Of which kernel time: a thread that spins in drivers shows it here.
+    pub kernel: u64,
 }
 
-/// Threads above `min_percent` of one core since `before`, busiest first.
-/// A thread that is new counts from zero.
+/// A busy thread: name, percent of one core, and the kernel part of it.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub struct Busy {
+    pub name: String,
+    pub percent: f64,
+    pub kernel: f64,
+}
+
+/// Threads above `min_percent` of one core since `before` (total and kernel
+/// ticks per thread id), busiest first. A thread that is new counts from zero.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn busy(
-    before: &HashMap<u32, u64>,
+    before: &HashMap<u32, (u64, u64)>,
     after: &[Sample],
     seconds: f64,
     min_percent: f64,
-) -> Vec<(String, f64)> {
-    let mut out: Vec<(String, f64)> = after
+) -> Vec<Busy> {
+    let mut out: Vec<Busy> = after
         .iter()
         .filter_map(|s| {
-            let used = s
-                .ticks
-                .saturating_sub(before.get(&s.id).copied().unwrap_or(0));
-            let percent = used as f64 / 1e7 / seconds * 100.0;
-            (percent >= min_percent).then(|| (s.name.clone(), percent))
+            let (t0, k0) = before.get(&s.id).copied().unwrap_or((0, 0));
+            let to_percent = |ticks: u64| ticks as f64 / 1e7 / seconds * 100.0;
+            let percent = to_percent(s.ticks.saturating_sub(t0));
+            (percent >= min_percent).then(|| Busy {
+                name: s.name.clone(),
+                percent,
+                kernel: to_percent(s.kernel.saturating_sub(k0)),
+            })
         })
         .collect();
-    out.sort_by(|a, b| b.1.total_cmp(&a.1));
+    out.sort_by(|a, b| b.percent.total_cmp(&a.percent));
     out
 }
+
+/// Gives the calling thread a name that shows up in the CPU log.
+#[cfg(windows)]
+pub fn name_this_thread(name: &str) {
+    use windows::core::HSTRING;
+    use windows::Win32::System::Threading::{GetCurrentThread, SetThreadDescription};
+    // SAFETY: the pseudo handle of the current thread needs no closing.
+    unsafe {
+        let _ = SetThreadDescription(GetCurrentThread(), &HSTRING::from(name));
+    }
+}
+
+#[cfg(not(windows))]
+pub fn name_this_thread(_name: &str) {}
 
 #[cfg(windows)]
 pub fn start() {
@@ -45,9 +73,9 @@ pub fn start() {
     let _ = std::thread::Builder::new()
         .name("faderust-cpu".into())
         .spawn(|| {
-            let mut before: HashMap<u32, u64> = windows_impl::sample()
+            let mut before: HashMap<u32, (u64, u64)> = windows_impl::sample()
                 .iter()
-                .map(|s| (s.id, s.ticks))
+                .map(|s| (s.id, (s.ticks, s.kernel)))
                 .collect();
             let mut at = Instant::now();
             loop {
@@ -62,12 +90,14 @@ pub fn start() {
                 let seconds = at.elapsed().as_secs_f64();
                 at = Instant::now();
                 let top = busy(&before, &now, seconds, 5.0);
-                before = now.iter().map(|s| (s.id, s.ticks)).collect();
+                before = now.iter().map(|s| (s.id, (s.ticks, s.kernel))).collect();
                 if !top.is_empty() {
                     let list: Vec<String> = top
                         .iter()
                         .take(4)
-                        .map(|(name, p)| format!("{name} {p:.0} %"))
+                        .map(|b| {
+                            format!("{} {:.0} % (kernel {:.0} %)", b.name, b.percent, b.kernel)
+                        })
                         .collect();
                     faderust_core::log::write(&format!("CPU: {}", list.join(", ")));
                 }
@@ -136,6 +166,7 @@ mod windows_impl {
                                 id: entry.th32ThreadID,
                                 name,
                                 ticks: ticks(kernel) + ticks(user),
+                                kernel: ticks(kernel),
                             });
                         }
                         let _ = CloseHandle(thread);
@@ -155,17 +186,20 @@ mod tests {
 
     #[test]
     fn only_busy_threads_are_named_busiest_first() {
-        let before = HashMap::from([(1, 0), (2, 0), (3, 0)]);
+        let before = HashMap::from([(1, (0, 0)), (2, (0, 0)), (3, (0, 0))]);
         let s = |id, name: &str, secs: f64| Sample {
             id,
             name: name.into(),
             ticks: (secs * 1e7) as u64,
+            kernel: (secs * 1e7 / 2.0) as u64,
         };
         // Over 30 s: 3 s = 10 %, 0.3 s = 1 %, 6 s = 20 %.
         let after = [s(1, "gui", 3.0), s(2, "idle", 0.3), s(3, "engine", 6.0)];
         let top = busy(&before, &after, 30.0, 5.0);
-        let names: Vec<&str> = top.iter().map(|(n, _)| n.as_str()).collect();
+        let names: Vec<&str> = top.iter().map(|b| b.name.as_str()).collect();
         assert_eq!(names, ["engine", "gui"]);
-        assert!((top[0].1 - 20.0).abs() < 0.01);
+        assert!((top[0].percent - 20.0).abs() < 0.01);
+        // Half of the time was spent in the kernel.
+        assert!((top[0].kernel - 10.0).abs() < 0.01);
     }
 }

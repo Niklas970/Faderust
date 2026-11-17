@@ -228,8 +228,8 @@ fn run_urbs(stream: TcpStream, ring: &Arc<Ring>, cable: usize) -> io::Result<()>
     let (play_tx, play_rx) = mpsc::channel();
     let (rec_tx, rec_rx) = mpsc::channel();
     let workers = [
-        spawn_pacer(shared.clone(), play_rx),
-        spawn_pacer(shared.clone(), rec_rx),
+        spawn_pacer("usbcable-pacer-out", shared.clone(), play_rx),
+        spawn_pacer("usbcable-pacer-in", shared.clone(), rec_rx),
     ];
 
     let mut reader = stream;
@@ -363,8 +363,11 @@ fn control(
 }
 
 /// Completes the URBs of one endpoint, each when its frames are over.
-fn spawn_pacer(shared: Arc<Shared>, jobs: Receiver<IsoJob>) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
+fn spawn_pacer(name: &str, shared: Arc<Shared>, jobs: Receiver<IsoJob>) -> thread::JoinHandle<()> {
+    // Named, so the CPU log of the debug mode can say which thread is busy.
+    thread::Builder::new()
+        .name(name.into())
+        .spawn(move || {
         // The moment up to which this endpoint's frames are already spoken for.
         let mut clock: Option<Instant> = None;
         let (mut urbs, mut packets, mut late_ms) = (0u32, 0u32, 0u128);
@@ -409,6 +412,7 @@ fn spawn_pacer(shared: Arc<Shared>, jobs: Receiver<IsoJob>) -> thread::JoinHandl
             }
         }
     })
+    .expect("spawn pacer thread")
 }
 
 fn complete(shared: &Shared, job: IsoJob) -> io::Result<()> {
