@@ -383,9 +383,9 @@ impl Fader<'_> {
         let (cw0, ch0) = if wide { (68.0, 44.0) } else { (40.0, 40.0) };
         let (cw, ch) = if self.parts.small_cap {
             if wide {
-                (44.0, 24.0)
+                (46.0, 32.0)
             } else {
-                (34.0, 22.0)
+                (34.0, 28.0)
             }
         } else {
             (cw0, ch0)
@@ -397,7 +397,7 @@ impl Fader<'_> {
         let radius = if self.parts.square_cap {
             CAP_RADIUS_SQUARE
         } else if self.parts.small_cap {
-            6.0
+            3.0
         } else {
             CAP_RADIUS
         };
@@ -466,7 +466,19 @@ impl Fader<'_> {
                 accent_light()
             },
         );
-        if !self.parts.cap_value || self.parts.small_cap {
+        if self.parts.small_cap {
+            // Grip ridges like on a console fader: a dark groove with a light
+            // edge below it, two above and two below the index line.
+            let gx = cx + 6.0;
+            let gw = cw - 12.0;
+            for k in [-2.0_f32, -1.0, 1.0, 2.0] {
+                let y = cap_y + k * 4.5 - k.signum() * 1.5;
+                f.fill_rectangle(Point::new(gx, y - 1.0), Size::new(gw, 1.0), rgb(14, 15, 17));
+                f.fill_rectangle(Point::new(gx, y), Size::new(gw, 1.0), rgb(120, 126, 134));
+            }
+            return;
+        }
+        if !self.parts.cap_value {
             return;
         }
         let win = Path::rounded_rectangle(
