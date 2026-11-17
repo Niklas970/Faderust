@@ -387,6 +387,7 @@ pub enum Edit {
     MatrixMeters(bool),
     Osd(bool),
     Debug(bool),
+    TestChannel(bool),
     TrayPopup(bool),
     AccentHex(String),
     SignalHex(String),
@@ -677,8 +678,9 @@ impl App {
         }
         self.checking = true;
         self.last_check = Some(Instant::now());
+        let test = self.prefs.test_channel;
         blocking(
-            || faderust_core::update::check(env!("CARGO_PKG_VERSION")),
+            move || faderust_core::update::check(env!("CARGO_PKG_VERSION"), test),
             move |r| Message::UpdateChecked(r, manual),
         )
     }
@@ -2369,6 +2371,11 @@ impl App {
             Edit::ReadoutDisplay(on) => self.set_look(|p| p.readout_display = on),
             Edit::MatrixMeters(on) => self.set_look(|p| p.matrix_meters_off = !on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
+            Edit::TestChannel(on) => {
+                self.set_look(|p| p.test_channel = on);
+                // Look for a test build right away.
+                self.last_check = None;
+            }
             Edit::Debug(on) => self.set_look(|p| p.debug = on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),
             Edit::Picker(t) => {
@@ -2748,7 +2755,7 @@ impl App {
                     text(if self.updating {
                         "Lädt …".to_string()
                     } else {
-                        format!("{} {}", i18n::tr("Update auf"), u.version)
+                        format!("{} {}", i18n::tr("Update auf"), u.label())
                     })
                     .size(12)
                     .font(BOLD)
