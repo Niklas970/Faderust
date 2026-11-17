@@ -180,8 +180,11 @@ pub fn view(app: &App, d: Dialog) -> Element<'_, Message> {
 }
 
 fn fx(app: &App, i: usize) -> Element<'_, Message> {
-    let f = &app.fx[i];
-    let lit = (app.strips[i].shown + 90.0).clamp(1.0, 89.0) as u16;
+    // The strip can be gone (removed in the devices dialog) while this is open.
+    let (Some(f), Some(strip)) = (app.fx.get(i), app.strips.get(i)) else {
+        return frame("Effekte".into(), 1040.0, false, hint("Lade …"), no_footer());
+    };
+    let lit = (strip.shown + 90.0).clamp(1.0, 89.0) as u16;
     let band = |b: usize, name: &'static str, hz: &'static str| {
         row![
             container(text(format!("{name} {hz}")).size(13).color(text_color())).width(150),
@@ -209,130 +212,216 @@ fn fx(app: &App, i: usize) -> Element<'_, Message> {
         .spacing(10)
         .align_y(Vertical::Center)
     };
-    let body = column![
-        h3("Rauschfilter"),
-        check(f.denoise)
-            .label(tr("Hintergrundgeräusche entfernen"))
-            .on_toggle(move |v| edit(Edit::Denoise(i, v))),
-        hint("Filtert Tastatur, Lüfter und Rauschen aus der Stimme."),
-        row![
-            container(text("Stärke").size(13).color(text_color())).width(150),
+    // Words instead of percentages: each choice sets one value, the one
+    // nearest to the current value is shown as on.
+    let nearest = |value: f32, options: &[f32]| -> usize {
+        options
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| (**a - value).abs().total_cmp(&(**b - value).abs()))
+            .map_or(0, |(k, _)| k)
+    };
+    const FEEDBACK: [(&str, f32); 4] = [
+        ("Keine", 0.0),
+        ("Wenige", 0.2),
+        ("Mittel", 0.45),
+        ("Viele", 0.7),
+    ];
+    const MIX: [(&str, f32); 3] = [("Dezent", 0.15), ("Mittel", 0.3), ("Deutlich", 0.5)];
+    const ECHO_STYLES: [(&str, f32, f32, f32); 4] = [
+        ("Slapback", 120.0, 0.15, 0.3),
+        ("Raum", 250.0, 0.3, 0.25),
+        ("Hall", 500.0, 0.5, 0.3),
+        ("Weit", 800.0, 0.6, 0.35),
+    ];
+    const EQ_STYLES: [(&str, [f32; 3]); 4] = [
+        ("Flach", [0.0, 0.0, 0.0]),
+        ("Stimme klar", [-2.0, 3.0, 1.5]),
+        ("Warm", [3.0, -1.0, -3.0]),
+        ("Hell", [-3.0, 2.0, 4.0]),
+    ];
+    let fb_now = nearest(
+        f.echo_feedback,
+        &FEEDBACK.iter().map(|(_, v)| *v).collect::<Vec<_>>(),
+    );
+    let mix_now = nearest(f.echo_mix, &MIX.iter().map(|(_, v)| *v).collect::<Vec<_>>());
+    let style_now = ECHO_STYLES.iter().position(|(_, ms, fb, mix)| {
+        (f.echo_ms - ms).abs() < 5.0
+            && (f.echo_feedback - fb).abs() < 0.03
+            && (f.echo_mix - mix).abs() < 0.03
+    });
+    let eq_now = EQ_STYLES
+        .iter()
+        .position(|(_, g)| (0..3).all(|b| (f.eq[b] - g[b]).abs() < 0.3));
+    let echo_style = segmented(
+        ECHO_STYLES
+            .iter()
+            .enumerate()
+            .map(|(k, (name, ms, fb, mix))| {
+                (
+                    tr(name),
+                    style_now == Some(k),
+                    edit(Edit::EchoStyle(i, *ms, *fb, *mix)),
+                )
+            })
+            .collect(),
+    );
+    let echo_feedback = segmented(
+        FEEDBACK
+            .iter()
+            .enumerate()
+            .map(|(k, (name, v))| (tr(name), fb_now == k, edit(Edit::EchoFeedback(i, *v))))
+            .collect(),
+    );
+    let echo_mix = segmented(
+        MIX.iter()
+            .enumerate()
+            .map(|(k, (name, v))| (tr(name), mix_now == k, edit(Edit::EchoMix(i, *v))))
+            .collect(),
+    );
+    let eq_style = segmented(
+        EQ_STYLES
+            .iter()
+            .enumerate()
+            .map(|(k, (name, g))| (tr(name), eq_now == Some(k), edit(Edit::EqStyle(i, *g))))
+            .collect(),
+    );
+    let gate_bar = row![
+        space().width(160),
+        container(row![
+            container(space())
+                .width(Length::FillPortion(lit))
+                .height(8)
+                .style(|_| container::Style {
+                    background: Some(Background::Color(signal())),
+                    ..container::Style::default()
+                }),
+            space().width(Length::FillPortion(90 - lit)),
+        ])
+        .width(Length::Fill)
+        .style(|_| container::Style {
+            background: Some(Background::Color(panel_2())),
+            border: Border {
+                radius: 4.0.into(),
+                ..Border::default()
+            },
+            ..container::Style::default()
+        }),
+    ];
+    let denoise_card = card(
+        "Rauschfilter",
+        column![
+            check(f.denoise)
+                .label(tr("Hintergrundgeräusche entfernen"))
+                .on_toggle(move |v| edit(Edit::Denoise(i, v))),
+            hint("Filtert Tastatur, Lüfter und Rauschen aus der Stimme."),
+            row![
+                container(text("Stärke").size(13).color(text_color())).width(150),
+                segmented(
+                    [("Leicht", 0.4_f32), ("Mittel", 0.7), ("Stark", 1.0)]
+                        .into_iter()
+                        .map(|(name, amount)| (
+                            tr(name),
+                            (f.denoise_amount - amount).abs() < 0.05,
+                            edit(Edit::DenoiseAmount(i, amount))
+                        ))
+                        .collect()
+                ),
+            ]
+            .align_y(Vertical::Center),
+        ]
+        .spacing(8),
+    );
+    let low_cut_card = card(
+        "Low-Cut",
+        column![
             segmented(
-                [("Leicht", 0.4_f32), ("Mittel", 0.7), ("Stark", 1.0)]
+                [0u16, 80, 120, 160]
                     .into_iter()
-                    .map(|(name, amount)| (
-                        tr(name),
-                        (f.denoise_amount - amount).abs() < 0.05,
-                        edit(Edit::DenoiseAmount(i, amount))
+                    .map(|hz| (
+                        if hz == 0 {
+                            "Aus".into()
+                        } else {
+                            format!("{hz} Hz")
+                        },
+                        f.low_cut == hz,
+                        edit(Edit::LowCut(i, hz))
                     ))
                     .collect()
             ),
+            hint("Schneidet Brummen und Trittschall unten ab."),
         ]
-        .align_y(Vertical::Center),
-        h3("Low-Cut"),
-        segmented(
-            [0u16, 80, 120, 160]
-                .into_iter()
-                .map(|hz| (
-                    if hz == 0 {
-                        "Aus".into()
-                    } else {
-                        format!("{hz} Hz")
-                    },
-                    f.low_cut == hz,
-                    edit(Edit::LowCut(i, hz))
-                ))
-                .collect()
-        ),
-        hint("Schneidet Brummen und Trittschall unten ab."),
-        h3("EQ"),
-        band(0, "Bass", "120 Hz"),
-        band(1, "Präsenz", "3 kHz"),
-        band(2, "Höhen", "8 kHz"),
-        h3("Gate"),
-        check(f.gate)
-            .label(tr("Stumm unter der Schwelle"))
-            .on_toggle(move |v| edit(Edit::Gate(i, v))),
-        row![
-            container(text("Schwelle").size(13).color(text_color())).width(150),
-            slider(-90.0..=-10.0, f.gate_db, move |v| edit(Edit::GateDb(
-                i,
-                v.round()
-            ))),
-            container(
-                text(format!("{} dB", f.gate_db))
-                    .font(MONO)
-                    .size(13)
-                    .color(text_color())
-            )
-            .width(70)
-            .align_right(Length::Fill),
+        .spacing(8),
+    );
+    let eq_card = card(
+        "EQ",
+        column![
+            eq_style,
+            band(0, "Bass", "120 Hz"),
+            band(1, "Präsenz", "3 kHz"),
+            band(2, "Höhen", "8 kHz"),
         ]
-        .spacing(10)
-        .align_y(Vertical::Center),
-        row![
-            space().width(160),
-            container(row![
-                container(space())
-                    .width(Length::FillPortion(lit))
-                    .height(8)
-                    .style(|_| container::Style {
-                        background: Some(Background::Color(signal())),
-                        ..container::Style::default()
-                    }),
-                space().width(Length::FillPortion(90 - lit)),
-            ])
-            .width(Length::Fill)
-            .style(|_| container::Style {
-                background: Some(Background::Color(panel_2())),
-                border: Border {
-                    radius: 4.0.into(),
-                    ..Border::default()
-                },
-                ..container::Style::default()
-            }),
-        ],
-        hint("Der Balken zeigt den Pegel, der Strich die Schwelle."),
-        h3("Echo"),
-        check(f.echo)
-            .label(tr("Echo-Effekt"))
-            .on_toggle(move |v| edit(Edit::Echo(i, v))),
-        echo_row(
-            "Zeit",
-            format!("{} ms", f.echo_ms.round()),
-            slider(50.0..=1000.0, f.echo_ms, move |v| edit(Edit::EchoMs(
-                i,
-                (v / 10.0).round() * 10.0
-            )))
-            .into()
-        ),
-        echo_row(
-            "Wiederholungen",
-            format!("{} %", (f.echo_feedback * 100.0).round()),
-            slider(0.0..=0.8, f.echo_feedback, move |v| edit(
-                Edit::EchoFeedback(i, (v * 20.0).round() / 20.0)
-            ))
-            .step(0.01_f32)
-            .into()
-        ),
-        echo_row(
-            "Anteil",
-            format!("{} %", (f.echo_mix * 100.0).round()),
-            slider(0.0..=1.0, f.echo_mix, move |v| edit(Edit::EchoMix(
-                i,
-                (v * 20.0).round() / 20.0
-            )))
-            .step(0.01_f32)
-            .into()
-        ),
-        hint("Fügt der Stimme ein Echo hinzu. Wiederholungen: wie oft es nachhallt."),
-        h3("Ducking"),
-        duck(app, i),
+        .spacing(8),
+    );
+    let gate_card = card(
+        "Gate",
+        column![
+            check(f.gate)
+                .label(tr("Stumm unter der Schwelle"))
+                .on_toggle(move |v| edit(Edit::Gate(i, v))),
+            row![
+                container(text("Schwelle").size(13).color(text_color())).width(150),
+                slider(-90.0..=-10.0, f.gate_db, move |v| edit(Edit::GateDb(
+                    i,
+                    v.round()
+                ))),
+                container(
+                    text(format!("{} dB", f.gate_db))
+                        .font(MONO)
+                        .size(13)
+                        .color(text_color())
+                )
+                .width(70)
+                .align_right(Length::Fill),
+            ]
+            .spacing(10)
+            .align_y(Vertical::Center),
+            gate_bar,
+            hint("Der Balken zeigt den Pegel, der Strich die Schwelle."),
+        ]
+        .spacing(8),
+    );
+    let echo_card = card(
+        "Echo",
+        column![
+            check(f.echo)
+                .label(tr("Echo-Effekt"))
+                .on_toggle(move |v| edit(Edit::Echo(i, v))),
+            echo_row("Stil", String::new(), echo_style),
+            echo_row(
+                "Abstand",
+                format!("{} ms", f.echo_ms.round()),
+                slider(50.0..=1000.0, f.echo_ms, move |v| edit(Edit::EchoMs(
+                    i,
+                    (v / 10.0).round() * 10.0
+                )))
+                .into()
+            ),
+            echo_row("Nachhall", String::new(), echo_feedback),
+            echo_row("Lautstärke", String::new(), echo_mix),
+            hint("Stil stellt alles auf einmal ein. Darunter kannst du Abstand, Nachhall und Lautstärke des Echos einzeln ändern."),
+        ]
+        .spacing(8),
+    );
+    let body = row![
+        cards(1, vec![denoise_card, low_cut_card, eq_card]),
+        cards(1, vec![gate_card, echo_card, card("Ducking", duck(app, i))]),
     ]
-    .spacing(8);
+    .spacing(12)
+    .align_y(Vertical::Top);
     frame(
-        format!("{}: {}", tr("Effekte"), app.strips[i].label),
-        520.0,
+        format!("{}: {}", tr("Effekte"), strip.label),
+        1040.0,
         false,
         body.into(),
         row![btn("Zurücksetzen", edit(Edit::ResetFx(i)), false),]
