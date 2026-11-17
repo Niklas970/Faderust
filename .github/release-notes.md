@@ -1,8 +1,8 @@
-## What's new in 0.8.4
+## What's new in 0.8.5
 
-- **Test versions card** under "Devices > Debug": shows your current version or test build and has a "Search now" button
-- **One test build per branch:** pick the branch in the app and it updates itself to that build, with no download and no release
-- **Test build workflow** on GitHub (Actions > "Test build") publishes the build of the chosen branch as a signed test release
+- **Preview in the Design tab:** a sample strip shows every change right away while you try the switches
+- **Restart after an update:** Faderust starts again by itself and opens its window
+- **Test versions without clutter:** test builds now live in a GitHub package instead of the releases page, so the list of versions stays clean (this fixes the 404 when searching for test versions)
 
 ## Installation
 
@@ -14,8 +14,8 @@ All features and a guide are in the [README](https://github.com/Niklas970/faderu
 
 ---
 
-## Neu in 0.8.4
+## Neu in 0.8.5
 
-- **Karte „Testversionen“** unter „Geräte > Debug“: zeigt deine aktuelle Version oder den Test-Build und hat einen Knopf „Jetzt suchen“
-- **Ein Test-Build pro Branch:** den Branch in der App auswählen, und Faderust aktualisiert sich selbst darauf, ohne Download und ohne Release
-- **Test-Build-Workflow** auf GitHub (Actions > „Test build“) veröffentlicht den Build des gewählten Branches als signierten Test-Release
+- **Vorschau im Design-Tab:** ein Beispiel-Streifen zeigt jede Änderung sofort, während du die Schalter ausprobierst
+- **Neustart nach dem Update:** Faderust startet von selbst neu und öffnet sein Fenster wieder
+- **Testversionen ohne Durcheinander:** Test-Builds liegen jetzt in einem GitHub-Package statt auf der Release-Seite, die Versionsliste bleibt sauber (behebt den Fehler 404 bei der Suche nach Testversionen)
