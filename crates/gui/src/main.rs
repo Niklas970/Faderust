@@ -369,6 +369,7 @@ pub enum Edit {
     OutDevice(usize, String),
     OutBuffer(usize, String),
     OutRelease(usize, u32),
+    OutReleaseWired(usize, bool),
     OutAdd,
     MicAdd,
     /// Park the program on a quiet cable, then record it: (program, label, pids, cable id).
@@ -2242,6 +2243,11 @@ impl App {
                     x.release_secs = secs;
                 }
             }),
+            Edit::OutReleaseWired(o, on) => self.draft_edit(|c| {
+                if let Some(x) = c.outputs.get_mut(o) {
+                    x.release_wired = on;
+                }
+            }),
             Edit::OutAdd => {
                 let device = self.devs.outputs.first().map(|d| d.name.clone());
                 if let Some(device) = device {
@@ -2253,6 +2259,7 @@ impl App {
                             buffer_ms: 60,
                             master: Default::default(),
                             release_secs: 30,
+                            release_wired: false,
                         });
                         for row in c
                             .gains
@@ -2278,6 +2285,7 @@ impl App {
                             buffer_ms: 30,
                             master: Default::default(),
                             release_secs: 30,
+                            release_wired: false,
                         });
                         // The first input (usually the microphone) at 0 dB, the rest muted.
                         for row in c

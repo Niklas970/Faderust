@@ -1554,34 +1554,40 @@ fn settings(app: &App) -> Element<'_, Message> {
             .copied()
             .unwrap_or((output.release_secs, "Andere"));
         outputs = outputs.push(
-            row![
-                text_input("Name", &output.label)
-                    .on_input(move |t| edit(Edit::OutLabel(o, t)))
-                    .width(120),
-                pick_list(choices, Some(current), move |c| edit(Edit::OutDevice(
-                    o, c.id
-                )))
-                .width(Length::Fill),
-                text_input("ms", &output.buffer_ms.to_string())
-                    .on_input(move |t| edit(Edit::OutBuffer(o, t)))
-                    .width(54),
-                pick_list(
-                    RELEASE.iter().map(|(_, n)| *n).collect::<Vec<_>>(),
-                    Some(release.1),
-                    move |n| edit(Edit::OutRelease(
-                        o,
-                        RELEASE
-                            .iter()
-                            .find(|(_, x)| *x == n)
-                            .map_or(30, |(s, _)| *s)
-                    ))
-                ),
-                arrow("←", (o > 0).then(|| edit(Edit::OutMove(o, -1)))),
-                arrow("→", (o + 1 < n_out).then(|| edit(Edit::OutMove(o, 1)))),
-                btn("✕", edit(Edit::OutRemove(o)), false),
+            column![
+                row![
+                    text_input("Name", &output.label)
+                        .on_input(move |t| edit(Edit::OutLabel(o, t)))
+                        .width(120),
+                    pick_list(choices, Some(current), move |c| edit(Edit::OutDevice(
+                        o, c.id
+                    )))
+                    .width(Length::Fill),
+                    text_input("ms", &output.buffer_ms.to_string())
+                        .on_input(move |t| edit(Edit::OutBuffer(o, t)))
+                        .width(54),
+                    pick_list(
+                        RELEASE.iter().map(|(_, n)| *n).collect::<Vec<_>>(),
+                        Some(release.1),
+                        move |n| edit(Edit::OutRelease(
+                            o,
+                            RELEASE
+                                .iter()
+                                .find(|(_, x)| *x == n)
+                                .map_or(30, |(s, _)| *s)
+                        ))
+                    ),
+                    arrow("←", (o > 0).then(|| edit(Edit::OutMove(o, -1)))),
+                    arrow("→", (o + 1 < n_out).then(|| edit(Edit::OutMove(o, 1)))),
+                    btn("✕", edit(Edit::OutRemove(o)), false),
+                ]
+                .spacing(8)
+                .align_y(Vertical::Center),
+                check(output.release_wired)
+                    .label(tr("Auch Kabelgeräte freigeben (gegen Rauschen)"))
+                    .on_toggle(move |v| edit(Edit::OutReleaseWired(o, v))),
             ]
-            .spacing(8)
-            .align_y(Vertical::Center),
+            .spacing(4),
         );
     }
     let cable_section: Element<'_, Message> = match &app.usb {

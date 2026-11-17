@@ -33,6 +33,9 @@ pub struct OutputConfig {
     /// again when signal returns. Lets Bluetooth headphones switch to
     /// another device (multipoint) while Faderust has nothing to play.
     pub release_after: Option<Duration>,
+    /// Release wired devices too, not only Bluetooth. Some headphones hiss
+    /// while a stream is open, even when it carries only silence.
+    pub release_wired: bool,
 }
 
 /// Below this peak (−60 dBFS) an input counts as silent.
@@ -693,7 +696,8 @@ impl<B: AudioBackend> Engine<B> {
             handle,
             failed: flag,
         });
-        self.idle[o].releasable = self.backend.releasable(&device.id);
+        self.idle[o].releasable =
+            self.config.outputs[o].release_wired || self.backend.releasable(&device.id);
         self.outputs[o].device = Some((device.clone(), format));
         EngineEvent::Connected {
             dir: Direction::Output,
@@ -1092,6 +1096,7 @@ mod tests {
                     device: d.to_string(),
                     buffer_ms: *ms,
                     release_after: None,
+                    release_wired: false,
                 })
                 .collect(),
         }
@@ -1412,6 +1417,29 @@ mod tests {
         assert!(engine.maintain_at(t0 + Duration::from_secs(60)).is_empty());
         assert!(!engine.is_released(0));
         assert!(engine.outputs()[0].device.is_some());
+    }
+
+    #[test]
+    fn wired_output_is_released_when_asked_to() {
+        let b = FakeBackend::default();
+        b.plug_input("mic", 48_000, 1);
+        b.plug_output("speakers", 48_000, 2);
+        b.wire("speakers");
+        let mut cfg = config(&["mic"], &[("speakers", 20)]);
+        cfg.outputs[0].release_after = Some(Duration::from_secs(5));
+        cfg.outputs[0].release_wired = true;
+        let mut engine = Engine::new(b.clone(), cfg).unwrap();
+        engine.matrix.set_muted(0, 0, true);
+        let t0 = Instant::now();
+        assert_eq!(connected(&engine.maintain_at(t0)), 2);
+        b.pump(100, level);
+        assert!(engine.maintain_at(t0 + Duration::from_secs(1)).is_empty());
+        b.pump(100, level);
+        assert_eq!(
+            engine.maintain_at(t0 + Duration::from_secs(7)),
+            vec![EngineEvent::Released { slot: 0 }]
+        );
+        assert!(engine.is_released(0));
     }
 
     #[test]

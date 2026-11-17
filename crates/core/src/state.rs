@@ -476,6 +476,7 @@ pub fn initial_config() -> Config {
                 buffer_ms: 40,
                 master: Default::default(),
                 release_secs: 30,
+                release_wired: false,
             })
             .into_iter()
             .collect(),
@@ -704,6 +705,7 @@ mod tests {
                 buffer_ms: 40,
                 master: Default::default(),
                 release_secs: 30,
+                release_wired: false,
             }],
             gains: vec![],
             presets: vec![],
