@@ -103,6 +103,8 @@ pub fn set_autostart(on: bool) -> Result<(), String> {
 #[derive(Serialize, Deserialize, Default, Clone, PartialEq)]
 #[serde(default)]
 pub struct Prefs {
+    /// Where the main window was last: x, y, width, height (logical px).
+    pub win: Option<[f32; 4]>,
     /// "desk" or "matrix".
     pub view: String,
     /// Seconds of silence after which a program leaves the desk; `None` is the default.

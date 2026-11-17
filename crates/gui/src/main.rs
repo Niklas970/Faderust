@@ -215,6 +215,8 @@ pub struct App {
     /// Logical window size the user chose, restored after a monitor with a
     /// different scaling changed it (Windows rounds a little on every move).
     size_keep: Option<Size>,
+    /// Last known position of the main window (for the next start).
+    pos_keep: Option<Point>,
     /// When the window last changed its scaling or size during a move across
     /// monitors; the size settles after that.
     rescaled_at: Option<Instant>,
@@ -462,6 +464,7 @@ pub enum Message {
     LogAction(iced::widget::text_editor::Action),
     /// The window got another size (logical).
     Resized(window::Id, Size),
+    Moved(window::Id, Point),
     /// The window lost focus (closes the tray popup).
     Unfocused(window::Id),
     /// Tray popup: the screen size, to place the window at its corner.
@@ -964,8 +967,31 @@ impl App {
         self.mini || self.popup_draw.get()
     }
 
+    /// Writes where the main window is, so the next start (also after an
+    /// update) opens it in the same place and size.
+    fn remember_window(&mut self) {
+        if self.mini {
+            return;
+        }
+        let old = self.prefs.win;
+        let (Some(size), Some(pos)) = (
+            self.size_keep,
+            self.pos_keep.or(old.map(|w| Point::new(w[0], w[1]))),
+        ) else {
+            return;
+        };
+        let win = Some([pos.x, pos.y, size.width, size.height]);
+        if win != old {
+            let mut prefs = self.prefs.clone();
+            prefs.win = win;
+            shell::save_prefs(&self.dir, &prefs);
+            self.prefs = prefs;
+        }
+    }
+
     /// Closing the window keeps the mixer running in the tray.
     fn hide(&mut self) -> Task<Message> {
+        self.remember_window();
         self.visible.store(false, Ordering::Relaxed);
         match self.win_id {
             Some(id) => window::set_mode(id, window::Mode::Hidden),
@@ -1304,6 +1330,7 @@ impl App {
             popup_draw: Cell::new(false),
             mini_count: 0,
             size_keep: Some(Size::new(1400.0, 860.0)),
+            pos_keep: None,
             rescaled_at: None,
             burst_from: None,
             size_log: Vec::new(),
@@ -1375,7 +1402,11 @@ impl App {
         };
         app.refresh_presets();
         app.refresh_sounds();
-        let (main_id, open) = window::open(main_window());
+        app.pos_keep = app.prefs.win.map(|w| Point::new(w[0], w[1]));
+        if let Some(w) = app.prefs.win {
+            app.size_keep = Some(Size::new(w[2], w[3]));
+        }
+        let (main_id, open) = window::open(main_window(app.prefs.win));
         app.win_id = Some(main_id);
         let mut tasks = vec![app.open(dialog), open.map(|id| Message::WinId(Some(id)))];
         if hide_closed(app.hide_after) {
@@ -1778,6 +1809,12 @@ impl App {
                     return window::drag_resize(id, direction);
                 }
             }
+            Message::Moved(id, p) => {
+                // A minimised window reports a position far off screen.
+                if Some(id) == self.win_id && !self.mini && p.x > -10000.0 && p.y > -10000.0 {
+                    self.pos_keep = Some(p);
+                }
+            }
             Message::Resized(id, size) => {
                 if Some(id) != self.win_id {
                     return Task::none();
@@ -1861,6 +1898,7 @@ impl App {
                 }
             }
             Message::Quit => {
+                self.remember_window();
                 faderust_core::log::write("Faderust beendet");
                 // A stream that never closes must not keep the process, and
                 // with it the audio devices, alive after Quit.
@@ -4173,6 +4211,7 @@ impl App {
                 iced::Event::Window(window::Event::Resized(size)) => {
                     Some(Message::Resized(id, size))
                 }
+                iced::Event::Window(window::Event::Moved(p)) => Some(Message::Moved(id, p)),
                 iced::Event::Window(window::Event::Rescaled(_)) => Some(Message::Rescaled(id)),
                 iced::Event::Window(window::Event::Unfocused) => Some(Message::Unfocused(id)),
                 _ => None,
@@ -4274,11 +4313,42 @@ fn main() -> iced::Result {
         .run()
 }
 
+/// Whether the saved window still lies on a screen (a monitor may be gone).
+#[cfg(windows)]
+fn window_on_screen(w: [f32; 4]) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::*;
+    // SAFETY: plain system metric queries.
+    let (vx, vy, vw, vh) = unsafe {
+        (
+            GetSystemMetrics(SM_XVIRTUALSCREEN) as f32,
+            GetSystemMetrics(SM_YVIRTUALSCREEN) as f32,
+            GetSystemMetrics(SM_CXVIRTUALSCREEN) as f32,
+            GetSystemMetrics(SM_CYVIRTUALSCREEN) as f32,
+        )
+    };
+    let [x, y, width, height] = w;
+    width >= 200.0
+        && height >= 200.0
+        && x + width > vx + 100.0
+        && y + height > vy + 60.0
+        && x < vx + vw - 100.0
+        && y < vy + vh - 60.0
+}
+
+#[cfg(not(windows))]
+fn window_on_screen(w: [f32; 4]) -> bool {
+    w[2] >= 200.0 && w[3] >= 200.0 && w[0] > -10000.0 && w[1] > -10000.0
+}
+
 /// The main window. The title bar is drawn by the app; closing goes to the tray.
-fn main_window() -> window::Settings {
+fn main_window(saved: Option<[f32; 4]>) -> window::Settings {
     let minimized = std::env::args().any(|a| a == shell::MINIMIZED_ARG);
+    let saved = saved.filter(|w| window_on_screen(*w));
     window::Settings {
-        size: Size::new(1400.0, 860.0),
+        size: saved.map_or(Size::new(1400.0, 860.0), |w| Size::new(w[2], w[3])),
+        position: saved.map_or(window::Position::Default, |w| {
+            window::Position::Specific(Point::new(w[0], w[1]))
+        }),
         min_size: Some(Size::new(480.0, 420.0)),
         icon: window::icon::from_file_data(LOGO, None).ok(),
         decorations: false,
