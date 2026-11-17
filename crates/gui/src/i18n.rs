@@ -281,6 +281,7 @@ const TABLE: &[(&str, &str)] = &[
     ("Für ein Programm-Mikro (Discord, Teams …) braucht es ein freies virtuelles Kabel. Alle Kabel sind schon belegt: erhöhe die Anzahl unter „Faderust Kabel“.", "A program microphone (Discord, Teams …) needs a free virtual cable. All cables are in use: raise the number under “Faderust cable”."),
     ("Für ein Programm-Mikro (Discord, Teams …) braucht es ein virtuelles Kabel.", "A program microphone (Discord, Teams …) needs a virtual cable."),
     ("Update auf", "Update to"),
+    ("Testversionen: Updates auch von Test-Builds", "Test versions: also update to test builds"),
     ("ausgeblendet", "hidden"),
     ("still, zeigen", "silent, show"),
     ("verfügbar", "available"),

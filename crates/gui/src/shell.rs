@@ -118,6 +118,8 @@ pub struct Prefs {
     pub signal: String,
     /// No green edge around an output that carries signal.
     pub output_edge_off: bool,
+    /// Update to the rolling test build of the repository too.
+    pub test_channel: bool,
     /// Debug mode: measurements, self-test and log are shown and written.
     pub debug: bool,
     /// The same for devices and for programs on the desk.

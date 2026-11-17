@@ -1638,9 +1638,15 @@ fn settings(app: &App) -> Element<'_, Message> {
             card("Programm-Mikro", mic_section(app)),
             card(
                 "Start",
-                check(app.autostart)
-                    .label(tr("Mit Windows starten (im Tray, ohne Fenster)"))
-                    .on_toggle(|v| edit(Edit::Autostart(v))),
+                column![
+                    check(app.autostart)
+                        .label(tr("Mit Windows starten (im Tray, ohne Fenster)"))
+                        .on_toggle(|v| edit(Edit::Autostart(v))),
+                    check(app.prefs.test_channel)
+                        .label(tr("Testversionen: Updates auch von Test-Builds"))
+                        .on_toggle(|v| edit(Edit::TestChannel(v))),
+                ]
+                .spacing(6),
             ),
             card("Faderust Kabel", cable_section),
             card("Stream Deck", deck_section(app)),

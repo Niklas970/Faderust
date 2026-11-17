@@ -1,0 +1,114 @@
+name: Test build
+
+# Builds the branch you pick (Run workflow, "Use workflow from") as a signed
+# setup and publishes it as the rolling pre-release "test". Faderust updates
+# itself to it when "Testversionen" is on in the Devices dialog: no download,
+# no version bump, no release. Normal users never see it (it is a
+# pre-release, the updater reads the latest full release).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+concurrency:
+  group: test-build
+  cancel-in-progress: true
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: streamdeck/package-lock.json
+      - run: npm ci && npm run build && npm run pack
+        working-directory: streamdeck
+      - name: Ship the plugin with the app
+        run: |
+          mkdir -p stage/resources
+          cp streamdeck/dist/*.streamDeckPlugin stage/resources/
+          jq -r .Version streamdeck/com.niklas970.faderust.sdPlugin/manifest.json \
+            > stage/resources/streamdeck-plugin.version
+      # The build id tells the app which test build it is, so it offers only
+      # another one.
+      - name: Build
+        run: |
+          echo "BUILD=${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          FADERUST_BUILD="${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" cargo build --release -p faderust
+      - name: Build setup
+        run: |
+          choco install nsis -y --no-progress
+          VERSION=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          "/c/Program Files (x86)/NSIS/makensis.exe" -V2 \
+            "-DVERSION=$VERSION" \
+            "-DEXE=$(cygpath -aw target/release/faderust.exe)" \
+            "-DRESOURCES=$(cygpath -aw stage/resources)" \
+            "-DOUTFILE=$(cygpath -w "$PWD/Faderust_${VERSION}_x64-setup.exe")" \
+            installer/faderust.nsi
+      - name: Sign setup
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: |
+          [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] || { echo "Signing key missing"; exit 1; }
+          npx --yes @tauri-apps/cli@2.12.4 signer sign "Faderust_${VERSION}_x64-setup.exe"
+      - name: Collect files
+        run: |
+          mkdir release
+          cp Faderust_*_x64-setup.exe Faderust_*_x64-setup.exe.sig release/
+          echo "$BUILD" > release/build.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: test-files
+          path: release/*
+          if-no-files-found: error
+
+  # Separate job so only it can write to the repository.
+  publish:
+    needs: installer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: test-files
+          path: release
+      - name: Publish the rolling test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          cd release
+          setup=$(ls *-setup.exe)
+          build=$(cat build.txt)
+          # Same file name for every build: the updater downloads by manifest.
+          jq -n \
+            --arg version "$(grep -m1 '^version' "$GITHUB_WORKSPACE/Cargo.toml" | sed -E 's/.*"(.*)".*/\1/')" \
+            --arg build "$build" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg sig "$(cat "$setup.sig")" \
+            --arg url "https://github.com/$GITHUB_REPOSITORY/releases/download/test/$setup" \
+            '{version: $version, build: $build, pub_date: $date, notes: "", platforms: {"windows-x86_64": {signature: $sig, url: $url}}}' \
+            > latest-test.json
+          gh release delete test --cleanup-tag --yes || true
+          gh release create test "$setup" "$setup.sig" latest-test.json \
+            --title "Test build $build" \
+            --notes "Test build of branch \`$REF_NAME\` ($GITHUB_SHA). For trying changes only: turn on \"Testversionen\" in Faderust to update to it." \
+            --prerelease \
+            --latest=false \
+            --target "$GITHUB_SHA"

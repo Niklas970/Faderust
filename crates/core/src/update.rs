@@ -13,6 +13,16 @@ use crate::remote::is_newer;
 /// Where the latest release lists its setup and signature.
 const ENDPOINT: &str = "https://github.com/Niklas970/faderust/releases/latest/download/latest.json";
 
+/// The rolling test build: every run of the "Test build" workflow replaces it.
+const TEST_ENDPOINT: &str =
+    "https://github.com/Niklas970/faderust/releases/download/test/latest-test.json";
+
+/// Identifies this build for the test channel ("<run>-<commit>", set by the
+/// test workflow); empty for every other build.
+pub fn own_build() -> &'static str {
+    option_env!("FADERUST_BUILD").unwrap_or("")
+}
+
 /// The release signing key, as the Tauri updater stores it: the public key
 /// file, base64 encoded.
 const PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg2QkYyMEVDMUZBNjkzNkEKUldScWs2WWY3Q0MvaHBVK25RbzlRMXBaUXN0NTJPVTcvTW5YTWt4aWNtOFRhdU1vT0pCU0N0R20K";
@@ -23,6 +33,8 @@ const PLATFORM: &str = "windows-x86_64";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Update {
     pub version: String,
+    /// Set for a test build: which one ("<run>-<commit>").
+    pub build: String,
     url: String,
     /// The `.sig` file's content (base64 of the minisign signature).
     signature: String,
@@ -31,6 +43,9 @@ pub struct Update {
 #[derive(Deserialize)]
 struct Manifest {
     version: String,
+    /// Only the test channel's manifest has one.
+    #[serde(default)]
+    build: String,
     platforms: std::collections::HashMap<String, Platform>,
 }
 
@@ -40,6 +55,17 @@ struct Platform {
     signature: String,
 }
 
+impl Update {
+    /// What the update button says: the version, plus the build for a test.
+    pub fn label(&self) -> String {
+        if self.build.is_empty() {
+            self.version.clone()
+        } else {
+            format!("{} Test {}", self.version, self.build)
+        }
+    }
+}
+
 /// The update `json` offers over `current`, if it is newer and has a setup
 /// for this platform.
 pub fn parse_manifest(json: &str, current: &str) -> Result<Option<Update>, String> {
@@ -47,12 +73,26 @@ pub fn parse_manifest(json: &str, current: &str) -> Result<Option<Update>, Strin
     if !is_newer(m.version.trim_start_matches('v'), current) {
         return Ok(None);
     }
+    offer(m)
+}
+
+/// The test build `json` offers, if it is another build than `own`.
+pub fn parse_test_manifest(json: &str, own: &str) -> Result<Option<Update>, String> {
+    let m: Manifest = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    if m.build.is_empty() || m.build == own {
+        return Ok(None);
+    }
+    offer(m)
+}
+
+fn offer(m: Manifest) -> Result<Option<Update>, String> {
     let p = m
         .platforms
         .get(PLATFORM)
         .ok_or_else(|| format!("no setup for {PLATFORM}"))?;
     Ok(Some(Update {
         version: m.version.trim_start_matches('v').to_string(),
+        build: m.build.clone(),
         url: p.url.clone(),
         signature: p.signature.clone(),
     }))
@@ -79,9 +119,16 @@ fn fetch(args: &[&str]) -> Result<Vec<u8>, String> {
 }
 
 /// Asks GitHub for the latest release; `Ok(None)` when this one is current.
-pub fn check(current: &str) -> Result<Option<Update>, String> {
+/// With `test`, a newer release still wins, otherwise the rolling test build
+/// is offered when it is another build than this one.
+pub fn check(current: &str, test: bool) -> Result<Option<Update>, String> {
     let body = fetch(&["--max-time", "20", ENDPOINT])?;
-    parse_manifest(&String::from_utf8_lossy(&body), current)
+    let release = parse_manifest(&String::from_utf8_lossy(&body), current)?;
+    if release.is_some() || !test {
+        return Ok(release);
+    }
+    let body = fetch(&["--max-time", "20", TEST_ENDPOINT])?;
+    parse_test_manifest(&String::from_utf8_lossy(&body), own_build())
 }
 
 fn b64_text(s: &str) -> Result<String, String> {
@@ -146,6 +193,19 @@ mod tests {
         let u = parse_manifest(MANIFEST, "0.6.4").unwrap().unwrap();
         assert_eq!(u.version, "0.7.0");
         assert_eq!(u.url, "https://example.invalid/setup.exe");
+    }
+
+    #[test]
+    fn a_test_build_is_offered_when_it_is_another_build() {
+        let json = MANIFEST.replace(
+            "\"version\":\"0.7.0\"",
+            "\"version\":\"0.7.0\",\"build\":\"12-abc1234\"",
+        );
+        let u = parse_test_manifest(&json, "11-def5678").unwrap().unwrap();
+        assert_eq!(u.label(), "0.7.0 Test 12-abc1234");
+        assert!(parse_test_manifest(&json, "12-abc1234").unwrap().is_none());
+        // A manifest of a release has no build: never a test build.
+        assert!(parse_test_manifest(MANIFEST, "").unwrap().is_none());
     }
 
     #[test]
