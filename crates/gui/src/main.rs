@@ -396,7 +396,6 @@ pub enum Edit {
     ThinTrack(bool),
     SmallCap(bool),
     Relief(bool),
-    LcdTint(bool),
     /// A colour for the LCD display, typed or chosen.
     LcdHex(String),
     Lcd(String),
@@ -2393,7 +2392,6 @@ impl App {
             Edit::ThinTrack(on) => self.set_look(|p| p.thin_track = on),
             Edit::SmallCap(on) => self.set_look(|p| p.small_cap = on),
             Edit::Relief(on) => self.set_look(|p| p.relief = on),
-            Edit::LcdTint(on) => self.set_look(|p| p.lcd_tint = on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::Debug(on) => self.set_look(|p| p.debug = on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),
@@ -2944,10 +2942,10 @@ impl App {
         .into()
     }
 
-    /// The LCD colour as "#rrggbb", teal when none is chosen.
+    /// The LCD colour as "#rrggbb"; the signal colour when none is chosen.
     fn lcd_hex(&self) -> String {
         if self.prefs.lcd_color.is_empty() {
-            style::DEFAULT_LCD.into()
+            self.signal()
         } else {
             self.prefs.lcd_color.clone()
         }
@@ -2970,7 +2968,7 @@ impl App {
                 .into();
         }
         // The value in a small recessed display, like the window on a cap.
-        let lcd = self.prefs.lcd_tint.then(|| style::hex(&self.lcd_hex()));
+        let lcd = (!self.prefs.lcd_color.is_empty()).then(|| style::hex(&self.prefs.lcd_color));
         container(
             value
                 .color(if muted {

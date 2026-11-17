@@ -422,7 +422,14 @@ impl Fader<'_> {
                 }),
             );
         }
-        let (c0, c1, c2, c3) = if self.parts.accent_cap && !off {
+        let (c0, c1, c2, c3) = if self.parts.small_cap && !self.parts.accent_cap {
+            (
+                rgb(74, 78, 84),
+                rgb(44, 47, 52),
+                rgb(30, 32, 36),
+                rgb(40, 43, 47),
+            )
+        } else if self.parts.accent_cap && !off {
             (
                 mix(accent(), Color::WHITE, 0.25),
                 accent(),
@@ -442,7 +449,15 @@ impl Fader<'_> {
             .add_stop(0.45, c1)
             .add_stop(0.55, c2)
             .add_stop(1.0, c3);
-        let edge = if off { rgb(85, 90, 97) } else { accent() };
+        let console = self.parts.small_cap;
+        let edge = if off {
+            rgb(85, 90, 97)
+        } else if console && !self.parts.accent_cap {
+            // A console cap is black plastic; the accent stays in the index line.
+            rgb(18, 19, 21)
+        } else {
+            accent()
+        };
         f.fill(&cap, Fill::from(edge));
         f.fill(
             &inner,
@@ -467,6 +482,12 @@ impl Fader<'_> {
             },
         );
         if self.parts.small_cap {
+            // Light edge along the top, like a bevel.
+            f.fill_rectangle(
+                Point::new(cx + 3.0 + radius, cy + 1.0),
+                Size::new(cw - 6.0 - 2.0 * radius, 1.0),
+                rgb(150, 156, 164),
+            );
             // Grip ridges like on a console fader: a dark groove with a light
             // edge below it, two above and two below the index line.
             let gx = cx + 6.0;
