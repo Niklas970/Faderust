@@ -136,6 +136,12 @@ pub struct Prefs {
     pub readout_display: bool,
     /// No level bars in the matrix.
     pub matrix_meters_off: bool,
+    /// Square fader caps instead of round ones.
+    pub cap_square: bool,
+    /// No scale (numbers and marks) beside the faders.
+    pub scale_off: bool,
+    /// No glow around the accent bar of the fader.
+    pub glow_off: bool,
     /// "de", "en" or empty for the system language.
     pub lang: String,
     /// The window stays above all others.

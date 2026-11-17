@@ -20,6 +20,8 @@ pub enum Kind {
 
 /// Corner radius of the fader cap in px.
 const CAP_RADIUS: f32 = 16.0;
+/// The same for the square look.
+const CAP_RADIUS_SQUARE: f32 = 4.0;
 
 impl Kind {
     fn message(self, db: f32) -> Message {
@@ -39,6 +41,12 @@ pub struct Parts {
     pub peak: bool,
     /// A line at 0 dB across the slot.
     pub zero_mark: bool,
+    /// Square cap instead of a round one.
+    pub square_cap: bool,
+    /// Numbers and marks of the scale beside the slot.
+    pub scale: bool,
+    /// Glow around the accent bar.
+    pub glow: bool,
 }
 
 /// Fader track, scale, cap and LED meter of one strip in a single canvas.
@@ -239,7 +247,7 @@ impl Fader<'_> {
         for d in (-24..=12)
             .step_by(3)
             .map(|d| d as f32)
-            .filter(|_| self.labels)
+            .filter(|_| self.labels && self.parts.scale)
         {
             let y = Self::y_of(scale::to_pos(d), total);
             f.fill_rectangle(
@@ -248,7 +256,11 @@ impl Fader<'_> {
                 mix(panel(), border(), 0.8),
             );
         }
-        for (d, label) in scale::TICKS.iter().copied().filter(|_| self.labels) {
+        for (d, label) in scale::TICKS
+            .iter()
+            .copied()
+            .filter(|_| self.labels && self.parts.scale)
+        {
             let y = Self::y_of(scale::to_pos(d), total);
             let zero = d == 0.0;
             f.fill_text(Text {
@@ -300,7 +312,7 @@ impl Fader<'_> {
             let (core, glow) = if self.muted {
                 (rgb(85, 90, 97), None)
             } else {
-                (accent(), Some(accent()))
+                (accent(), self.parts.glow.then(accent))
             };
             if let Some(g) = glow {
                 for (grow, alpha) in [(4.0, 0.06), (2.5, 0.10), (1.0, 0.16)] {
@@ -328,20 +340,25 @@ impl Fader<'_> {
         let (cw, ch) = if wide { (68.0, 44.0) } else { (40.0, 40.0) };
         let cy = cap_y - ch / 2.0;
         let win_w = if wide { 52.0 } else { 34.0 };
-        let cap = Path::rounded_rectangle(Point::new(cx, cy), Size::new(cw, ch), CAP_RADIUS.into());
+        let radius = if self.parts.square_cap {
+            CAP_RADIUS_SQUARE
+        } else {
+            CAP_RADIUS
+        };
+        let cap = Path::rounded_rectangle(Point::new(cx, cy), Size::new(cw, ch), radius.into());
         // The body sits 3 px in from the sides, so the accent shows as a rim
         // that follows the rounded corners.
         let inner = Path::rounded_rectangle(
             Point::new(cx + 3.0, cy),
             Size::new(cw - 6.0, ch),
-            CAP_RADIUS.into(),
+            radius.into(),
         );
         for (grow, alpha) in [(6.0, 0.10), (3.0, 0.18), (1.0, 0.30)] {
             f.fill(
                 &Path::rounded_rectangle(
                     Point::new(cx - grow, cy - grow + 3.0),
                     Size::new(cw + 2.0 * grow, ch + 2.0 * grow),
-                    (CAP_RADIUS + grow).into(),
+                    (radius + grow).into(),
                 ),
                 Fill::from(Color {
                     a: alpha * 0.5,

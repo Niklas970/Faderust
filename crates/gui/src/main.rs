@@ -335,6 +335,10 @@ pub enum Edit {
     GateDb(usize, f32),
     Echo(usize, bool),
     EchoMs(usize, f32),
+    /// Time, repeats and amount of the echo in one go.
+    EchoStyle(usize, f32, f32, f32),
+    /// Gains of the three EQ bands in one go.
+    EqStyle(usize, [f32; 3]),
     EchoFeedback(usize, f32),
     EchoMix(usize, f32),
     ResetFx(usize),
@@ -385,6 +389,9 @@ pub enum Edit {
     ZeroMark(bool),
     ReadoutDisplay(bool),
     MatrixMeters(bool),
+    CapSquare(bool),
+    Scale(bool),
+    Glow(bool),
     Osd(bool),
     Debug(bool),
     TestChannel(bool),
@@ -2035,6 +2042,13 @@ impl App {
             Edit::GateDb(i, v) => self.set_fx(i, |f| f.gate_db = v),
             Edit::Echo(i, on) => self.set_fx(i, |f| f.echo = on),
             Edit::EchoMs(i, v) => self.set_fx(i, |f| f.echo_ms = v),
+            Edit::EchoStyle(i, ms, fb, mix) => self.set_fx(i, |f| {
+                f.echo = true;
+                f.echo_ms = ms;
+                f.echo_feedback = fb;
+                f.echo_mix = mix;
+            }),
+            Edit::EqStyle(i, gains) => self.set_fx(i, |f| f.eq = gains),
             Edit::EchoFeedback(i, v) => self.set_fx(i, |f| f.echo_feedback = v),
             Edit::EchoMix(i, v) => self.set_fx(i, |f| f.echo_mix = v),
             Edit::ResetFx(i) => {
@@ -2370,6 +2384,9 @@ impl App {
             Edit::ZeroMark(on) => self.set_look(|p| p.zero_mark = on),
             Edit::ReadoutDisplay(on) => self.set_look(|p| p.readout_display = on),
             Edit::MatrixMeters(on) => self.set_look(|p| p.matrix_meters_off = !on),
+            Edit::CapSquare(on) => self.set_look(|p| p.cap_square = on),
+            Edit::Scale(on) => self.set_look(|p| p.scale_off = !on),
+            Edit::Glow(on) => self.set_look(|p| p.glow_off = !on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::TestChannel(on) => {
                 self.set_look(|p| p.test_channel = on);
@@ -2952,6 +2969,9 @@ impl App {
             segments: self.prefs.meter_segments,
             peak: !self.prefs.peak_off,
             zero_mark: self.prefs.zero_mark,
+            square_cap: self.prefs.cap_square,
+            scale: !self.prefs.scale_off,
+            glow: !self.prefs.glow_off,
         }
     }
 

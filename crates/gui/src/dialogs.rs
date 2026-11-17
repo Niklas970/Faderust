@@ -4,13 +4,18 @@
 use crate::i18n::{text, tr};
 use crate::style::{check, input as text_input, look_text, pick as pick_list, scroll, Look};
 use iced::alignment::Vertical;
-use iced::widget::{button, column, container, mouse_area, opaque, row, slider, space};
+use iced::widget::{
+    button, column, container, mouse_area, opaque, row, slider, space, vertical_slider,
+};
 use iced::{Background, Border, Color, Element, Length};
 
 use crate::style::*;
 use faderust_core::names::device_label;
 
 use crate::{App, Dialog, Edit, Message, Target, HIDE_AFTER, RELEASE};
+
+/// Height of the equaliser faders in px.
+const EQ_H: f32 = 150.0;
 
 fn edit(e: Edit) -> Message {
     Message::Edit(e)
@@ -29,6 +34,43 @@ fn h3(label: impl Into<String>) -> Element<'static, Message> {
             .color(muted_color())
     ]
     .into()
+}
+
+/// A titled group in a card, so a wide dialog reads as a grid of blocks.
+fn card<'a>(
+    title: impl Into<String>,
+    content: impl Into<Element<'a, Message>>,
+) -> Element<'a, Message> {
+    container(
+        column![
+            text(tr(&title.into()).to_uppercase())
+                .size(12)
+                .font(BOLD)
+                .color(muted_color()),
+            content.into()
+        ]
+        .spacing(10),
+    )
+    .padding(14)
+    .width(Length::Fill)
+    .style(|_| container::Style {
+        background: Some(Background::Color(well())),
+        border: Border {
+            color: border(),
+            width: 1.0,
+            radius: 4.0.into(),
+        },
+        ..container::Style::default()
+    })
+    .into()
+}
+
+/// One column of cards; the portions set how wide it is next to the others.
+fn cards<'a>(portion: u16, items: Vec<Element<'a, Message>>) -> Element<'a, Message> {
+    column(items)
+        .spacing(12)
+        .width(Length::FillPortion(portion))
+        .into()
 }
 
 fn hint(label: impl Into<String>) -> Element<'static, Message> {
@@ -94,8 +136,9 @@ fn frame<'a>(
         .spacing(12),
     )
     .padding(20)
-    .width(width)
-    .max_height(if tall { 780.0 } else { 640.0 })
+    .width(Length::Fill)
+    .max_width(width)
+    .max_height(if tall { 780.0 } else { 760.0 })
     .style(|_| container::Style {
         background: Some(Background::Color(panel())),
         border: Border {
@@ -142,24 +185,47 @@ pub fn view(app: &App, d: Dialog) -> Element<'_, Message> {
 }
 
 fn fx(app: &App, i: usize) -> Element<'_, Message> {
-    let f = &app.fx[i];
-    let lit = (app.strips[i].shown + 90.0).clamp(1.0, 89.0) as u16;
-    let band = |b: usize, name: &'static str, hz: &'static str| {
-        row![
-            container(text(format!("{name} {hz}")).size(13).color(text_color())).width(150),
-            slider(-12.0..=12.0, f.eq[b], move |v| edit(Edit::Eq(i, b, v))).step(0.5_f32),
-            container(
-                text(format!("{:+.1} dB", f.eq[b]))
-                    .font(MONO)
-                    .size(13)
-                    .color(text_color())
-            )
-            .width(70)
-            .align_right(Length::Fill),
-        ]
-        .spacing(10)
-        .align_y(Vertical::Center)
+    // The strip can be gone (removed in the devices dialog) while this is open.
+    let (Some(f), Some(strip)) = (app.fx.get(i), app.strips.get(i)) else {
+        return frame("Effekte".into(), 1040.0, false, hint("Lade …"), no_footer());
     };
+    let lit = (strip.shown + 90.0).clamp(1.0, 89.0) as u16;
+    // One band of the equaliser: value on top, the fader, frequency below.
+    let band = |b: usize, name: &'static str, hz: &'static str| {
+        column![
+            text(format!("{:+.1}", f.eq[b]))
+                .font(MONO)
+                .size(13)
+                .color(text_color()),
+            vertical_slider(-12.0..=12.0, f.eq[b], move |v| edit(Edit::Eq(i, b, v)))
+                .step(0.5_f32)
+                .height(EQ_H),
+            text(tr(name)).size(13).color(text_color()),
+            text(hz).font(MONO).size(11).color(muted_color()),
+        ]
+        .spacing(6)
+        .align_x(iced::alignment::Horizontal::Center)
+        .width(Length::FillPortion(1))
+    };
+    // Scale on the left, like a hardware equaliser.
+    let eq_scale = column![
+        space().height(24),
+        column(["+12", "+6", "0", "-6", "-12"].into_iter().map(|t| {
+            text(t)
+                .font(MONO)
+                .size(11)
+                .color(if t == "0" {
+                    text_color()
+                } else {
+                    muted_color()
+                })
+                .into()
+        }))
+        .height(EQ_H)
+        .width(30)
+        .align_x(iced::alignment::Horizontal::Right)
+        .spacing((EQ_H - 5.0 * 14.0) / 4.0),
+    ];
     let echo_row = |name: &'static str, value: String, bar: Element<'static, Message>| {
         row![
             container(text(name).size(13).color(text_color())).width(150),
@@ -171,130 +237,221 @@ fn fx(app: &App, i: usize) -> Element<'_, Message> {
         .spacing(10)
         .align_y(Vertical::Center)
     };
-    let body = column![
-        h3("Rauschfilter"),
-        check(f.denoise)
-            .label(tr("Hintergrundgeräusche entfernen"))
-            .on_toggle(move |v| edit(Edit::Denoise(i, v))),
-        hint("Filtert Tastatur, Lüfter und Rauschen aus der Stimme."),
-        row![
-            container(text("Stärke").size(13).color(text_color())).width(150),
+    // Words instead of percentages: each choice sets one value, the one
+    // nearest to the current value is shown as on.
+    let nearest = |value: f32, options: &[f32]| -> usize {
+        options
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| (**a - value).abs().total_cmp(&(**b - value).abs()))
+            .map_or(0, |(k, _)| k)
+    };
+    const FEEDBACK: [(&str, f32); 4] = [
+        ("Keine", 0.0),
+        ("Wenige", 0.2),
+        ("Mittel", 0.45),
+        ("Viele", 0.7),
+    ];
+    const MIX: [(&str, f32); 3] = [("Dezent", 0.15), ("Mittel", 0.3), ("Deutlich", 0.5)];
+    const ECHO_STYLES: [(&str, f32, f32, f32); 4] = [
+        ("Slapback", 120.0, 0.15, 0.3),
+        ("Raum", 250.0, 0.3, 0.25),
+        ("Hall", 500.0, 0.5, 0.3),
+        ("Weit", 800.0, 0.6, 0.35),
+    ];
+    const EQ_STYLES: [(&str, [f32; 3]); 4] = [
+        ("Flach", [0.0, 0.0, 0.0]),
+        ("Stimme klar", [-2.0, 3.0, 1.5]),
+        ("Warm", [3.0, -1.0, -3.0]),
+        ("Hell", [-3.0, 2.0, 4.0]),
+    ];
+    let fb_now = nearest(
+        f.echo_feedback,
+        &FEEDBACK.iter().map(|(_, v)| *v).collect::<Vec<_>>(),
+    );
+    let mix_now = nearest(f.echo_mix, &MIX.iter().map(|(_, v)| *v).collect::<Vec<_>>());
+    let style_now = ECHO_STYLES.iter().position(|(_, ms, fb, mix)| {
+        (f.echo_ms - ms).abs() < 5.0
+            && (f.echo_feedback - fb).abs() < 0.03
+            && (f.echo_mix - mix).abs() < 0.03
+    });
+    let eq_now = EQ_STYLES
+        .iter()
+        .position(|(_, g)| (0..3).all(|b| (f.eq[b] - g[b]).abs() < 0.3));
+    let echo_style = segmented(
+        ECHO_STYLES
+            .iter()
+            .enumerate()
+            .map(|(k, (name, ms, fb, mix))| {
+                (
+                    tr(name),
+                    style_now == Some(k),
+                    edit(Edit::EchoStyle(i, *ms, *fb, *mix)),
+                )
+            })
+            .collect(),
+    );
+    let echo_feedback = segmented(
+        FEEDBACK
+            .iter()
+            .enumerate()
+            .map(|(k, (name, v))| (tr(name), fb_now == k, edit(Edit::EchoFeedback(i, *v))))
+            .collect(),
+    );
+    let echo_mix = segmented(
+        MIX.iter()
+            .enumerate()
+            .map(|(k, (name, v))| (tr(name), mix_now == k, edit(Edit::EchoMix(i, *v))))
+            .collect(),
+    );
+    let eq_style = segmented(
+        EQ_STYLES
+            .iter()
+            .enumerate()
+            .map(|(k, (name, g))| (tr(name), eq_now == Some(k), edit(Edit::EqStyle(i, *g))))
+            .collect(),
+    );
+    let gate_bar = row![
+        space().width(160),
+        container(row![
+            container(space())
+                .width(Length::FillPortion(lit))
+                .height(8)
+                .style(|_| container::Style {
+                    background: Some(Background::Color(signal())),
+                    ..container::Style::default()
+                }),
+            space().width(Length::FillPortion(90 - lit)),
+        ])
+        .width(Length::Fill)
+        .style(|_| container::Style {
+            background: Some(Background::Color(panel_2())),
+            border: Border {
+                radius: 4.0.into(),
+                ..Border::default()
+            },
+            ..container::Style::default()
+        }),
+    ];
+    let denoise_card = card(
+        "Rauschfilter",
+        column![
+            check(f.denoise)
+                .label(tr("Hintergrundgeräusche entfernen"))
+                .on_toggle(move |v| edit(Edit::Denoise(i, v))),
+            hint("Filtert Tastatur, Lüfter und Rauschen aus der Stimme."),
+            row![
+                container(text("Stärke").size(13).color(text_color())).width(150),
+                segmented(
+                    [("Leicht", 0.4_f32), ("Mittel", 0.7), ("Stark", 1.0)]
+                        .into_iter()
+                        .map(|(name, amount)| (
+                            tr(name),
+                            (f.denoise_amount - amount).abs() < 0.05,
+                            edit(Edit::DenoiseAmount(i, amount))
+                        ))
+                        .collect()
+                ),
+            ]
+            .align_y(Vertical::Center),
+        ]
+        .spacing(8),
+    );
+    let low_cut_card = card(
+        "Low-Cut",
+        column![
             segmented(
-                [("Leicht", 0.4_f32), ("Mittel", 0.7), ("Stark", 1.0)]
+                [0u16, 80, 120, 160]
                     .into_iter()
-                    .map(|(name, amount)| (
-                        tr(name),
-                        (f.denoise_amount - amount).abs() < 0.05,
-                        edit(Edit::DenoiseAmount(i, amount))
+                    .map(|hz| (
+                        if hz == 0 {
+                            "Aus".into()
+                        } else {
+                            format!("{hz} Hz")
+                        },
+                        f.low_cut == hz,
+                        edit(Edit::LowCut(i, hz))
                     ))
                     .collect()
             ),
+            hint("Schneidet Brummen und Trittschall unten ab."),
         ]
-        .align_y(Vertical::Center),
-        h3("Low-Cut"),
-        segmented(
-            [0u16, 80, 120, 160]
-                .into_iter()
-                .map(|hz| (
-                    if hz == 0 {
-                        "Aus".into()
-                    } else {
-                        format!("{hz} Hz")
-                    },
-                    f.low_cut == hz,
-                    edit(Edit::LowCut(i, hz))
-                ))
-                .collect()
-        ),
-        hint("Schneidet Brummen und Trittschall unten ab."),
-        h3("EQ"),
-        band(0, "Bass", "120 Hz"),
-        band(1, "Präsenz", "3 kHz"),
-        band(2, "Höhen", "8 kHz"),
-        h3("Gate"),
-        check(f.gate)
-            .label(tr("Stumm unter der Schwelle"))
-            .on_toggle(move |v| edit(Edit::Gate(i, v))),
-        row![
-            container(text("Schwelle").size(13).color(text_color())).width(150),
-            slider(-90.0..=-10.0, f.gate_db, move |v| edit(Edit::GateDb(
-                i,
-                v.round()
-            ))),
-            container(
-                text(format!("{} dB", f.gate_db))
-                    .font(MONO)
-                    .size(13)
-                    .color(text_color())
-            )
-            .width(70)
-            .align_right(Length::Fill),
+        .spacing(8),
+    );
+    let eq_card = card(
+        "EQ",
+        column![
+            eq_style,
+            row![
+                eq_scale,
+                band(0, "Bass", "120 Hz"),
+                band(1, "Präsenz", "3 kHz"),
+                band(2, "Höhen", "8 kHz"),
+            ]
+            .spacing(8),
+            hint("Regler ziehen: ±12 dB in Schritten von 0,5."),
         ]
-        .spacing(10)
-        .align_y(Vertical::Center),
-        row![
-            space().width(160),
-            container(row![
-                container(space())
-                    .width(Length::FillPortion(lit))
-                    .height(8)
-                    .style(|_| container::Style {
-                        background: Some(Background::Color(signal())),
-                        ..container::Style::default()
-                    }),
-                space().width(Length::FillPortion(90 - lit)),
-            ])
-            .width(Length::Fill)
-            .style(|_| container::Style {
-                background: Some(Background::Color(panel_2())),
-                border: Border {
-                    radius: 4.0.into(),
-                    ..Border::default()
-                },
-                ..container::Style::default()
-            }),
-        ],
-        hint("Der Balken zeigt den Pegel, der Strich die Schwelle."),
-        h3("Echo"),
-        check(f.echo)
-            .label(tr("Echo-Effekt"))
-            .on_toggle(move |v| edit(Edit::Echo(i, v))),
-        echo_row(
-            "Zeit",
-            format!("{} ms", f.echo_ms.round()),
-            slider(50.0..=1000.0, f.echo_ms, move |v| edit(Edit::EchoMs(
-                i,
-                (v / 10.0).round() * 10.0
-            )))
-            .into()
-        ),
-        echo_row(
-            "Wiederholungen",
-            format!("{} %", (f.echo_feedback * 100.0).round()),
-            slider(0.0..=0.8, f.echo_feedback, move |v| edit(
-                Edit::EchoFeedback(i, (v * 20.0).round() / 20.0)
-            ))
-            .step(0.01_f32)
-            .into()
-        ),
-        echo_row(
-            "Anteil",
-            format!("{} %", (f.echo_mix * 100.0).round()),
-            slider(0.0..=1.0, f.echo_mix, move |v| edit(Edit::EchoMix(
-                i,
-                (v * 20.0).round() / 20.0
-            )))
-            .step(0.01_f32)
-            .into()
-        ),
-        hint("Fügt der Stimme ein Echo hinzu. Wiederholungen: wie oft es nachhallt."),
-        h3("Ducking"),
-        duck(app, i),
+        .spacing(10),
+    );
+    let gate_card = card(
+        "Gate",
+        column![
+            check(f.gate)
+                .label(tr("Stumm unter der Schwelle"))
+                .on_toggle(move |v| edit(Edit::Gate(i, v))),
+            row![
+                container(text("Schwelle").size(13).color(text_color())).width(150),
+                slider(-90.0..=-10.0, f.gate_db, move |v| edit(Edit::GateDb(
+                    i,
+                    v.round()
+                ))),
+                container(
+                    text(format!("{} dB", f.gate_db))
+                        .font(MONO)
+                        .size(13)
+                        .color(text_color())
+                )
+                .width(70)
+                .align_right(Length::Fill),
+            ]
+            .spacing(10)
+            .align_y(Vertical::Center),
+            gate_bar,
+            hint("Der Balken zeigt den Pegel, der Strich die Schwelle."),
+        ]
+        .spacing(8),
+    );
+    let echo_card = card(
+        "Echo",
+        column![
+            check(f.echo)
+                .label(tr("Echo-Effekt"))
+                .on_toggle(move |v| edit(Edit::Echo(i, v))),
+            echo_row("Stil", String::new(), echo_style),
+            echo_row(
+                "Abstand",
+                format!("{} ms", f.echo_ms.round()),
+                slider(50.0..=1000.0, f.echo_ms, move |v| edit(Edit::EchoMs(
+                    i,
+                    (v / 10.0).round() * 10.0
+                )))
+                .into()
+            ),
+            echo_row("Nachhall", String::new(), echo_feedback),
+            echo_row("Lautstärke", String::new(), echo_mix),
+            hint("Stil stellt alles auf einmal ein. Darunter kannst du Abstand, Nachhall und Lautstärke des Echos einzeln ändern."),
+        ]
+        .spacing(8),
+    );
+    let body = row![
+        cards(1, vec![denoise_card, low_cut_card, eq_card]),
+        cards(1, vec![gate_card, echo_card, card("Ducking", duck(app, i))]),
     ]
-    .spacing(8);
+    .spacing(12)
+    .align_y(Vertical::Top);
     frame(
-        format!("{}: {}", tr("Effekte"), app.strips[i].label),
-        520.0,
+        format!("{}: {}", tr("Effekte"), strip.label),
+        1040.0,
         false,
         body.into(),
         row![btn("Zurücksetzen", edit(Edit::ResetFx(i)), false),]
@@ -842,44 +999,61 @@ fn design(app: &App) -> Element<'_, Message> {
         ))
     });
     let lang_now = app.lang();
-    let body = column![
-        h3("Ansicht"),
+    let view_card = card(
+        "Ansicht",
         segmented(vec![
             (
                 "Pult".into(),
                 matches!(app.view, crate::View::Desk),
-                Message::SetView(crate::View::Desk)
+                Message::SetView(crate::View::Desk),
             ),
             (
                 "Matrix".into(),
                 matches!(app.view, crate::View::Matrix),
-                Message::SetView(crate::View::Matrix)
+                Message::SetView(crate::View::Matrix),
             ),
         ]),
-        h3("Stille Programme ausblenden"),
-        segmented(hide),
-        hint("„Beendete“ blendet nur Programme aus, die geschlossen sind. Stille, aber geöffnete bleiben sichtbar."),
-        h3("Akzentfarbe"),
-        accents,
-        custom_color(
-            app.accent_input
-                .clone()
-                .unwrap_or_else(|| accent_now.clone()),
-            Target::Accent,
-            app.picker,
-            |t| edit(Edit::AccentHex(t)),
-        ),
-        h3("Signalfarbe"),
-        signals,
-        custom_color(
-            app.signal_input
-                .clone()
-                .unwrap_or_else(|| signal_now.clone()),
-            Target::Signal,
-            app.picker,
-            |t| edit(Edit::SignalHex(t)),
-        ),
-        h3("Grüner Rand bei Signal"),
+    );
+    let hide_card = card(
+        "Stille Programme ausblenden",
+        column![
+            segmented(hide),
+            hint("„Beendete“ blendet nur Programme aus, die geschlossen sind. Stille, aber geöffnete bleiben sichtbar."),
+        ]
+        .spacing(8),
+    );
+    let accent_card = card(
+        "Akzentfarbe",
+        column![
+            accents,
+            custom_color(
+                app.accent_input
+                    .clone()
+                    .unwrap_or_else(|| accent_now.clone()),
+                Target::Accent,
+                app.picker,
+                |t| edit(Edit::AccentHex(t)),
+            ),
+        ]
+        .spacing(10),
+    );
+    let signal_card = card(
+        "Signalfarbe",
+        column![
+            signals,
+            custom_color(
+                app.signal_input
+                    .clone()
+                    .unwrap_or_else(|| signal_now.clone()),
+                Target::Signal,
+                app.picker,
+                |t| edit(Edit::SignalHex(t)),
+            ),
+        ]
+        .spacing(10),
+    );
+    let edge_card = card(
+        "Grüner Rand bei Signal",
         row![
             check(!app.prefs.output_edge_off)
                 .label(tr("Ausgänge"))
@@ -892,7 +1066,30 @@ fn design(app: &App) -> Element<'_, Message> {
                 .on_toggle(|v| edit(Edit::ProgramEdge(v))),
         ]
         .spacing(18),
-        h3("Bausteine"),
+    );
+    let fader_card = card(
+        "Fader",
+        column![
+            check(app.prefs.cap_square)
+                .label(tr("Eckige Fader-Kappe"))
+                .on_toggle(|v| edit(Edit::CapSquare(v))),
+            check(!app.prefs.scale_off)
+                .label(tr("Skala am Fader"))
+                .on_toggle(|v| edit(Edit::Scale(v))),
+            check(app.prefs.zero_mark)
+                .label(tr("Nullstrich am Fader"))
+                .on_toggle(|v| edit(Edit::ZeroMark(v))),
+            check(!app.prefs.glow_off)
+                .label(tr("Leuchten am Fader"))
+                .on_toggle(|v| edit(Edit::Glow(v))),
+            check(app.prefs.readout_display)
+                .label(tr("Wert im Display"))
+                .on_toggle(|v| edit(Edit::ReadoutDisplay(v))),
+        ]
+        .spacing(6),
+    );
+    let meter_card = card(
+        "Pegel",
         column![
             check(app.prefs.meter_segments)
                 .label(tr("LED-Segmente statt Balken"))
@@ -900,64 +1097,72 @@ fn design(app: &App) -> Element<'_, Message> {
             check(!app.prefs.peak_off)
                 .label(tr("Spitzenwert-Marke"))
                 .on_toggle(|v| edit(Edit::PeakMark(v))),
-            check(app.prefs.zero_mark)
-                .label(tr("Nullstrich am Fader"))
-                .on_toggle(|v| edit(Edit::ZeroMark(v))),
-            check(app.prefs.readout_display)
-                .label(tr("Wert im Display"))
-                .on_toggle(|v| edit(Edit::ReadoutDisplay(v))),
             check(!app.prefs.matrix_meters_off)
                 .label(tr("Pegelbalken in der Matrix"))
                 .on_toggle(|v| edit(Edit::MatrixMeters(v))),
         ]
         .spacing(6),
-        h3("Soundboard"),
-        segmented(vec![
-            (
-                "An".into(),
-                app.prefs.soundboard,
-                edit(Edit::Soundboard(true))
-            ),
-            (
-                "Aus".into(),
-                !app.prefs.soundboard,
-                edit(Edit::Soundboard(false))
-            ),
-        ]),
-        h3("Lautstärke-Anzeige"),
-        check(!app.prefs.osd_off)
-            .label(tr("Kurze Einblendung am Bildschirmrand bei Stream Deck"))
-            .on_toggle(|v| edit(Edit::Osd(v))),
-        h3("Tray-Symbol"),
-        check(app.prefs.tray_popup)
-            .label(tr("Klick öffnet einen kleinen Mixer neben der Taskbar"))
-            .on_toggle(|v| edit(Edit::TrayPopup(v))),
-        h3("Helligkeit"),
-        segmented(vec![
-            (
-                "Wie Windows".into(),
-                mode_now == "system",
-                edit(Edit::Mode("system"))
-            ),
-            (
-                "Hell".into(),
-                mode_now == "light",
-                edit(Edit::Mode("light"))
-            ),
-            (
-                "Dunkel".into(),
-                mode_now == "dark",
-                edit(Edit::Mode("dark"))
-            ),
-        ]),
-        h3("Sprache"),
-        segmented(vec![
-            ("English".into(), lang_now == "en", edit(Edit::Lang("en"))),
-            ("Deutsch".into(), lang_now == "de", edit(Edit::Lang("de"))),
-        ]),
+    );
+    let extras_card = card(
+        "Fenster",
+        column![
+            text(tr("Soundboard")).size(13).color(text_color()),
+            segmented(vec![
+                (
+                    "An".into(),
+                    app.prefs.soundboard,
+                    edit(Edit::Soundboard(true))
+                ),
+                (
+                    "Aus".into(),
+                    !app.prefs.soundboard,
+                    edit(Edit::Soundboard(false))
+                ),
+            ]),
+            check(!app.prefs.osd_off)
+                .label(tr("Kurze Einblendung am Bildschirmrand bei Stream Deck"))
+                .on_toggle(|v| edit(Edit::Osd(v))),
+            check(app.prefs.tray_popup)
+                .label(tr("Klick öffnet einen kleinen Mixer neben der Taskbar"))
+                .on_toggle(|v| edit(Edit::TrayPopup(v))),
+        ]
+        .spacing(8),
+    );
+    let look_card = card(
+        "Helligkeit",
+        column![
+            segmented(vec![
+                (
+                    "Wie Windows".into(),
+                    mode_now == "system",
+                    edit(Edit::Mode("system"))
+                ),
+                (
+                    "Hell".into(),
+                    mode_now == "light",
+                    edit(Edit::Mode("light"))
+                ),
+                (
+                    "Dunkel".into(),
+                    mode_now == "dark",
+                    edit(Edit::Mode("dark"))
+                ),
+            ]),
+            segmented(vec![
+                ("English".into(), lang_now == "en", edit(Edit::Lang("en"))),
+                ("Deutsch".into(), lang_now == "de", edit(Edit::Lang("de"))),
+            ]),
+        ]
+        .spacing(8),
+    );
+    let body = row![
+        cards(1, vec![view_card, hide_card, look_card]),
+        cards(1, vec![accent_card, signal_card, edge_card]),
+        cards(1, vec![fader_card, meter_card, extras_card]),
     ]
-    .spacing(10);
-    frame("Design".into(), 480.0, true, body.into(), no_footer())
+    .spacing(12)
+    .align_y(Vertical::Top);
+    frame("Design".into(), 1180.0, false, body.into(), no_footer())
 }
 
 pub fn tip<'a>(
@@ -1015,7 +1220,7 @@ fn custom_color(
     let head = row![
         text("Eigene Farbe").size(13).color(muted_color()),
         swatch,
-        text_input("#rrggbb", &value).on_input(on_input).width(100),
+        text_input("#rrggbb", &value).on_input(on_input).width(84),
         btn(
             if open.is_some() {
                 "Farbwähler schließen"
@@ -1026,7 +1231,7 @@ fn custom_color(
             false
         ),
     ]
-    .spacing(10)
+    .spacing(8)
     .align_y(Vertical::Center);
     match open {
         Some((_, hsv)) => column![
@@ -1392,50 +1597,66 @@ fn settings(app: &App) -> Element<'_, Message> {
             col.into()
         }
     };
-    let body = column![
-        error_line(app),
-        h3("Eingänge"),
-        inputs,
-        btn("+ Eingang", edit(Edit::InAdd), false),
-        h3("Ausgänge"),
-        outputs,
-        btn("+ Ausgang", edit(Edit::OutAdd), false),
-        mic_section(app),
-        h3("Start"),
-        check(app.autostart)
-            .label(tr("Mit Windows starten (im Tray, ohne Fenster)"))
-            .on_toggle(|v| edit(Edit::Autostart(v))),
-        check(app.prefs.test_channel)
-            .label(tr("Testversionen: Updates auch von Test-Builds"))
-            .on_toggle(|v| edit(Edit::TestChannel(v))),
-        h3("Faderust Kabel"),
-        cable_section,
-        h3("Stream Deck"),
-        deck_section(app),
-        h3("Debug-Modus"),
-        check(app.prefs.debug)
-            .label(tr("Messungen, Selbsttest und Protokoll einschalten"))
-            .on_toggle(|v| edit(Edit::Debug(v))),
-        hint("Aus spart Leistung: dann laufen keine Messungen (CPU je Thread, Kabel, Zeiten) und es werden keine Zeilen dafür geschrieben."),
-    ]
-    .spacing(10);
-    let body = if app.prefs.debug {
-        body.push(h3("Selbsttest")).push(
-            row![
-                hint("Prüft Geräte, Puffer, Fernsteuerung und Plugin."),
-                space().width(Length::Fill),
-                btn("Starten", Message::Open(Some(Dialog::Selftest)), false),
-                btn("Protokoll", Message::Open(Some(Dialog::Log)), false),
-            ]
-            .spacing(8)
-            .align_y(Vertical::Center),
-        )
-    } else {
-        body
+    let debug_card = {
+        let mut c = column![
+            check(app.prefs.debug)
+                .label(tr("Messungen, Selbsttest und Protokoll einschalten"))
+                .on_toggle(|v| edit(Edit::Debug(v))),
+            hint("Aus spart Leistung: dann laufen keine Messungen (CPU je Thread, Kabel, Zeiten) und es werden keine Zeilen dafür geschrieben."),
+        ]
+        .spacing(8);
+        if app.prefs.debug {
+            c = c.push(
+                row![
+                    hint("Prüft Geräte, Puffer, Fernsteuerung und Plugin."),
+                    space().width(Length::Fill),
+                    btn("Starten", Message::Open(Some(Dialog::Selftest)), false),
+                    btn("Protokoll", Message::Open(Some(Dialog::Log)), false),
+                ]
+                .spacing(8)
+                .align_y(Vertical::Center),
+            );
+        }
+        card("Debug-Modus", c)
     };
+    let left = cards(
+        3,
+        vec![
+            card(
+                "Eingänge",
+                column![inputs, btn("+ Eingang", edit(Edit::InAdd), false)].spacing(10),
+            ),
+            card(
+                "Ausgänge",
+                column![outputs, btn("+ Ausgang", edit(Edit::OutAdd), false)].spacing(10),
+            ),
+        ],
+    );
+    let right = cards(
+        2,
+        vec![
+            card("Programm-Mikro", mic_section(app)),
+            card(
+                "Start",
+                column![
+                    check(app.autostart)
+                        .label(tr("Mit Windows starten (im Tray, ohne Fenster)"))
+                        .on_toggle(|v| edit(Edit::Autostart(v))),
+                    check(app.prefs.test_channel)
+                        .label(tr("Testversionen: Updates auch von Test-Builds"))
+                        .on_toggle(|v| edit(Edit::TestChannel(v))),
+                ]
+                .spacing(6),
+            ),
+            card("Faderust Kabel", cable_section),
+            card("Stream Deck", deck_section(app)),
+            debug_card,
+        ],
+    );
+    let body = column![error_line(app), row![left, right].spacing(12)].spacing(10);
     frame(
         "Geräte".into(),
-        760.0,
+        1180.0,
         true,
         body.into(),
         hint("Änderungen werden automatisch gespeichert."),
