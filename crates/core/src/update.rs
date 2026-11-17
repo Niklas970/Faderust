@@ -26,12 +26,18 @@ const TITLE: &str = "org.opencontainers.image.title";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestBuild {
     pub tag: String,
+    /// What the build is about: the title of its last commit (empty if unknown).
+    pub title: String,
 }
 
 impl std::fmt::Display for TestBuild {
-    /// The branch name, as shown in the list.
+    /// The title, or the branch name when there is none, as shown in the list.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.tag)
+        if self.title.is_empty() {
+            f.write_str(&self.tag)
+        } else {
+            f.write_str(&self.title)
+        }
     }
 }
 
@@ -43,7 +49,10 @@ pub fn parse_tag_list(json: &str) -> Result<Vec<TestBuild>, String> {
         .map(|a| a.iter().filter_map(|t| t.as_str()))
         .into_iter()
         .flatten()
-        .map(|t| TestBuild { tag: t.into() })
+        .map(|t| TestBuild {
+            tag: t.into(),
+            title: String::new(),
+        })
         .collect())
 }
 
@@ -73,7 +82,26 @@ fn registry_get(token: &str, path: &str, accept: bool) -> Result<Vec<u8>, String
 pub fn list_tests() -> Result<Vec<TestBuild>, String> {
     let token = registry_token()?;
     let body = registry_get(&token, "tags/list", false)?;
-    parse_tag_list(&String::from_utf8_lossy(&body))
+    let mut list = parse_tag_list(&String::from_utf8_lossy(&body))?;
+    // A few builds at most: one small request each for the title.
+    for b in list.iter_mut().take(20) {
+        if let Ok(m) = registry_get(&token, &format!("manifests/{}", b.tag), true) {
+            b.title = parse_title(&String::from_utf8_lossy(&m));
+        }
+    }
+    Ok(list)
+}
+
+/// The title annotation of a test build's manifest.
+fn parse_title(json: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(json)
+        .ok()
+        .and_then(|v| {
+            v["annotations"]["title"]
+                .as_str()
+                .map(|t| t.trim().to_string())
+        })
+        .unwrap_or_default()
 }
 
 /// A test build's manifest: which build it is and where its files are.
@@ -304,6 +332,14 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].to_string(), "claude-x");
         assert_eq!(list[1].tag, "main");
+        assert_eq!(list[1].to_string(), "main");
+        let titled = TestBuild {
+            tag: "main".into(),
+            title: "Fenster merkt sich die Position".into(),
+        };
+        assert_eq!(titled.to_string(), "Fenster merkt sich die Position");
+        assert_eq!(parse_title(r#"{"annotations":{"title":" Neu "}}"#), "Neu");
+        assert_eq!(parse_title("{}"), "");
         // A package without tags answers with null.
         assert!(parse_tag_list(r#"{"tags":null}"#).unwrap().is_empty());
     }

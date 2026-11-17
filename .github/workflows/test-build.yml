@@ -108,6 +108,7 @@ jobs:
             --artifact-type application/vnd.faderust.test \
             --annotation "version=$(grep -m1 '^version' "$GITHUB_WORKSPACE/Cargo.toml" | sed -E 's/.*"(.*)".*/\1/')" \
             --annotation "build=$(cat build.txt)" \
+            --annotation "title=$(git -C "$GITHUB_WORKSPACE" log -1 --format=%s "$GITHUB_SHA" | cut -c1-80)" \
             --annotation "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --annotation "org.opencontainers.image.description=Faderust test builds, one tag per branch" \
             "$setup" "$setup.sig"
