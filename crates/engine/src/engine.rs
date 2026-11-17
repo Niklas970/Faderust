@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use crate::backend::{AudioBackend, BackendError, DeviceInfo, StreamFormat};
 use crate::duck::{InputDuck, Levels};
 use crate::fx::InputFx;
-use crate::lane::{lane, LaneSpec, LaneStats};
+use crate::lane::{lane, Lane, LaneSpec, LaneStats};
 use crate::matrix::MixMatrix;
 use crate::meter::PeakMeter;
 use crate::node::{DuckLink, InputCommand, InputNode, NodeHandle, OutputCommand, OutputNode};
@@ -205,6 +205,9 @@ pub struct Engine<B: AudioBackend> {
     live_out: Vec<Option<Live<B::Stream, OutputCommand>>>,
     /// `lanes[input][output]`, stable across reconnections.
     lanes: Vec<Vec<Arc<LaneStats>>>,
+    /// Per output and input: the lane that keeps collecting sound while the
+    /// output is released, so the sound that wakes it is not lost.
+    parked: Vec<Vec<Option<Box<Lane>>>>,
     /// Effect settings per input, stable across reconnections.
     fx: Vec<Arc<InputFx>>,
     /// Ducking settings per input, stable across reconnections.
@@ -280,6 +283,9 @@ impl<B: AudioBackend> Engine<B> {
             live_out: (0..n_out).map(|_| None).collect(),
             lanes: (0..n_in)
                 .map(|_| (0..n_out).map(|_| Arc::default()).collect())
+                .collect(),
+            parked: (0..n_out)
+                .map(|_| (0..n_in).map(|_| None).collect())
                 .collect(),
             fx: (0..n_in).map(|_| Arc::default()).collect(),
             duck: (0..n_in).map(|_| Arc::default()).collect(),
@@ -473,10 +479,43 @@ impl<B: AudioBackend> Engine<B> {
                         releasable: true,
                         reopen: None,
                     };
+                    let rate = self.outputs[o].device.as_ref().map(|(_, f)| f.sample_rate);
                     self.disconnect_output(o);
+                    if let Some(rate) = rate {
+                        self.park_lanes(o, rate);
+                    }
                     events.push(EngineEvent::Released { slot: o });
                 }
             }
+        }
+    }
+
+    /// Gives every live input a lane to the released output `o` that nobody
+    /// plays yet: it collects the sound meanwhile, and the output starts with
+    /// it when it reopens.
+    fn park_lanes(&mut self, o: usize, output_rate: u32) {
+        for i in 0..self.inputs.len() {
+            self.parked[o][i] = None;
+            let (Some(live), Some((_, format))) = (&mut self.live_in[i], &self.inputs[i].device)
+            else {
+                continue;
+            };
+            if live.failed.load(Relaxed) {
+                continue;
+            }
+            let stats = Arc::clone(&self.lanes[i][o]);
+            let (producer, lane) = lane(
+                LaneSpec {
+                    input_rate: format.sample_rate,
+                    output_rate,
+                    target_ms: self.config.outputs[o].buffer_ms,
+                },
+                Arc::clone(&stats),
+            );
+            let _ = live
+                .handle
+                .send(InputCommand::SetLane(o, Some((producer, stats))));
+            self.parked[o][i] = Some(Box::new(lane));
         }
     }
 
@@ -494,6 +533,13 @@ impl<B: AudioBackend> Engine<B> {
             return events;
         }
         self.listen(now);
+        for (o, idle) in self.idle.iter().enumerate() {
+            if idle.released {
+                for lane in self.parked[o].iter_mut().flatten() {
+                    lane.skip_leading_silence();
+                }
+            }
+        }
         for o in 0..self.outputs.len() {
             if !(self.idle[o].released && self.has_signal(o, now)) {
                 continue;
@@ -595,15 +641,25 @@ impl<B: AudioBackend> Engine<B> {
             match (&self.live_in[i], &state.device) {
                 // A stream that just failed is about to be rebuilt: no lane to it.
                 (Some(live), Some((_, in_format))) if !live.failed.load(Relaxed) => {
+                    let spec = LaneSpec {
+                        input_rate: in_format.sample_rate,
+                        output_rate: format.sample_rate,
+                        target_ms: buffer_ms,
+                    };
+                    // A lane that kept collecting while the output was released
+                    // starts with the sound that woke it up.
+                    let waiting = self.parked[o][i].take().filter(|l| {
+                        let s = l.spec();
+                        (s.input_rate, s.output_rate, s.target_ms)
+                            == (spec.input_rate, spec.output_rate, spec.target_ms)
+                    });
+                    if let Some(mut waiting) = waiting {
+                        waiting.catch_up();
+                        lanes.push(Some(waiting));
+                        continue;
+                    }
                     let stats = Arc::clone(&self.lanes[i][o]);
-                    let (producer, lane) = lane(
-                        LaneSpec {
-                            input_rate: in_format.sample_rate,
-                            output_rate: format.sample_rate,
-                            target_ms: buffer_ms,
-                        },
-                        Arc::clone(&stats),
-                    );
+                    let (producer, lane) = lane(spec, Arc::clone(&stats));
                     lanes.push(Some(Box::new(lane)));
                     producers.push((i, (producer, stats)));
                 }
@@ -659,6 +715,8 @@ impl<B: AudioBackend> Engine<B> {
             Err(e) => return failed(e),
         };
 
+        // A new stream has new ring buffers: waiting lanes no longer fit.
+        self.parked.iter_mut().for_each(|row| row[i] = None);
         // One lane to every connected output.
         let mut producers = Vec::with_capacity(self.outputs.len());
         let mut lanes = Vec::new();
@@ -726,6 +784,7 @@ impl<B: AudioBackend> Engine<B> {
     }
 
     fn disconnect_output(&mut self, o: usize) {
+        self.parked[o].iter_mut().for_each(|l| *l = None);
         if let Some(live) = self.live_out[o].take() {
             live.close();
         }
@@ -739,6 +798,7 @@ impl<B: AudioBackend> Engine<B> {
     }
 
     fn disconnect_input(&mut self, i: usize) {
+        self.parked.iter_mut().for_each(|row| row[i] = None);
         if let Some(live) = self.live_in[i].take() {
             live.close();
         }
@@ -1207,6 +1267,40 @@ mod tests {
         );
         b.pump(100, level);
         assert_eq!(connected(&engine.maintain_at(at(40))), 1);
+    }
+
+    #[test]
+    fn a_reopened_output_starts_with_the_sound_that_woke_it() {
+        let b = FakeBackend::default();
+        b.plug_input("mic", 48_000, 1);
+        b.plug_input("game", 48_000, 2);
+        b.plug_output("usb", 48_000, 2);
+        b.plug_output("bt", 48_000, 2);
+        let mut cfg = config(&["mic", "game"], &[("usb", 20), ("bt", 80)]);
+        cfg.outputs[1].release_after = Some(Duration::from_secs(5));
+        let mut engine = Engine::new(b.clone(), cfg).unwrap();
+        engine.matrix.set_muted(0, 1, true);
+        let t0 = Instant::now();
+        let at = |s: u64| t0 + Duration::from_secs(s);
+        engine.maintain_at(at(0));
+        let quiet_game = |n: &str| if n == "game" { 0.0 } else { level(n) };
+        b.pump(100, quiet_game);
+        engine.maintain_at(at(1));
+        b.pump(100, quiet_game);
+        assert_eq!(
+            engine.maintain_at(at(6)),
+            vec![EngineEvent::Released { slot: 1 }]
+        );
+        b.pump(100, quiet_game);
+        engine.wake_at(at(7));
+
+        // The game starts while bt is closed; the sound is kept for it.
+        b.pump_inputs(120, level);
+        assert_eq!(connected(&engine.wake_at(at(8))), 1);
+        // Right after the reopening, not one target later, bt plays it.
+        let out = b.pump(30, level);
+        let last = *out["bt"].last().unwrap();
+        assert!(last > 0.3, "bt plays {last}");
     }
 
     #[test]
