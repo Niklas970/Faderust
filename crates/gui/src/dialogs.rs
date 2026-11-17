@@ -969,9 +969,21 @@ fn design(app: &App) -> Element<'_, Message> {
             check(!app.prefs.cap_value_off)
                 .label(tr("Wert in der Kappe"))
                 .on_toggle(|v| edit(Edit::CapValue(v))),
+            check(app.prefs.thin_track)
+                .label(tr("Schmale Bahn"))
+                .on_toggle(|v| edit(Edit::ThinTrack(v))),
+            check(app.prefs.small_cap)
+                .label(tr("Kleine Kappe wie bei einer Konsole"))
+                .on_toggle(|v| edit(Edit::SmallCap(v))),
+            check(app.prefs.relief)
+                .label(tr("Streifen als erhabene Platten"))
+                .on_toggle(|v| edit(Edit::Relief(v))),
             check(app.prefs.readout_display)
                 .label(tr("Wert im Display"))
                 .on_toggle(|v| edit(Edit::ReadoutDisplay(v))),
+            check(app.prefs.lcd_tint)
+                .label(tr("Display in LCD-Türkis"))
+                .on_toggle(|v| edit(Edit::LcdTint(v))),
         ]
         .spacing(6),
     );
