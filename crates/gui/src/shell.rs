@@ -142,6 +142,20 @@ pub struct Prefs {
     pub scale_off: bool,
     /// No glow around the accent bar of the fader.
     pub glow_off: bool,
+    /// The meters in the signal colour only.
+    pub one_color: bool,
+    /// Fader caps in the accent colour.
+    pub accent_cap: bool,
+    /// No dB value in the fader cap.
+    pub cap_value_off: bool,
+    /// Thin track instead of the recessed slot.
+    pub thin_track: bool,
+    /// Small cap, like a console knob.
+    pub small_cap: bool,
+    /// Strips as raised panels.
+    pub relief: bool,
+    /// Colour of the value display as "#rrggbb"; empty is the signal colour.
+    pub lcd_color: String,
     /// "de", "en" or empty for the system language.
     pub lang: String,
     /// The window stays above all others.

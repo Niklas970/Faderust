@@ -237,6 +237,7 @@ pub struct App {
     pub accent_input: Option<String>,
     pub picker: Option<(Target, (f32, f32, f32))>,
     pub signal_input: Option<String>,
+    pub lcd_input: Option<String>,
     logo: image::Handle,
     #[cfg(windows)]
     tray: Option<shell::tray::Tray>,
@@ -317,6 +318,7 @@ fn apply_look(p: &shell::Prefs) {
 pub enum Target {
     Accent,
     Signal,
+    Lcd,
 }
 
 #[derive(Debug, Clone)]
@@ -392,6 +394,15 @@ pub enum Edit {
     CapSquare(bool),
     Scale(bool),
     Glow(bool),
+    OneColor(bool),
+    AccentCap(bool),
+    CapValue(bool),
+    ThinTrack(bool),
+    SmallCap(bool),
+    Relief(bool),
+    /// A colour for the LCD display, typed or chosen.
+    LcdHex(String),
+    Lcd(String),
     Osd(bool),
     Debug(bool),
     TestChannel(bool),
@@ -1297,6 +1308,7 @@ impl App {
             accent_input: None,
             picker: None,
             signal_input: None,
+            lcd_input: None,
             logo: image::Handle::from_bytes(LOGO),
             #[cfg(windows)]
             tray: tray_icon(),
@@ -2387,6 +2399,12 @@ impl App {
             Edit::CapSquare(on) => self.set_look(|p| p.cap_square = on),
             Edit::Scale(on) => self.set_look(|p| p.scale_off = !on),
             Edit::Glow(on) => self.set_look(|p| p.glow_off = !on),
+            Edit::OneColor(on) => self.set_look(|p| p.one_color = on),
+            Edit::AccentCap(on) => self.set_look(|p| p.accent_cap = on),
+            Edit::CapValue(on) => self.set_look(|p| p.cap_value_off = !on),
+            Edit::ThinTrack(on) => self.set_look(|p| p.thin_track = on),
+            Edit::SmallCap(on) => self.set_look(|p| p.small_cap = on),
+            Edit::Relief(on) => self.set_look(|p| p.relief = on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::TestChannel(on) => {
                 self.set_look(|p| p.test_channel = on);
@@ -2402,6 +2420,7 @@ impl App {
                     let hex = match t {
                         Target::Accent => self.accent(),
                         Target::Signal => self.signal(),
+                        Target::Lcd => self.lcd_hex(),
                     };
                     Some((t, style::rgb_to_hsv(style::hex(&hex))))
                 };
@@ -2418,6 +2437,10 @@ impl App {
                     Target::Signal => {
                         self.signal_input = Some(hex.clone());
                         p.signal = hex;
+                    }
+                    Target::Lcd => {
+                        self.lcd_input = Some(hex.clone());
+                        p.lcd_color = hex;
                     }
                 }
                 // Live, without writing the file on every move.
@@ -2447,6 +2470,17 @@ impl App {
             Edit::Signal(c) => {
                 self.signal_input = None;
                 self.set_look(|p| p.signal = c);
+            }
+            Edit::LcdHex(t) => {
+                let hex = style::parse_hex_input(&t);
+                self.lcd_input = Some(t);
+                if let Some(c) = hex {
+                    self.set_look(|p| p.lcd_color = c);
+                }
+            }
+            Edit::Lcd(c) => {
+                self.lcd_input = None;
+                self.set_look(|p| p.lcd_color = c);
             }
             Edit::Lang(l) => self.set_look(|p| p.lang = l.into()),
             Edit::Autostart(on) => match shell::set_autostart(on) {
@@ -2926,6 +2960,15 @@ impl App {
         .into()
     }
 
+    /// The LCD colour as "#rrggbb"; the signal colour when none is chosen.
+    fn lcd_hex(&self) -> String {
+        if self.prefs.lcd_color.is_empty() {
+            self.signal()
+        } else {
+            self.prefs.lcd_color.clone()
+        }
+    }
+
     fn readout(&self, db: f32, muted: bool) -> Element<'static, Message> {
         let value = text(if db <= scale::OFF {
             "−∞ dB".to_string()
@@ -2943,16 +2986,26 @@ impl App {
                 .into();
         }
         // The value in a small recessed display, like the window on a cap.
+        let lcd = (!self.prefs.lcd_color.is_empty()).then(|| style::hex(&self.prefs.lcd_color));
         container(
             value
-                .color(if muted { muted_color() } else { signal() })
+                .color(if muted {
+                    muted_color()
+                } else if let Some(c) = lcd {
+                    c
+                } else {
+                    signal()
+                })
                 .center(),
         )
         .width(88)
         .padding([4, 0])
         .center_x(88)
-        .style(|_| container::Style {
-            background: Some(Background::Color(rgb(11, 12, 14))),
+        .style(move |_| container::Style {
+            background: Some(Background::Color(match lcd {
+                Some(c) => style::mix(c, Color::BLACK, 0.9),
+                None => rgb(11, 12, 14),
+            })),
             border: Border {
                 color: rgb(44, 47, 51),
                 width: 1.0,
@@ -2972,6 +3025,11 @@ impl App {
             square_cap: self.prefs.cap_square,
             scale: !self.prefs.scale_off,
             glow: !self.prefs.glow_off,
+            one_color: self.prefs.one_color,
+            accent_cap: self.prefs.accent_cap,
+            cap_value: !self.prefs.cap_value_off,
+            thin_track: self.prefs.thin_track,
+            small_cap: self.prefs.small_cap,
         }
     }
 
@@ -3013,14 +3071,37 @@ impl App {
     }
 
     /// One strip in its card: A1-A3, name, note, fader, readout, mute, effects.
-    fn card<'a>(content: Element<'a, Message>, width: f32, active: bool) -> Element<'a, Message> {
+    fn card<'a>(
+        &self,
+        content: Element<'a, Message>,
+        width: f32,
+        active: bool,
+    ) -> Element<'a, Message> {
+        let relief = self.prefs.relief;
         container(content)
             .padding([10, 6])
             .width(width)
             .height(Length::Fill)
             .align_x(Horizontal::Center)
             .style(move |_| container::Style {
-                background: Some(Background::Color(panel())),
+                background: Some(Background::Color(if relief {
+                    mix(panel(), Color::WHITE, 0.045)
+                } else {
+                    panel()
+                })),
+                shadow: if relief {
+                    iced::Shadow {
+                        color: Color {
+                            a: 0.55,
+                            ..Color::BLACK
+                        },
+                        // No blur: a blurred shadow is slow in software drawing.
+                        offset: iced::Vector::new(0.0, 2.0),
+                        blur_radius: 0.0,
+                    }
+                } else {
+                    iced::Shadow::default()
+                },
                 border: Border {
                     // A strip with signal gets a faint signal-coloured edge.
                     color: if active {
@@ -3149,7 +3230,7 @@ impl App {
         } else {
             self.prefs.device_edge_off
         };
-        Self::card(
+        self.card(
             column![
                 top,
                 Self::name_label(&s.label),
@@ -3232,7 +3313,7 @@ impl App {
         ]
         .align_y(Vertical::Center)
         .width(Length::Fill);
-        Self::card(
+        self.card(
             column![
                 tag,
                 Self::name_label(&m.label),
@@ -3447,6 +3528,7 @@ impl App {
             peak,
             muted,
             segments: self.prefs.meter_segments,
+            one_color: self.prefs.one_color,
         })
         .width(Length::Fill)
         .height(6)

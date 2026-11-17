@@ -1052,6 +1052,34 @@ fn design(app: &App) -> Element<'_, Message> {
         ]
         .spacing(10),
     );
+    let lcd_now = app.lcd_hex();
+    let lcd_custom = !app.prefs.lcd_color.is_empty();
+    let lcd_swatches = LCD_COLORS.iter().fold(row![].spacing(8), |r, (_, _, hex)| {
+        r.push(swatch(
+            hex,
+            lcd_custom && lcd_now.eq_ignore_ascii_case(hex),
+            edit(Edit::Lcd((*hex).into())),
+        ))
+    });
+    let lcd_card = card(
+        "Display-Farbe",
+        column![
+            lcd_swatches,
+            custom_color(
+                app.lcd_input.clone().unwrap_or_else(|| lcd_now.clone()),
+                Target::Lcd,
+                app.picker,
+                |t| edit(Edit::LcdHex(t)),
+            ),
+            row![
+                btn("Standard", edit(Edit::Lcd(String::new())), !lcd_custom),
+                hint("Gilt für „Wert im Display“."),
+            ]
+            .spacing(10)
+            .align_y(Vertical::Center),
+        ]
+        .spacing(10),
+    );
     let edge_card = card(
         "Grüner Rand bei Signal",
         row![
@@ -1082,6 +1110,21 @@ fn design(app: &App) -> Element<'_, Message> {
             check(!app.prefs.glow_off)
                 .label(tr("Leuchten am Fader"))
                 .on_toggle(|v| edit(Edit::Glow(v))),
+            check(app.prefs.accent_cap)
+                .label(tr("Kappe in Akzentfarbe"))
+                .on_toggle(|v| edit(Edit::AccentCap(v))),
+            check(!app.prefs.cap_value_off)
+                .label(tr("Wert in der Kappe"))
+                .on_toggle(|v| edit(Edit::CapValue(v))),
+            check(app.prefs.thin_track)
+                .label(tr("Schmale Bahn"))
+                .on_toggle(|v| edit(Edit::ThinTrack(v))),
+            check(app.prefs.small_cap)
+                .label(tr("Kleine Kappe wie bei einer Konsole"))
+                .on_toggle(|v| edit(Edit::SmallCap(v))),
+            check(app.prefs.relief)
+                .label(tr("Streifen als erhabene Platten"))
+                .on_toggle(|v| edit(Edit::Relief(v))),
             check(app.prefs.readout_display)
                 .label(tr("Wert im Display"))
                 .on_toggle(|v| edit(Edit::ReadoutDisplay(v))),
@@ -1094,6 +1137,9 @@ fn design(app: &App) -> Element<'_, Message> {
             check(app.prefs.meter_segments)
                 .label(tr("LED-Segmente statt Balken"))
                 .on_toggle(|v| edit(Edit::MeterSegments(v))),
+            check(app.prefs.one_color)
+                .label(tr("Pegel einfarbig"))
+                .on_toggle(|v| edit(Edit::OneColor(v))),
             check(!app.prefs.peak_off)
                 .label(tr("Spitzenwert-Marke"))
                 .on_toggle(|v| edit(Edit::PeakMark(v))),
@@ -1156,9 +1202,9 @@ fn design(app: &App) -> Element<'_, Message> {
         .spacing(8),
     );
     let body = row![
-        cards(1, vec![view_card, hide_card, look_card]),
-        cards(1, vec![accent_card, signal_card, edge_card]),
-        cards(1, vec![fader_card, meter_card, extras_card]),
+        cards(1, vec![view_card, hide_card, look_card, extras_card]),
+        cards(1, vec![accent_card, signal_card, lcd_card, edge_card]),
+        cards(1, vec![fader_card, meter_card]),
     ]
     .spacing(12)
     .align_y(Vertical::Top);
