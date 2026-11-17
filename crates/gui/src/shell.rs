@@ -120,6 +120,8 @@ pub struct Prefs {
     pub output_edge_off: bool,
     /// Update to the rolling test build of the repository too.
     pub test_channel: bool,
+    /// Tag (`test-<branch>`) of the test build to follow.
+    pub test_branch: String,
     /// Debug mode: measurements, self-test and log are shown and written.
     pub debug: bool,
     /// The same for devices and for programs on the desk.

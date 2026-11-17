@@ -1680,11 +1680,29 @@ fn settings(app: &App) -> Element<'_, Message> {
             check(app.prefs.test_channel)
                 .label(tr("Testversionen: Updates auch von Test-Builds"))
                 .on_toggle(|v| edit(Edit::TestChannel(v))),
-            hint("Ein Test-Build ist der Stand eines Branches vor dem Release. Du startest ihn in GitHub unter Actions („Test build“); Faderust bietet ihn dann als Update an."),
+            hint("Ein Test-Build ist der Stand eines Branches vor dem Release. Du startest ihn in GitHub unter Actions („Test build“) für einen Branch; hier wählst du den Branch aus."),
             hint(mine),
         ]
         .spacing(8);
         if app.prefs.test_channel {
+            let current = app
+                .test_builds
+                .iter()
+                .find(|b| b.tag == app.prefs.test_branch)
+                .cloned();
+            c = c.push(if app.test_builds.is_empty() {
+                hint("Noch keine Test-Builds geladen: „Jetzt suchen“ lädt die Liste.")
+            } else {
+                row![
+                    hint("Test-Build"),
+                    pick_list(app.test_builds.clone(), current, |b| {
+                        edit(Edit::TestBranch(b.tag))
+                    }),
+                ]
+                .spacing(10)
+                .align_y(Vertical::Center)
+                .into()
+            });
             let found = match &app.update {
                 Some(u) => format!("{} {}", tr("Gefunden:"), u.label()),
                 None => tr("Kein neueres Build gefunden.").to_string(),

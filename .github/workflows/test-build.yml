@@ -1,10 +1,11 @@
 name: Test build
 
 # Builds the branch you pick (Run workflow, "Use workflow from") as a signed
-# setup and publishes it as the rolling pre-release "test". Faderust updates
-# itself to it when "Testversionen" is on in the Devices dialog: no download,
-# no version bump, no release. Normal users never see it (it is a
-# pre-release, the updater reads the latest full release).
+# setup and publishes it as the pre-release "test-<branch>" (one per branch,
+# each run replaces the previous one of its branch). Faderust lists them when
+# "Testversionen" is on in the Devices dialog; you pick the branch there and
+# it updates itself: no download, no version bump, no release. Normal users
+# never see it (pre-releases are not "latest").
 on:
   workflow_dispatch:
 
@@ -15,7 +16,7 @@ env:
   CARGO_TERM_COLOR: always
 
 concurrency:
-  group: test-build
+  group: test-build-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -93,6 +94,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REF_NAME: ${{ github.ref_name }}
         run: |
+          # Branch name as a tag: "claude/x y" becomes "test-claude-x-y".
+          tag="test-$(printf '%s' "$REF_NAME" | tr -c 'A-Za-z0-9._-' '-')"
           cd release
           setup=$(ls *-setup.exe)
           build=$(cat build.txt)
@@ -102,13 +105,13 @@ jobs:
             --arg build "$build" \
             --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg sig "$(cat "$setup.sig")" \
-            --arg url "https://github.com/$GITHUB_REPOSITORY/releases/download/test/$setup" \
+            --arg url "https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$setup" \
             '{version: $version, build: $build, pub_date: $date, notes: "", platforms: {"windows-x86_64": {signature: $sig, url: $url}}}' \
             > latest-test.json
-          gh release delete test --cleanup-tag --yes || true
-          gh release create test "$setup" "$setup.sig" latest-test.json \
+          gh release delete "$tag" --cleanup-tag --yes || true
+          gh release create "$tag" "$setup" "$setup.sig" latest-test.json \
             --title "Test build $build" \
-            --notes "Test build of branch \`$REF_NAME\` ($GITHUB_SHA). For trying changes only: turn on \"Testversionen\" in Faderust to update to it." \
+            --notes "Test build of branch \`$REF_NAME\` ($GITHUB_SHA). For trying changes only: turn on \"Testversionen\" in Faderust and pick this branch." \
             --prerelease \
             --latest=false \
             --target "$GITHUB_SHA"

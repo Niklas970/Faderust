@@ -291,9 +291,14 @@ const TABLE: &[(&str, &str)] = &[
     ("Für ein Programm-Mikro (Discord, Teams …) braucht es ein virtuelles Kabel.", "A program microphone (Discord, Teams …) needs a virtual cable."),
     ("Update auf", "Update to"),
     ("Testversionen", "Test versions"),
+    ("Test-Build", "Test build"),
     (
-        "Ein Test-Build ist der Stand eines Branches vor dem Release. Du startest ihn in GitHub unter Actions („Test build“); Faderust bietet ihn dann als Update an.",
-        "A test build is the state of a branch before the release. You start it in GitHub under Actions (\"Test build\"); Faderust then offers it as an update.",
+        "Noch keine Test-Builds geladen: „Jetzt suchen“ lädt die Liste.",
+        "No test builds loaded yet: \"Search now\" loads the list.",
+    ),
+    (
+        "Ein Test-Build ist der Stand eines Branches vor dem Release. Du startest ihn in GitHub unter Actions („Test build“) für einen Branch; hier wählst du den Branch aus.",
+        "A test build is the state of a branch before the release. You start it in GitHub under Actions (\"Test build\") for a branch; here you pick the branch.",
     ),
     ("Dieses Faderust ist ein Release:", "This Faderust is a release:"),
     ("Dieses Faderust ist ein Test-Build:", "This Faderust is a test build:"),
