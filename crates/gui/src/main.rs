@@ -244,6 +244,8 @@ pub struct App {
     update: Option<Update>,
     updating: bool,
     checking: bool,
+    /// Test builds the repository offers (loaded on demand).
+    pub test_builds: Vec<faderust_core::update::TestBuild>,
     last_check: Option<Instant>,
     core: Arc<AppState>,
     notices: Arc<Mutex<Vec<Notice>>>,
@@ -406,6 +408,8 @@ pub enum Edit {
     Osd(bool),
     Debug(bool),
     TestChannel(bool),
+    /// The test build to follow, by tag.
+    TestBranch(String),
     TrayPopup(bool),
     AccentHex(String),
     SignalHex(String),
@@ -467,6 +471,7 @@ pub enum Message {
     Quit,
     CheckUpdate,
     UpdateChecked(Result<Option<Update>, String>, bool),
+    TestBuildsLoaded(Result<Vec<faderust_core::update::TestBuild>, String>),
     InstallUpdate,
     UpdateInstalled(Result<(), String>),
     Open(Option<Dialog>),
@@ -690,15 +695,23 @@ fn blocking<T: Send + 'static>(
 }
 
 impl App {
+    fn load_test_builds(&self) -> Task<Message> {
+        blocking(faderust_core::update::list_tests, Message::TestBuildsLoaded)
+    }
+
     fn check_update(&mut self, manual: bool) -> Task<Message> {
         if self.checking || self.updating {
             return Task::none();
         }
         self.checking = true;
         self.last_check = Some(Instant::now());
-        let test = self.prefs.test_channel;
+        let test = self
+            .prefs
+            .test_channel
+            .then(|| self.prefs.test_branch.clone())
+            .filter(|b| !b.is_empty());
         blocking(
-            move || faderust_core::update::check(env!("CARGO_PKG_VERSION"), test),
+            move || faderust_core::update::check(env!("CARGO_PKG_VERSION"), test.as_deref()),
             move |r| Message::UpdateChecked(r, manual),
         )
     }
@@ -1315,6 +1328,7 @@ impl App {
             update: None,
             updating: false,
             checking: false,
+            test_builds: Vec::new(),
             last_check: None,
             prefs,
             dialog: None,
@@ -1800,7 +1814,17 @@ impl App {
                     return window::drag(id);
                 }
             }
-            Message::CheckUpdate => return self.check_update(true),
+            Message::CheckUpdate => {
+                let check = self.check_update(true);
+                if self.prefs.test_channel {
+                    return Task::batch([check, self.load_test_builds()]);
+                }
+                return check;
+            }
+            Message::TestBuildsLoaded(r) => match r {
+                Ok(list) => self.test_builds = list,
+                Err(e) => self.say("warn", format!("Test-Builds laden fehlgeschlagen: {e}")),
+            },
             Message::UpdateChecked(r, manual) => {
                 self.checking = false;
                 match r {
@@ -2410,6 +2434,15 @@ impl App {
                 self.set_look(|p| p.test_channel = on);
                 // Look for a test build right away.
                 self.last_check = None;
+                if on {
+                    let t = self.load_test_builds();
+                    self.jobs.push(t);
+                }
+            }
+            Edit::TestBranch(tag) => {
+                self.set_look(|p| p.test_branch = tag);
+                self.last_check = None;
+                self.update = None;
             }
             Edit::Debug(on) => self.set_look(|p| p.debug = on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),

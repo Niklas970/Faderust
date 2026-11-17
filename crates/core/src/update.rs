@@ -13,9 +13,42 @@ use crate::remote::is_newer;
 /// Where the latest release lists its setup and signature.
 const ENDPOINT: &str = "https://github.com/Niklas970/faderust/releases/latest/download/latest.json";
 
-/// The rolling test build: every run of the "Test build" workflow replaces it.
-const TEST_ENDPOINT: &str =
-    "https://github.com/Niklas970/faderust/releases/download/test/latest-test.json";
+/// Every run of the "Test build" workflow publishes a pre-release `test-<branch>`
+/// (replacing the previous one of that branch); the app lists them to choose from.
+const RELEASES: &str = "https://api.github.com/repos/Niklas970/faderust/releases?per_page=50";
+const TEST_PREFIX: &str = "test-";
+
+/// A test build to choose from: the pre-release of one branch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TestBuild {
+    /// The release tag, `test-<branch>`.
+    pub tag: String,
+}
+
+impl std::fmt::Display for TestBuild {
+    /// The branch name, as shown in the list.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.tag.strip_prefix(TEST_PREFIX).unwrap_or(&self.tag))
+    }
+}
+
+/// The test builds in a `releases` listing of the GitHub API.
+pub fn parse_test_list(json: &str) -> Result<Vec<TestBuild>, String> {
+    let list: Vec<serde_json::Value> = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    Ok(list
+        .iter()
+        .filter(|r| r["prerelease"].as_bool() == Some(true))
+        .filter_map(|r| r["tag_name"].as_str())
+        .filter(|t| t.starts_with(TEST_PREFIX))
+        .map(|t| TestBuild { tag: t.into() })
+        .collect())
+}
+
+/// Asks GitHub which test builds exist.
+pub fn list_tests() -> Result<Vec<TestBuild>, String> {
+    let body = fetch(&["--max-time", "20", RELEASES])?;
+    parse_test_list(&String::from_utf8_lossy(&body))
+}
 
 /// Identifies this build for the test channel ("<run>-<commit>", set by the
 /// test workflow); empty for every other build.
@@ -119,15 +152,17 @@ fn fetch(args: &[&str]) -> Result<Vec<u8>, String> {
 }
 
 /// Asks GitHub for the latest release; `Ok(None)` when this one is current.
-/// With `test`, a newer release still wins, otherwise the rolling test build
-/// is offered when it is another build than this one.
-pub fn check(current: &str, test: bool) -> Result<Option<Update>, String> {
+/// With a test build's tag, a newer release still wins, otherwise that test
+/// build is offered when it is another build than this one.
+pub fn check(current: &str, test: Option<&str>) -> Result<Option<Update>, String> {
     let body = fetch(&["--max-time", "20", ENDPOINT])?;
     let release = parse_manifest(&String::from_utf8_lossy(&body), current)?;
-    if release.is_some() || !test {
+    let Some(tag) = test.filter(|t| release.is_none() && t.starts_with(TEST_PREFIX)) else {
         return Ok(release);
-    }
-    let body = fetch(&["--max-time", "20", TEST_ENDPOINT])?;
+    };
+    let url =
+        format!("https://github.com/Niklas970/faderust/releases/download/{tag}/latest-test.json");
+    let body = fetch(&["--max-time", "20", &url])?;
     parse_test_manifest(&String::from_utf8_lossy(&body), own_build())
 }
 
@@ -206,6 +241,15 @@ mod tests {
         assert!(parse_test_manifest(&json, "12-abc1234").unwrap().is_none());
         // A manifest of a release has no build: never a test build.
         assert!(parse_test_manifest(MANIFEST, "").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_builds_are_the_prereleases_named_test() {
+        let json = r#"[{"tag_name":"v0.8.3","prerelease":false},{"tag_name":"test-claude-x","prerelease":true},{"tag_name":"test-main","prerelease":true},{"tag_name":"test-fake","prerelease":false}]"#;
+        let list = parse_test_list(json).unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].to_string(), "claude-x");
+        assert_eq!(list[1].tag, "test-main");
     }
 
     #[test]
