@@ -391,6 +391,10 @@ pub enum Edit {
     OneColor(bool),
     AccentCap(bool),
     CapValue(bool),
+    ThinTrack(bool),
+    SmallCap(bool),
+    Relief(bool),
+    LcdTint(bool),
     Osd(bool),
     Debug(bool),
     TrayPopup(bool),
@@ -2380,6 +2384,10 @@ impl App {
             Edit::OneColor(on) => self.set_look(|p| p.one_color = on),
             Edit::AccentCap(on) => self.set_look(|p| p.accent_cap = on),
             Edit::CapValue(on) => self.set_look(|p| p.cap_value_off = !on),
+            Edit::ThinTrack(on) => self.set_look(|p| p.thin_track = on),
+            Edit::SmallCap(on) => self.set_look(|p| p.small_cap = on),
+            Edit::Relief(on) => self.set_look(|p| p.relief = on),
+            Edit::LcdTint(on) => self.set_look(|p| p.lcd_tint = on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::Debug(on) => self.set_look(|p| p.debug = on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),
@@ -2931,16 +2939,27 @@ impl App {
                 .into();
         }
         // The value in a small recessed display, like the window on a cap.
+        let lcd = self.prefs.lcd_tint;
         container(
             value
-                .color(if muted { muted_color() } else { signal() })
+                .color(if muted {
+                    muted_color()
+                } else if lcd {
+                    rgb(88, 230, 208)
+                } else {
+                    signal()
+                })
                 .center(),
         )
         .width(88)
         .padding([4, 0])
         .center_x(88)
-        .style(|_| container::Style {
-            background: Some(Background::Color(rgb(11, 12, 14))),
+        .style(move |_| container::Style {
+            background: Some(Background::Color(if lcd {
+                rgb(11, 20, 22)
+            } else {
+                rgb(11, 12, 14)
+            })),
             border: Border {
                 color: rgb(44, 47, 51),
                 width: 1.0,
@@ -2963,6 +2982,8 @@ impl App {
             one_color: self.prefs.one_color,
             accent_cap: self.prefs.accent_cap,
             cap_value: !self.prefs.cap_value_off,
+            thin_track: self.prefs.thin_track,
+            small_cap: self.prefs.small_cap,
         }
     }
 
@@ -3004,14 +3025,37 @@ impl App {
     }
 
     /// One strip in its card: A1-A3, name, note, fader, readout, mute, effects.
-    fn card<'a>(content: Element<'a, Message>, width: f32, active: bool) -> Element<'a, Message> {
+    fn card<'a>(
+        &self,
+        content: Element<'a, Message>,
+        width: f32,
+        active: bool,
+    ) -> Element<'a, Message> {
+        let relief = self.prefs.relief;
         container(content)
             .padding([10, 6])
             .width(width)
             .height(Length::Fill)
             .align_x(Horizontal::Center)
             .style(move |_| container::Style {
-                background: Some(Background::Color(panel())),
+                background: Some(Background::Color(if relief {
+                    mix(panel(), Color::WHITE, 0.045)
+                } else {
+                    panel()
+                })),
+                shadow: if relief {
+                    iced::Shadow {
+                        color: Color {
+                            a: 0.55,
+                            ..Color::BLACK
+                        },
+                        // No blur: a blurred shadow is slow in software drawing.
+                        offset: iced::Vector::new(0.0, 2.0),
+                        blur_radius: 0.0,
+                    }
+                } else {
+                    iced::Shadow::default()
+                },
                 border: Border {
                     // A strip with signal gets a faint signal-coloured edge.
                     color: if active {
@@ -3140,7 +3184,7 @@ impl App {
         } else {
             self.prefs.device_edge_off
         };
-        Self::card(
+        self.card(
             column![
                 top,
                 Self::name_label(&s.label),
@@ -3223,7 +3267,7 @@ impl App {
         ]
         .align_y(Vertical::Center)
         .width(Length::Fill);
-        Self::card(
+        self.card(
             column![
                 tag,
                 Self::name_label(&m.label),

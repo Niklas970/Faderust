@@ -80,6 +80,10 @@ pub struct Parts {
     pub accent_cap: bool,
     /// The dB value in the cap.
     pub cap_value: bool,
+    /// Thin track instead of the recessed slot.
+    pub thin_track: bool,
+    /// Small console-style cap without a value window.
+    pub small_cap: bool,
 }
 
 /// Fader track, scale, cap and LED meter of one strip in a single canvas.
@@ -274,6 +278,12 @@ impl Fader<'_> {
         };
         let slot_w = if wide { 18.0 } else { 12.0 };
         let bar_w = if wide { 10.0 } else { 6.0 };
+        // A thin track keeps its centre under the cap.
+        let (sx, slot_w, bar_w) = if self.parts.thin_track {
+            (sx + (slot_w - 6.0) / 2.0, 6.0, 4.0)
+        } else {
+            (sx, slot_w, bar_w)
+        };
         let bar_x = sx + (slot_w - bar_w) / 2.0;
         // Scale: numbers on the left, small marks beside the slot.
         // Fine marks every 3 dB between -24 and +12.
@@ -370,11 +380,24 @@ impl Fader<'_> {
         }
 
         // Cap: graphite gradient, accent edges, index line and a value window.
-        let (cw, ch) = if wide { (68.0, 44.0) } else { (40.0, 40.0) };
+        let (cw0, ch0) = if wide { (68.0, 44.0) } else { (40.0, 40.0) };
+        let (cw, ch) = if self.parts.small_cap {
+            if wide {
+                (44.0, 24.0)
+            } else {
+                (34.0, 22.0)
+            }
+        } else {
+            (cw0, ch0)
+        };
+        // The cap keeps its centre when its size changes.
+        let cx = cx + (cw0 - cw) / 2.0;
         let cy = cap_y - ch / 2.0;
         let win_w = if wide { 52.0 } else { 34.0 };
         let radius = if self.parts.square_cap {
             CAP_RADIUS_SQUARE
+        } else if self.parts.small_cap {
+            6.0
         } else {
             CAP_RADIUS
         };
@@ -443,7 +466,7 @@ impl Fader<'_> {
                 accent_light()
             },
         );
-        if !self.parts.cap_value {
+        if !self.parts.cap_value || self.parts.small_cap {
             return;
         }
         let win = Path::rounded_rectangle(

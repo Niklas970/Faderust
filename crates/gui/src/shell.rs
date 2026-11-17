@@ -146,6 +146,14 @@ pub struct Prefs {
     pub accent_cap: bool,
     /// No dB value in the fader cap.
     pub cap_value_off: bool,
+    /// Thin track instead of the recessed slot.
+    pub thin_track: bool,
+    /// Small cap, like a console knob.
+    pub small_cap: bool,
+    /// Strips as raised panels.
+    pub relief: bool,
+    /// Value display in LCD teal.
+    pub lcd_tint: bool,
     /// "de", "en" or empty for the system language.
     pub lang: String,
     /// The window stays above all others.
