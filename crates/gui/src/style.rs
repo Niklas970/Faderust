@@ -19,7 +19,7 @@ pub const ACCENTS: [(&str, &str, &str); 8] = [
 
 /// Colours offered for the LCD display; any other works through the picker.
 pub const LCD_COLORS: [(&str, &str, &str); 7] = [
-    ("Türkis", "Teal", DEFAULT_LCD),
+    ("Türkis", "Teal", "#58e6d0"),
     ("Grün", "Green", "#6fe06a"),
     ("Bernstein", "Amber", "#ffb12e"),
     ("Orange", "Orange", "#ff8a1f"),
@@ -27,7 +27,6 @@ pub const LCD_COLORS: [(&str, &str, &str); 7] = [
     ("Blau", "Blue", "#5aa9ff"),
     ("Weiß", "White", "#e8eaec"),
 ];
-pub const DEFAULT_LCD: &str = "#58e6d0";
 
 pub const SIGNALS: [(&str, &str, &str); 5] = [
     ("Grün", "Green", "#5ccf6a"),

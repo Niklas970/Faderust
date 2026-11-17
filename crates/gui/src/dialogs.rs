@@ -1053,26 +1053,33 @@ fn design(app: &App) -> Element<'_, Message> {
         .spacing(10),
     );
     let lcd_now = app.lcd_hex();
-    let mut lcd_body = column![check(app.prefs.lcd_tint)
-        .label(tr("Display in LCD-Farbe"))
-        .on_toggle(|v| edit(Edit::LcdTint(v)))]
-    .spacing(10);
-    if app.prefs.lcd_tint {
-        let swatches = LCD_COLORS.iter().fold(row![].spacing(8), |r, (_, _, hex)| {
-            r.push(swatch(
-                hex,
-                lcd_now.eq_ignore_ascii_case(hex),
-                edit(Edit::Lcd((*hex).into())),
-            ))
-        });
-        lcd_body = lcd_body.push(swatches).push(custom_color(
-            app.lcd_input.clone().unwrap_or_else(|| lcd_now.clone()),
-            Target::Lcd,
-            app.picker,
-            |t| edit(Edit::LcdHex(t)),
-        ));
-    }
-    let lcd_card = card("Display-Farbe", lcd_body);
+    let lcd_custom = !app.prefs.lcd_color.is_empty();
+    let lcd_swatches = LCD_COLORS.iter().fold(row![].spacing(8), |r, (_, _, hex)| {
+        r.push(swatch(
+            hex,
+            lcd_custom && lcd_now.eq_ignore_ascii_case(hex),
+            edit(Edit::Lcd((*hex).into())),
+        ))
+    });
+    let lcd_card = card(
+        "Display-Farbe",
+        column![
+            lcd_swatches,
+            custom_color(
+                app.lcd_input.clone().unwrap_or_else(|| lcd_now.clone()),
+                Target::Lcd,
+                app.picker,
+                |t| edit(Edit::LcdHex(t)),
+            ),
+            row![
+                btn("Standard", edit(Edit::Lcd(String::new())), !lcd_custom),
+                hint("Gilt für „Wert im Display“."),
+            ]
+            .spacing(10)
+            .align_y(Vertical::Center),
+        ]
+        .spacing(10),
+    );
     let edge_card = card(
         "Grüner Rand bei Signal",
         row![
