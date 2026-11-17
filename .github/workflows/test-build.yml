@@ -102,12 +102,24 @@ jobs:
           echo "$GH_TOKEN" | oras login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           cd release
           setup=$(ls *-setup.exe)
+          # Sub-version of the latest release: 0.8.5.1, 0.8.5.2 ... The count
+          # starts again at 1 after each release (it empties the package).
+          latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName | sed 's/^v//')
+          last=0
+          for t in $(oras repo tags ghcr.io/niklas970/faderust-test 2>/dev/null || true); do
+            n=$(oras manifest fetch "ghcr.io/niklas970/faderust-test:$t" 2>/dev/null | jq -r '.annotations.name // empty')
+            case "$n" in "$latest".*) k=${n##*.}; [ "$k" -gt "$last" ] && last=$k ;; esac
+          done
+          name="$latest.$((last + 1))"
+          echo "Test build $name"
           # One tag per branch; a new run replaces the previous build. The
-          # app reads version and build from the annotations.
+          # app reads name, build and title from the annotations.
           oras push "ghcr.io/niklas970/faderust-test:$tag" \
             --artifact-type application/vnd.faderust.test \
-            --annotation "version=$(grep -m1 '^version' "$GITHUB_WORKSPACE/Cargo.toml" | sed -E 's/.*"(.*)".*/\1/')" \
+            --annotation "name=$name" \
+            --annotation "version=$name" \
             --annotation "build=$(cat build.txt)" \
+            --annotation "title=$(git -C "$GITHUB_WORKSPACE" log -1 --format=%s "$GITHUB_SHA" | cut -c1-80)" \
             --annotation "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --annotation "org.opencontainers.image.description=Faderust test builds, one tag per branch" \
             "$setup" "$setup.sig"
