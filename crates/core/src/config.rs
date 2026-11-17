@@ -154,10 +154,6 @@ pub struct OutputEntry {
     /// multipoint; 0 keeps it open.
     #[serde(default = "default_release_secs", alias = "releaseAfterS")]
     pub release_secs: u32,
-    /// Also release wired (USB, analog) devices after silence, so headphones
-    /// that hiss with an open stream fall quiet.
-    #[serde(default)]
-    pub release_wired: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -361,7 +357,6 @@ mod tests {
                     buffer_ms: 30,
                     master: Default::default(),
                     release_secs: 30,
-                    release_wired: false,
                 },
                 OutputEntry {
                     label: "Kopfhörer".into(),
@@ -369,7 +364,6 @@ mod tests {
                     buffer_ms: 80,
                     master: Default::default(),
                     release_secs: 30,
-                    release_wired: false,
                 },
             ],
             gains: vec![],

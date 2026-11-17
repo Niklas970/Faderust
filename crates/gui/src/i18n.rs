@@ -208,10 +208,6 @@ const TABLE: &[(&str, &str)] = &[
     ),
     ("Schwelle", "Threshold"),
     ("Echo-Effekt", "Echo effect"),
-    (
-        "Auch Kabelgeräte freigeben (gegen Rauschen)",
-        "Release wired devices too (against hiss)",
-    ),
     ("Zeit", "Time"),
     ("Wiederholungen", "Repeats"),
     ("Anteil", "Amount"),

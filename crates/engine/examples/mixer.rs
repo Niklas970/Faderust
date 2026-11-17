@@ -129,7 +129,6 @@ fn run(args: Args) -> Result<(), String> {
                 device: d.clone(),
                 buffer_ms: *ms,
                 release_after: None,
-                release_wired: false,
             })
             .collect(),
     };

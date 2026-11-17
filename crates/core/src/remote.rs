@@ -657,7 +657,6 @@ mod tests {
                 buffer_ms: 60,
                 master: Default::default(),
                 release_secs: 30,
-                release_wired: false,
             }],
             gains: vec![],
             presets: vec![],
