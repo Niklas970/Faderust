@@ -1665,6 +1665,42 @@ fn settings(app: &App) -> Element<'_, Message> {
         }
         card("Debug-Modus", c)
     };
+    let test_card = {
+        let build = faderust_core::update::own_build();
+        let mine = if build.is_empty() {
+            format!(
+                "{} {}",
+                tr("Dieses Faderust ist ein Release:"),
+                env!("CARGO_PKG_VERSION")
+            )
+        } else {
+            format!("{} {}", tr("Dieses Faderust ist ein Test-Build:"), build)
+        };
+        let mut c = column![
+            check(app.prefs.test_channel)
+                .label(tr("Testversionen: Updates auch von Test-Builds"))
+                .on_toggle(|v| edit(Edit::TestChannel(v))),
+            hint("Ein Test-Build ist der Stand eines Branches vor dem Release. Du startest ihn in GitHub unter Actions („Test build“); Faderust bietet ihn dann als Update an."),
+            hint(mine),
+        ]
+        .spacing(8);
+        if app.prefs.test_channel {
+            let found = match &app.update {
+                Some(u) => format!("{} {}", tr("Gefunden:"), u.label()),
+                None => tr("Kein neueres Build gefunden.").to_string(),
+            };
+            c = c.push(
+                row![
+                    hint(found),
+                    space().width(Length::Fill),
+                    btn("Jetzt suchen", Message::CheckUpdate, false),
+                ]
+                .spacing(8)
+                .align_y(Vertical::Center),
+            );
+        }
+        card("Testversionen", c)
+    };
     let left = cards(
         3,
         vec![
@@ -1676,6 +1712,8 @@ fn settings(app: &App) -> Element<'_, Message> {
                 "Ausgänge",
                 column![outputs, btn("+ Ausgang", edit(Edit::OutAdd), false)].spacing(10),
             ),
+            debug_card,
+            test_card,
         ],
     );
     let right = cards(
@@ -1684,19 +1722,12 @@ fn settings(app: &App) -> Element<'_, Message> {
             card("Programm-Mikro", mic_section(app)),
             card(
                 "Start",
-                column![
-                    check(app.autostart)
-                        .label(tr("Mit Windows starten (im Tray, ohne Fenster)"))
-                        .on_toggle(|v| edit(Edit::Autostart(v))),
-                    check(app.prefs.test_channel)
-                        .label(tr("Testversionen: Updates auch von Test-Builds"))
-                        .on_toggle(|v| edit(Edit::TestChannel(v))),
-                ]
-                .spacing(6),
+                check(app.autostart)
+                    .label(tr("Mit Windows starten (im Tray, ohne Fenster)"))
+                    .on_toggle(|v| edit(Edit::Autostart(v))),
             ),
             card("Faderust Kabel", cable_section),
             card("Stream Deck", deck_section(app)),
-            debug_card,
         ],
     );
     let body = column![error_line(app), row![left, right].spacing(12)].spacing(10);
