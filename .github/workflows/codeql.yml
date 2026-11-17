@@ -5,20 +5,31 @@ name: "CodeQL Advanced"
 # changed. The Rust analysis is the slowest check by far (about 6 minutes), and
 # it ran again on main after every merge. The weekly run (and a manual one)
 # always analyses everything, so nothing goes stale.
+#
+# Faster again: a draft pull request is not analysed (the check shows as
+# skipped, which a branch rule accepts) and is analysed when it is marked
+# ready for review; a new push cancels the run of the previous one.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     - cron: "23 11 * * 5"
 
 permissions:
   contents: read
 
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
+    # Not for drafts; pushes and the schedule have no pull request.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     permissions:
       contents: read
