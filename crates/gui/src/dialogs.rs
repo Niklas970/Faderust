@@ -1266,6 +1266,9 @@ fn design(app: &App) -> Element<'_, Message> {
             check(app.prefs.strip_history)
                 .label(tr("Pegelverlauf im Kopf (30 s)"))
                 .on_toggle(|v| edit(Edit::StripHistory(v))),
+            check(app.prefs.sort_strips)
+                .label(tr("Pfeile zum Sortieren auf den Streifen"))
+                .on_toggle(|v| edit(Edit::SortStrips(v))),
             check(app.prefs.echo_button)
                 .label(tr("Echo-Taste auf jedem Streifen"))
                 .on_toggle(|v| edit(Edit::EchoButton(v))),

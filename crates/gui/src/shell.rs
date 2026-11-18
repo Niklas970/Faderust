@@ -308,6 +308,10 @@ pub struct Prefs {
     pub strip_history: bool,
     /// Rotary knobs with an LED ring instead of sliders in the effects.
     pub knobs: bool,
+    /// Order of devices and programs on the desk (input device ids).
+    pub strip_order: Vec<String>,
+    /// Arrows on the strips to move them.
+    pub sort_strips: bool,
     /// Meter shape: 0 bar/segments, 1 dots, 2 blocks.
     pub meter_look: u8,
     /// Spacing of the desk: 0 compact, 1 normal (default), 2 airy.
