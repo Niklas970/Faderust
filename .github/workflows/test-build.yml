@@ -51,13 +51,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName | sed 's/^v//')
+          latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName | sed 's/^v//' | tr -d '\r')
           repo=https://ghcr.io/v2/niklas970/faderust-test
-          tok=$(curl -s "https://ghcr.io/token?service=ghcr.io&scope=repository:niklas970/faderust-test:pull" | jq -r '.token // empty')
+          tok=$(curl -s "https://ghcr.io/token?service=ghcr.io&scope=repository:niklas970/faderust-test:pull" | jq -r '.token // empty' | tr -d '\r')
           last=0
           if [ -n "$tok" ]; then
-            for t in $(curl -s -H "Authorization: Bearer $tok" "$repo/tags/list" | jq -r '.tags[]?'); do
-              n=$(curl -s -H "Authorization: Bearer $tok" -H "Accept: application/vnd.oci.image.manifest.v1+json" "$repo/manifests/$t" | jq -r '.annotations.name // empty')
+            for t in $(curl -s -H "Authorization: Bearer $tok" "$repo/tags/list" | jq -r '.tags[]?' | tr -d '\r'); do
+              n=$(curl -s -H "Authorization: Bearer $tok" -H "Accept: application/vnd.oci.image.manifest.v1+json" "$repo/manifests/$t" | jq -r '.annotations.name // empty' | tr -d '\r' || true)
               case "$n" in "$latest".*) k=${n##*.}; if [ "$k" -gt "$last" ]; then last=$k; fi ;; esac
             done
           fi
