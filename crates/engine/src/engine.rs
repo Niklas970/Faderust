@@ -35,6 +35,9 @@ pub struct OutputConfig {
     pub release_after: Option<Duration>,
 }
 
+/// A reopened output plays nothing for this long, and then the sound it
+/// collected: a Bluetooth headset drops what it gets while it wakes up.
+const WARM_UP_MS: u32 = 1_000;
 /// Below this peak (−60 dBFS) an input counts as silent.
 const SILENCE: f32 = 0.001;
 /// An input heard this recently still counts as playing.
@@ -658,7 +661,8 @@ impl<B: AudioBackend> Engine<B> {
                             == (spec.input_rate, spec.output_rate, spec.target_ms)
                     });
                     if fits {
-                        if let Some(waiting) = self.parked[o][i].take() {
+                        if let Some(mut waiting) = self.parked[o][i].take() {
+                            waiting.warm_up(WARM_UP_MS);
                             waiting_lanes.push((i, waiting));
                         }
                         lanes.push(None);
@@ -1313,8 +1317,11 @@ mod tests {
         // The game starts while bt is closed; the sound is kept for it.
         b.pump_inputs(120, level);
         assert_eq!(connected(&engine.wake_at(at(8))), 1);
-        // Right after the reopening, not one target later, bt plays it.
-        let out = b.pump(30, level);
+        // The headset is still waking up: nothing is played yet, the sound waits.
+        let out = b.pump(300, level);
+        assert_level(&out["bt"], 0.0, 1e-6);
+        // Then it starts with the sound that woke the output, not one target later.
+        let out = b.pump(900, level);
         let last = *out["bt"].last().unwrap();
         assert!(last > 0.3, "bt plays {last}");
     }
@@ -1387,7 +1394,9 @@ mod tests {
         b.pump_inputs(200, level);
         b.break_device("bt", false);
         assert_eq!(connected(&engine.wake_at(at(8_300))), 1);
-        let out = b.pump(30, level);
+        let out = b.pump(300, level);
+        assert_level(&out["bt"], 0.0, 1e-6);
+        let out = b.pump(900, level);
         let last = *out["bt"].last().unwrap();
         assert!(last > 0.3, "bt plays {last}");
     }

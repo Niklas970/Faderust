@@ -57,8 +57,8 @@ pub struct LaneSpec {
 /// the UI can keep one handle per (input, output) pair.
 pub fn lane(spec: LaneSpec, stats: Arc<LaneStats>) -> (Producer<f32>, Lane) {
     let target_frames = (spec.input_rate as u64 * spec.target_ms as u64 / 1000).max(1) as usize;
-    // Room for the sound that arrives while an output reopens (1.5 s).
-    let capacity_frames = (target_frames * 4).max(spec.input_rate as usize * 3 / 2);
+    // Room for the sound that arrives while an output reopens and warms up.
+    let capacity_frames = (target_frames * 4).max(spec.input_rate as usize * 3);
     let (producer, consumer) = RingBuffer::new(capacity_frames * BUS_CHANNELS);
 
     let ratio = spec.output_rate as f64 / spec.input_rate as f64;
@@ -107,6 +107,7 @@ pub fn lane(spec: LaneSpec, stats: Arc<LaneStats>) -> (Producer<f32>, Lane) {
         stats,
         spec,
         catch_up: false,
+        warm_up: 0,
         stretcher: Box::new(Stretcher::new()),
     };
     (producer, lane)
@@ -131,6 +132,8 @@ pub struct Lane {
     spec: LaneSpec,
     /// Plays a backlog off faster, see [`Lane::catch_up`].
     catch_up: bool,
+    /// Output frames still to wait before anything plays, see [`Lane::warm_up`].
+    warm_up: usize,
     stretcher: Box<Stretcher>,
 }
 
@@ -145,6 +148,13 @@ impl Lane {
     /// faster, without a change of pitch, until the lane is in step again.
     pub fn catch_up(&mut self) {
         self.catch_up = true;
+    }
+
+    /// Waits `ms` before the first sound plays, while the sound keeps being
+    /// collected. A Bluetooth headset takes a moment after its stream opened
+    /// before it passes sound on, and drops what comes sooner.
+    pub fn warm_up(&mut self, ms: u32) {
+        self.warm_up = self.spec.output_rate as usize * ms as usize / 1000;
     }
 
     /// For a lane nobody plays yet: drops the silence before the first sound,
@@ -171,6 +181,16 @@ impl Lane {
     /// Mixes the next `out.len() / 2` frames into `out` (interleaved stereo),
     /// moving the applied gain smoothly towards `target_gain`.
     pub fn render_add(&mut self, out: &mut [f32], target_gain: f32) {
+        let mut out = out;
+        if self.warm_up > 0 {
+            let frames = out.len() / BUS_CHANNELS;
+            let wait = self.warm_up.min(frames);
+            self.warm_up -= wait;
+            if wait == frames {
+                return;
+            }
+            out = &mut out[wait * BUS_CHANNELS..];
+        }
         if target_gain == 0.0 && self.gain < SILENT_GAIN {
             // Muted or off: skip the resampler, it is most of the cost.
             self.gain = 0.0;
@@ -437,6 +457,31 @@ mod tests {
             .count();
         let hz = crossings as f32 / left.len() as f32 * RATE as f32;
         assert!((hz - 440.0).abs() < 12.0, "pitch {hz}");
+    }
+
+    #[test]
+    fn a_warming_lane_waits_and_then_plays_what_it_collected() {
+        let (mut producer, mut lane, stats) = test_lane();
+        lane.warm_up(100);
+        lane.catch_up();
+        let mut out = Vec::new();
+        let mut block = vec![0.0; 128 * BUS_CHANNELS];
+        let mut pushed = 0;
+        for _ in 0..200 {
+            push_sine(&mut producer, pushed, 128);
+            pushed += 128;
+            lane.render_add(&mut block, 1.0);
+            out.extend_from_slice(&block);
+            block.fill(0.0);
+        }
+        // 100 ms are 4800 frames: nothing before, sound after.
+        let quiet = out[..4_700 * BUS_CHANNELS].iter().all(|v| *v == 0.0);
+        assert!(quiet, "silence while warming up");
+        let loud = out[8_000 * BUS_CHANNELS..]
+            .iter()
+            .fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(loud > 0.3, "plays afterwards: {loud}");
+        assert_eq!(stats.dropped_frames.load(Relaxed), 0);
     }
 
     #[test]
