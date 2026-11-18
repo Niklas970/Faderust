@@ -118,7 +118,6 @@ pub struct DesignSnap {
     pub accent_cap: bool,
     pub cap_value_off: bool,
     pub thin_track: bool,
-    pub small_cap: bool,
     pub grip_cap: bool,
     pub strip_colors: bool,
     pub relief: bool,
@@ -154,7 +153,6 @@ impl Prefs {
             accent_cap: self.accent_cap,
             cap_value_off: self.cap_value_off,
             thin_track: self.thin_track,
-            small_cap: self.small_cap,
             grip_cap: self.grip_cap,
             strip_colors: self.strip_colors,
             relief: self.relief,
@@ -193,7 +191,6 @@ impl Prefs {
         self.accent_cap = d.accent_cap;
         self.cap_value_off = d.cap_value_off;
         self.thin_track = d.thin_track;
-        self.small_cap = d.small_cap;
         self.grip_cap = d.grip_cap;
         self.strip_colors = d.strip_colors;
         self.relief = d.relief;
@@ -297,8 +294,6 @@ pub struct Prefs {
     pub cap_value_off: bool,
     /// Thin track instead of the recessed slot.
     pub thin_track: bool,
-    /// Small cap, like a console knob.
-    pub small_cap: bool,
     /// Strips as raised panels.
     pub relief: bool,
     /// Slim grip cap in the accent colour.

@@ -426,7 +426,6 @@ pub enum Edit {
     AccentCap(bool),
     CapValue(bool),
     ThinTrack(bool),
-    SmallCap(bool),
     GripCap(bool),
     MeterLine(bool),
     StripColors(bool),
@@ -437,6 +436,8 @@ pub enum Edit {
     ButtonLook(&'static str),
     DesignTab(u8),
     MeterLook(u8),
+    /// Shape of the meter: 0 bar, 1 segments, 2 dots, 3 blocks, 4 line.
+    MeterForm(u8),
     Density(u8),
     GlideSpeed(u8),
     ProfileName(String),
@@ -930,6 +931,7 @@ impl App {
             "system" => "system",
             "carbon" => "carbon",
             "github" => "github",
+            "midnight" => "midnight",
             _ => "dark",
         }
     }
@@ -2618,7 +2620,6 @@ impl App {
             Edit::AccentCap(on) => self.set_look(|p| p.accent_cap = on),
             Edit::CapValue(on) => self.set_look(|p| p.cap_value_off = !on),
             Edit::ThinTrack(on) => self.set_look(|p| p.thin_track = on),
-            Edit::SmallCap(on) => self.set_look(|p| p.small_cap = on),
             Edit::GripCap(on) => self.set_look(|p| p.grip_cap = on),
             Edit::MeterLine(on) => self.set_look(|p| p.meter_line = on),
             Edit::StripColors(on) => self.set_look(|p| p.strip_colors = on),
@@ -2627,6 +2628,15 @@ impl App {
             Edit::Knobs(on) => self.set_look(|p| p.knobs = on),
             Edit::DesignTab(t) => self.design_tab = t,
             Edit::MeterLook(v) => self.set_look(|p| p.meter_look = v),
+            Edit::MeterForm(v) => self.set_look(|p| {
+                p.meter_segments = v == 1;
+                p.meter_look = match v {
+                    2 => 1,
+                    3 => 2,
+                    _ => 0,
+                };
+                p.meter_line = v == 4;
+            }),
             Edit::Density(v) => self.set_look(|p| p.density = Some(v)),
             Edit::GlideSpeed(v) => self.set_look(|p| p.glide = Some(v)),
             Edit::ProfileName(t) => self.profile_name = t,
@@ -2676,7 +2686,6 @@ impl App {
                     p.accent_cap = d.accent_cap;
                     p.cap_value_off = d.cap_value_off;
                     p.thin_track = d.thin_track;
-                    p.small_cap = d.small_cap;
                     p.grip_cap = d.grip_cap;
                     p.strip_colors = d.strip_colors;
                     p.relief = d.relief;
@@ -3397,7 +3406,6 @@ impl App {
             accent_cap: self.prefs.accent_cap,
             cap_value: !self.prefs.cap_value_off,
             thin_track: self.prefs.thin_track,
-            small_cap: self.prefs.small_cap,
             grip_cap: self.prefs.grip_cap,
             meter_line: self.prefs.meter_line,
             meter_look: self.prefs.meter_look,

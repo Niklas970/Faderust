@@ -210,6 +210,15 @@ pub fn set_theme(mode: &str, accent: &str, signal: &str) {
             pal.text = rgb(236, 236, 236);
             pal.muted = rgb(140, 144, 151);
         }
+        "midnight" => {
+            pal.bg = rgb(2, 4, 10);
+            pal.panel = rgb(7, 13, 24);
+            pal.panel_2 = rgb(13, 22, 38);
+            pal.well = rgb(2, 4, 9);
+            pal.border = rgb(34, 52, 82);
+            pal.text = rgb(191, 210, 240);
+            pal.muted = rgb(127, 147, 181);
+        }
         "github" => {
             pal.bg = rgb(13, 17, 23);
             pal.panel = rgb(22, 27, 34);
