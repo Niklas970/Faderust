@@ -1292,7 +1292,7 @@ fn design(app: &App) -> Element<'_, Message> {
         .spacing(8),
     );
     let look_card = card(
-        "Helligkeit",
+        "Design",
         column![
             segmented(vec![
                 (
@@ -1323,10 +1323,21 @@ fn design(app: &App) -> Element<'_, Message> {
                     edit(Edit::Mode("github"))
                 ),
             ]),
-            segmented(vec![
-                ("English".into(), lang_now == "en", edit(Edit::Lang("en"))),
-                ("Deutsch".into(), lang_now == "de", edit(Edit::Lang("de"))),
-            ]),
+        ]
+        .spacing(8),
+    );
+    let lang_card = card(
+        "Sprache",
+        segmented(vec![
+            ("English".into(), lang_now == "en", edit(Edit::Lang("en"))),
+            ("Deutsch".into(), lang_now == "de", edit(Edit::Lang("de"))),
+        ]),
+    );
+    let reset_card = card(
+        "Zurücksetzen",
+        column![
+            hint("Setzt Farben, Bausteine und Knopf-Look auf die Standardwerte."),
+            btn("Design zurücksetzen", edit(Edit::ResetLook), false),
         ]
         .spacing(8),
     );
@@ -1338,28 +1349,44 @@ fn design(app: &App) -> Element<'_, Message> {
         ]
         .spacing(8),
     );
+    let tab = app.design_tab;
+    let tabs = segmented(vec![
+        ("Aussehen".into(), tab == 0, edit(Edit::DesignTab(0))),
+        ("Farben".into(), tab == 1, edit(Edit::DesignTab(1))),
+        ("Allgemein".into(), tab == 2, edit(Edit::DesignTab(2))),
+    ]);
+    let content: Element<'_, Message> = match tab {
+        1 => row![
+            cards(1, vec![accent_card, signal_card, lcd_card]),
+            cards(1, vec![parts_card, edge_card]),
+        ]
+        .spacing(12)
+        .align_y(Vertical::Top)
+        .into(),
+        2 => row![
+            cards(1, vec![view_card, hide_card, lang_card]),
+            cards(1, vec![extras_card]),
+        ]
+        .spacing(12)
+        .align_y(Vertical::Top)
+        .into(),
+        _ => row![
+            cards(1, vec![look_card, head_card, button_card]),
+            cards(1, vec![fader_card, meter_card]),
+        ]
+        .spacing(12)
+        .align_y(Vertical::Top)
+        .into(),
+    };
     let body = row![
-        cards(1, vec![preview_card]),
-        cards(
-            1,
-            vec![view_card, hide_card, look_card, head_card, extras_card]
-        ),
-        cards(
-            1,
-            vec![
-                accent_card,
-                signal_card,
-                lcd_card,
-                parts_card,
-                button_card,
-                edge_card
-            ]
-        ),
-        cards(1, vec![fader_card, meter_card]),
+        cards(1, vec![preview_card, reset_card]),
+        column![tabs, content]
+            .spacing(12)
+            .width(Length::FillPortion(2)),
     ]
     .spacing(12)
     .align_y(Vertical::Top);
-    frame("Design".into(), 1500.0, false, body.into(), no_footer())
+    frame("Design".into(), 1280.0, false, body.into(), no_footer())
 }
 
 pub fn tip<'a>(
@@ -1420,9 +1447,9 @@ fn custom_color(
         text_input("#rrggbb", &value).on_input(on_input).width(84),
         btn(
             if open.is_some() {
-                "Farbwähler schließen"
+                "Schließen"
             } else {
-                "Farbwähler"
+                "Wähler"
             },
             edit(Edit::Picker(target)),
             false

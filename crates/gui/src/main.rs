@@ -255,6 +255,8 @@ pub struct App {
     pub signal_input: Option<String>,
     pub lcd_input: Option<String>,
     pub part_input: Option<(style::Part, String)>,
+    /// Tab shown in the design dialog: 0 look, 1 colours, 2 general.
+    pub design_tab: u8,
     /// Drawing cache of the sample strips in the design dialog.
     pub preview_cache: canvas::Cache,
     logo: image::Handle,
@@ -431,6 +433,9 @@ pub enum Edit {
     Knobs(bool),
     EchoButton(bool),
     ButtonLook(&'static str),
+    DesignTab(u8),
+    /// Takes all looks of the design back to the defaults.
+    ResetLook,
     Relief(bool),
     /// A colour for the LCD display, typed or chosen.
     LcdHex(String),
@@ -1408,6 +1413,7 @@ impl App {
             signal_input: None,
             lcd_input: None,
             part_input: None,
+            design_tab: 0,
             preview_cache: canvas::Cache::new(),
             logo: image::Handle::from_bytes(LOGO),
             #[cfg(windows)]
@@ -2604,6 +2610,44 @@ impl App {
             Edit::StripHead(on) => self.set_look(|p| p.strip_head = on),
             Edit::StripHistory(on) => self.set_look(|p| p.strip_history = on),
             Edit::Knobs(on) => self.set_look(|p| p.knobs = on),
+            Edit::DesignTab(t) => self.design_tab = t,
+            Edit::ResetLook => {
+                self.accent_input = None;
+                self.signal_input = None;
+                self.lcd_input = None;
+                self.part_input = None;
+                self.picker = None;
+                self.set_look(|p| {
+                    let d = shell::Prefs::default();
+                    p.mode = d.mode;
+                    p.accent = d.accent;
+                    p.signal = d.signal;
+                    p.lcd_color = d.lcd_color;
+                    p.part_colors = d.part_colors;
+                    p.button_look = d.button_look;
+                    p.cap_square = d.cap_square;
+                    p.scale_off = d.scale_off;
+                    p.zero_mark = d.zero_mark;
+                    p.glow_off = d.glow_off;
+                    p.accent_cap = d.accent_cap;
+                    p.cap_value_off = d.cap_value_off;
+                    p.thin_track = d.thin_track;
+                    p.small_cap = d.small_cap;
+                    p.grip_cap = d.grip_cap;
+                    p.strip_colors = d.strip_colors;
+                    p.relief = d.relief;
+                    p.readout_display = d.readout_display;
+                    p.meter_segments = d.meter_segments;
+                    p.meter_line = d.meter_line;
+                    p.one_color = d.one_color;
+                    p.peak_off = d.peak_off;
+                    p.matrix_meters_off = d.matrix_meters_off;
+                    p.strip_head = d.strip_head;
+                    p.strip_history = d.strip_history;
+                    p.knobs = d.knobs;
+                    p.echo_button = d.echo_button;
+                });
+            }
             Edit::ButtonLook(l) => self.set_look(|p| p.button_look = l.into()),
             Edit::EchoButton(on) => self.set_look(|p| p.echo_button = on),
             Edit::Relief(on) => self.set_look(|p| p.relief = on),
