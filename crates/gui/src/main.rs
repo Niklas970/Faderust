@@ -222,10 +222,6 @@ pub struct App {
     /// different scaling changed it (Windows rounds a little on every move).
     /// Native handle of the main window (0 until known).
     hwnd: u64,
-    /// Preset tiles for the scene bar: name and one bar height per input.
-    scenes: Vec<(String, Vec<f32>)>,
-    /// The preset loaded last (highlighted in the scene bar).
-    last_scene: Option<String>,
     /// When the level history of the strips was last extended.
     hist_at: Instant,
     /// While the saved window rect is put back: when it began, the rect, steps done.
@@ -258,6 +254,7 @@ pub struct App {
     pub picker: Option<(Target, (f32, f32, f32))>,
     pub signal_input: Option<String>,
     pub lcd_input: Option<String>,
+    pub part_input: Option<(style::Part, String)>,
     /// Drawing cache of the sample strips in the design dialog.
     pub preview_cache: canvas::Cache,
     logo: image::Handle,
@@ -329,6 +326,8 @@ fn apply_look(p: &shell::Prefs) {
         &p.signal
     };
     style::set_theme(&p.mode, accent, signal);
+    style::set_parts(&p.part_colors);
+    style::set_button_look(&p.button_look);
     let lang = if p.lang.is_empty() {
         shell::system_lang()
     } else {
@@ -343,6 +342,7 @@ pub enum Target {
     Accent,
     Signal,
     Lcd,
+    Part(style::Part),
 }
 
 #[derive(Debug, Clone)]
@@ -429,10 +429,13 @@ pub enum Edit {
     StripHead(bool),
     StripHistory(bool),
     Knobs(bool),
-    SceneBar(bool),
+    EchoButton(bool),
+    ButtonLook(&'static str),
     Relief(bool),
     /// A colour for the LCD display, typed or chosen.
     LcdHex(String),
+    /// Typed colour of an element; empty text takes it back to the default.
+    PartHex(style::Part, String),
     Lcd(String),
     Osd(bool),
     Debug(bool),
@@ -907,6 +910,8 @@ impl App {
         match self.prefs.mode.as_str() {
             "light" => "light",
             "system" => "system",
+            "carbon" => "carbon",
+            "github" => "github",
             _ => "dark",
         }
     }
@@ -1376,8 +1381,6 @@ impl App {
             popup_draw: Cell::new(false),
             mini_count: 0,
             hwnd: 0,
-            scenes: Vec::new(),
-            last_scene: None,
             hist_at: Instant::now(),
             restore: None,
             size_keep: Some(Size::new(1400.0, 860.0)),
@@ -1404,6 +1407,7 @@ impl App {
             picker: None,
             signal_input: None,
             lcd_input: None,
+            part_input: None,
             preview_cache: canvas::Cache::new(),
             logo: image::Handle::from_bytes(LOGO),
             #[cfg(windows)]
@@ -1527,31 +1531,6 @@ impl App {
     fn refresh_presets(&mut self) {
         let cfg = self.core.config.lock().unwrap_or_else(|e| e.into_inner());
         self.presets = cfg.presets.iter().map(|p| p.name.clone()).collect();
-        // One bar per input: the loudest send of the preset, as a fader position.
-        self.scenes = cfg
-            .presets
-            .iter()
-            .map(|p| {
-                let bars = p
-                    .gains
-                    .iter()
-                    .take(8)
-                    .map(|row| {
-                        let db = row
-                            .iter()
-                            .filter(|g| !g.muted)
-                            .map(|g| g.db)
-                            .fold(f32::MIN, f32::max);
-                        if db <= scale::OFF {
-                            0.0
-                        } else {
-                            scale::to_pos(db)
-                        }
-                    })
-                    .collect();
-                (p.name.clone(), bars)
-            })
-            .collect();
     }
 
     /// Takes the engine's latest snapshot into the strips and outputs.
@@ -2625,7 +2604,8 @@ impl App {
             Edit::StripHead(on) => self.set_look(|p| p.strip_head = on),
             Edit::StripHistory(on) => self.set_look(|p| p.strip_history = on),
             Edit::Knobs(on) => self.set_look(|p| p.knobs = on),
-            Edit::SceneBar(on) => self.set_look(|p| p.scene_bar = on),
+            Edit::ButtonLook(l) => self.set_look(|p| p.button_look = l.into()),
+            Edit::EchoButton(on) => self.set_look(|p| p.echo_button = on),
             Edit::Relief(on) => self.set_look(|p| p.relief = on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::TestChannel(on) => {
@@ -2652,6 +2632,12 @@ impl App {
                         Target::Accent => self.accent(),
                         Target::Signal => self.signal(),
                         Target::Lcd => self.lcd_hex(),
+                        Target::Part(x) => self
+                            .prefs
+                            .part_colors
+                            .get(x.key())
+                            .cloned()
+                            .unwrap_or_else(|| self.part_default(x)),
                     };
                     Some((t, style::rgb_to_hsv(style::hex(&hex))))
                 };
@@ -2672,6 +2658,10 @@ impl App {
                     Target::Lcd => {
                         self.lcd_input = Some(hex.clone());
                         p.lcd_color = hex;
+                    }
+                    Target::Part(x) => {
+                        self.part_input = Some((x, hex.clone()));
+                        p.part_colors.insert(x.key().into(), hex);
                     }
                 }
                 // Live, without writing the file on every move.
@@ -2707,6 +2697,20 @@ impl App {
                 self.lcd_input = Some(t);
                 if let Some(c) = hex {
                     self.set_look(|p| p.lcd_color = c);
+                }
+            }
+            Edit::PartHex(x, t) => {
+                let hex = style::parse_hex_input(&t);
+                self.part_input = Some((x, t.clone()));
+                if t.trim().is_empty() {
+                    self.part_input = None;
+                    self.set_look(|p| {
+                        p.part_colors.remove(x.key());
+                    });
+                } else if let Some(c) = hex {
+                    self.set_look(|p| {
+                        p.part_colors.insert(x.key().into(), c);
+                    });
                 }
             }
             Edit::Lcd(c) => {
@@ -2760,7 +2764,6 @@ impl App {
                 ));
             }
             Edit::LoadPreset(name) => {
-                self.last_scene = Some(name.clone());
                 if let Err(e) = faderust_core::load_preset(name, &self.core) {
                     self.say("error", e);
                 }
@@ -3311,12 +3314,26 @@ impl App {
 
     /// The colour of a strip when strips are coloured: stable per input.
     fn tint_of(&self, id: &str) -> Option<Color> {
-        self.prefs.strip_colors.then(|| Self::palette_color(id))
+        if self.prefs.strip_colors {
+            Some(Self::palette_color(id))
+        } else {
+            style::part(style::Part::Bar)
+        }
+    }
+
+    /// What an element looks like without an own colour, as "#rrggbb".
+    fn part_default(&self, x: style::Part) -> String {
+        match x {
+            style::Part::Bar | style::Part::Cap | style::Part::Knob => self.accent(),
+            style::Part::Meter => self.signal(),
+            style::Part::Head => "#4da3ff".into(),
+        }
     }
 
     /// The colour of the band and symbol in a strip head.
     fn head_tint(&self, id: &str) -> Option<Color> {
-        (self.prefs.strip_colors || self.prefs.strip_head).then(|| Self::palette_color(id))
+        (self.prefs.strip_colors || self.prefs.strip_head)
+            .then(|| style::part(style::Part::Head).unwrap_or_else(|| Self::palette_color(id)))
     }
 
     fn palette_color(id: &str) -> Color {
@@ -3532,6 +3549,30 @@ impl App {
             } else {
                 small("Effekte", Message::Open(Some(Dialog::Fx(i))), 72.0).into()
             }
+        };
+        // An echo switch of its own under the effects button.
+        let foot: Element<'_, Message> = if self.prefs.echo_button && !self.is_mini() {
+            let on = self.fx.get(i).is_some_and(|f| f.echo);
+            let look = if on { Look::Primary } else { Look::Secondary };
+            let echo = dialogs::tip(
+                button(text("Echo").size(12).color(look_text(look)).center())
+                    .width(72)
+                    .height(24)
+                    .padding(0)
+                    .on_press(Message::Edit(Edit::Echo(i, !on)))
+                    .style(key(look)),
+                if on {
+                    "Echo ausschalten"
+                } else {
+                    "Echo einschalten"
+                },
+            );
+            column![foot, echo]
+                .spacing(6)
+                .align_x(Horizontal::Center)
+                .into()
+        } else {
+            foot
         };
         let top: Element<'_, Message> = if s.program {
             row![
@@ -4256,48 +4297,6 @@ impl App {
             .into()
     }
 
-    /// The presets as tiles under the desk: a click loads one and the
-    /// faders glide to their places.
-    fn scene_bar(&self) -> Element<'_, Message> {
-        let tiles = self.scenes.iter().map(|(name, bars)| {
-            let on = self.last_scene.as_deref() == Some(name.as_str());
-            let look = if on { Look::Primary } else { Look::Secondary };
-            let lit = if on { accent_light() } else { muted_color() };
-            let mini = row(bars.iter().map(|v| {
-                container(space())
-                    .width(5)
-                    .height(3.0 + 22.0 * v)
-                    .style(move |_| container::Style {
-                        background: Some(Background::Color(lit)),
-                        border: Border {
-                            radius: 1.5.into(),
-                            ..Border::default()
-                        },
-                        ..container::Style::default()
-                    })
-                    .into()
-            }))
-            .spacing(3)
-            .align_y(Vertical::Bottom)
-            .height(25);
-            button(
-                column![
-                    text(name.clone())
-                        .size(12)
-                        .font(BOLD)
-                        .color(style::look_text(look)),
-                    mini
-                ]
-                .spacing(5),
-            )
-            .padding([6, 12])
-            .on_press(Message::Edit(Edit::LoadPreset(name.clone())))
-            .style(style::flat(look))
-            .into()
-        });
-        row(tiles).spacing(8).wrap().into()
-    }
-
     fn view(&self) -> Element<'_, Message> {
         let body = match self.view {
             View::Desk => self.desk(),
@@ -4375,14 +4374,6 @@ impl App {
             }
             None => space().height(0).into(),
         };
-        let body: Element<'_, Message> =
-            if self.prefs.scene_bar && !self.is_mini() && !self.scenes.is_empty() {
-                column![container(body).height(Length::Fill), self.scene_bar()]
-                    .spacing(8)
-                    .into()
-            } else {
-                body
-            };
         let page = column![
             self.titlebar(),
             container(body)

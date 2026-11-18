@@ -57,6 +57,64 @@ struct Palette {
 
 static PALETTE: RwLock<Option<Palette>> = RwLock::new(None);
 
+/// Elements whose colour can be chosen on its own.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Part {
+    /// The lit bar of the fader.
+    Bar,
+    /// The fader cap.
+    Cap,
+    /// The level meter (one colour instead of signal/amber/red).
+    Meter,
+    /// The LEDs and pointer of the rotary knobs.
+    Knob,
+    /// The band and symbol in the strip head.
+    Head,
+}
+
+impl Part {
+    pub const ALL: [Part; 5] = [Part::Bar, Part::Cap, Part::Meter, Part::Knob, Part::Head];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Part::Bar => "bar",
+            Part::Cap => "cap",
+            Part::Meter => "meter",
+            Part::Knob => "knob",
+            Part::Head => "head",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Part::Bar => "Fader-Bahn",
+            Part::Cap => "Fader-Kappe",
+            Part::Meter => "Pegelanzeige",
+            Part::Knob => "Drehregler",
+            Part::Head => "Streifenkopf",
+        }
+    }
+}
+
+static PARTS: RwLock<[Option<Color>; 5]> = RwLock::new([None; 5]);
+
+/// Takes the chosen element colours ("#rrggbb" by key) into use.
+pub fn set_parts(map: &std::collections::BTreeMap<String, String>) {
+    let mut v = [None; 5];
+    for (i, p) in Part::ALL.iter().enumerate() {
+        v[i] = map.get(p.key()).and_then(|h| parse_hex(h));
+    }
+    if let Ok(mut w) = PARTS.write() {
+        *w = v;
+    }
+}
+
+/// The colour chosen for an element, if any.
+pub fn part(p: Part) -> Option<Color> {
+    let i = Part::ALL.iter().position(|x| *x == p)?;
+    PARTS.read().ok().and_then(|v| v[i])
+}
+
 fn parse_hex(h: &str) -> Option<Color> {
     let h = h.strip_prefix('#')?;
     if h.len() != 6 {
@@ -110,7 +168,7 @@ pub fn set_theme(mode: &str, accent: &str, signal: &str) {
     let signal = parse_hex(signal).unwrap_or_else(|| parse_hex(DEFAULT_SIGNAL).unwrap());
     let black = Color::BLACK;
     let white = Color::WHITE;
-    let pal = if light {
+    let mut pal = if light {
         Palette {
             accent: mix(accent, black, 0.2),
             accent_light: accent,
@@ -141,6 +199,30 @@ pub fn set_theme(mode: &str, accent: &str, signal: &str) {
             muted: rgb(169, 175, 183),
         }
     };
+    // Two more dark designs: only the neutrals change, the accent stays.
+    match mode {
+        "carbon" => {
+            pal.bg = rgb(6, 6, 7);
+            pal.panel = rgb(13, 14, 16);
+            pal.panel_2 = rgb(23, 24, 27);
+            pal.well = rgb(3, 3, 4);
+            pal.border = rgb(52, 55, 60);
+            pal.text = rgb(236, 236, 236);
+            pal.muted = rgb(140, 144, 151);
+        }
+        "github" => {
+            pal.bg = rgb(13, 17, 23);
+            pal.panel = rgb(22, 27, 34);
+            pal.panel_2 = rgb(33, 38, 45);
+            pal.well = rgb(1, 4, 9);
+            pal.border = rgb(48, 54, 61);
+            pal.text = rgb(230, 237, 243);
+            pal.muted = rgb(139, 148, 158);
+            pal.amber = rgb(210, 153, 34);
+            pal.danger = rgb(248, 81, 73);
+        }
+        _ => {}
+    }
     if let Ok(mut p) = PALETTE.write() {
         *p = Some(pal);
     }
@@ -306,7 +388,116 @@ fn key_colors(look: Look, status: button::Status) -> (Color, Color, Color) {
     }
 }
 
+static BUTTON_LOOK: RwLock<String> = RwLock::new(String::new());
+
+/// Chooses how keys look: "", "flat", "glow", "pill", "neon", "hardware" or "tile".
+pub fn set_button_look(l: &str) {
+    if let Ok(mut w) = BUTTON_LOOK.write() {
+        *w = l.to_string();
+    }
+}
+
+/// Reshapes the standard key into the chosen look.
+fn restyle(look: Look, status: button::Status, mut st: button::Style) -> button::Style {
+    let kind = BUTTON_LOOK.read().map(|k| k.clone()).unwrap_or_default();
+    let primary = look == Look::Primary;
+    let (top, bottom, _) = key_colors(look, status);
+    let solid = Background::Color(mix(top, bottom, 0.5));
+    let hot = matches!(status, button::Status::Hovered | button::Status::Pressed);
+    let glow = |c: Color, r: f32| Shadow {
+        color: Color { a: 0.55, ..c },
+        offset: iced::Vector::new(0.0, 0.0),
+        blur_radius: r,
+    };
+    match kind.as_str() {
+        "flat" => {
+            st.background = Some(solid);
+            st.shadow = Shadow::default();
+            st.border.radius = 3.0.into();
+            st.border.width = 0.0;
+        }
+        "glow" => {
+            if primary {
+                st.border.color = accent_light();
+                st.border.width = 2.0;
+                st.shadow = glow(accent_light(), 9.0);
+            } else if hot {
+                st.border.color = mix(border(), accent_light(), 0.5);
+            }
+        }
+        "pill" => {
+            st.border.radius = 99.0.into();
+            st.border.width = 1.5;
+            if primary {
+                st.background = Some(Background::Color(accent()));
+                st.border.color = accent_light();
+            } else {
+                st.background = Some(Background::Color(if hot {
+                    mix(panel(), accent(), 0.2)
+                } else {
+                    Color::TRANSPARENT
+                }));
+                st.border.color = mix(border(), accent_light(), if hot { 0.7 } else { 0.0 });
+            }
+            st.shadow = Shadow::default();
+        }
+        "neon" => {
+            let c = if primary {
+                accent_light()
+            } else {
+                muted_color()
+            };
+            let c = if hot { accent_light() } else { c };
+            st.background = Some(Background::Color(mix(
+                well(),
+                c,
+                if primary { 0.12 } else { 0.0 },
+            )));
+            st.border.color = c;
+            st.border.width = 1.5;
+            st.border.radius = 4.0.into();
+            st.text_color = c;
+            st.shadow = if primary || hot {
+                glow(c, 10.0)
+            } else {
+                Shadow::default()
+            };
+        }
+        "hardware" => {
+            st.border.radius = 2.0.into();
+            st.border.color = rgb(10, 11, 13);
+            let down = matches!(status, button::Status::Pressed);
+            st.shadow = Shadow {
+                color: Color::BLACK,
+                offset: iced::Vector::new(0.0, if down { 1.0 } else { 3.0 }),
+                blur_radius: 0.0,
+            };
+        }
+        "tile" => {
+            st.background = Some(Background::Color(if primary {
+                mix(panel_2(), accent(), 0.45)
+            } else if hot {
+                mix(panel_2(), text_color(), 0.1)
+            } else {
+                panel_2()
+            }));
+            st.border.radius = 10.0.into();
+            st.border.width = 0.0;
+            st.shadow = Shadow::default();
+            if primary {
+                st.text_color = text_color();
+            }
+        }
+        _ => {}
+    }
+    st
+}
+
 fn key_style(look: Look, status: button::Status, flat: bool) -> button::Style {
+    restyle(look, status, key_style_base(look, status, flat))
+}
+
+fn key_style_base(look: Look, status: button::Status, flat: bool) -> button::Style {
     let (top, bottom, edge) = key_colors(look, status);
     button::Style {
         // Dialog rows of many keys render wrongly with gradients on some

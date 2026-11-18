@@ -165,27 +165,53 @@ impl canvas::Program<Message> for Knob<'_> {
         let c = Point::new(bounds.width / 2.0, bounds.height / 2.0);
         let ring = s * 0.43;
         let frac = self.frac();
+        let lit_color = part(Part::Knob).unwrap_or_else(accent_light);
         let off = mix(well(), border(), 0.55);
+        let lit_n = (frac * (LEDS - 1) as f32 + 0.0001).floor() as usize;
         for j in 0..LEDS {
             let t = j as f32 / (LEDS - 1) as f32;
             let a = (-135.0 + 270.0 * t).to_radians();
             let at = Point::new(c.x + a.sin() * ring, c.y - a.cos() * ring);
             // The first LED is always lit, so a knob at its minimum still shows where it is.
-            let lit = t <= frac + 0.0001;
+            let lit = j <= lit_n;
+            let r = (s * 0.05).max(1.5);
+            if lit {
+                // Soft halo, strongest at the tip of the lit arc.
+                let tip = if j == lit_n { 0.35 } else { 0.14 };
+                f.fill(
+                    &Path::circle(at, r * 2.1),
+                    Fill::from(Color {
+                        a: tip,
+                        ..lit_color
+                    }),
+                );
+            }
             f.fill(
-                &Path::circle(at, (s * 0.045).max(1.4)),
-                Fill::from(if lit { accent_light() } else { off }),
+                &Path::circle(at, r),
+                Fill::from(if lit {
+                    mix(lit_color, Color::WHITE, if j == lit_n { 0.3 } else { 0.0 })
+                } else {
+                    off
+                }),
             );
         }
-        let body = s * 0.29;
-        f.fill(&Path::circle(c, body), Fill::from(rgb(40, 43, 48)));
+        let body = s * 0.31;
+        // Drop shadow, then the cap with a dark rim and a flat face.
+        f.fill(
+            &Path::circle(Point::new(c.x, c.y + 1.5), body + 1.0),
+            Fill::from(Color {
+                a: 0.45,
+                ..Color::BLACK
+            }),
+        );
+        f.fill(&Path::circle(c, body), Fill::from(rgb(46, 49, 55)));
         f.stroke(
             &Path::circle(c, body),
             Stroke::default()
                 .with_color(rgb(12, 13, 15))
                 .with_width(1.5),
         );
-        f.fill(&Path::circle(c, body * 0.8), Fill::from(rgb(20, 21, 24)));
+        f.fill(&Path::circle(c, body * 0.84), Fill::from(rgb(24, 25, 29)));
         // Light edge on top, like the console caps.
         f.stroke(
             &Path::new(|b| {
@@ -200,16 +226,31 @@ impl canvas::Program<Message> for Knob<'_> {
                 .with_color(rgb(110, 116, 124))
                 .with_width(1.0),
         );
+        // The pointer is a short line on the rim; the value sits in the middle.
         let a = (-135.0 + 270.0 * frac).to_radians();
-        let tip = Point::new(c.x + a.sin() * body * 0.85, c.y - a.cos() * body * 0.85);
-        let root = Point::new(c.x + a.sin() * body * 0.35, c.y - a.cos() * body * 0.35);
+        let tip = Point::new(c.x + a.sin() * body * 0.92, c.y - a.cos() * body * 0.92);
+        let root = Point::new(c.x + a.sin() * body * 0.62, c.y - a.cos() * body * 0.62);
         f.stroke(
             &Path::line(root, tip),
             Stroke::default()
-                .with_color(accent_light())
-                .with_width(2.4)
+                .with_color(lit_color)
+                .with_width(2.6)
                 .with_line_cap(canvas::LineCap::Round),
         );
+        let shown = if self.step >= 1.0 || self.max - self.min >= 100.0 {
+            format!("{:.0}", self.value)
+        } else {
+            format!("{:.1}", self.value)
+        };
+        f.fill_text(canvas::Text {
+            content: shown,
+            position: c,
+            color: rgb(214, 218, 224),
+            size: iced::Pixels((s * 0.17).max(9.0)),
+            align_x: iced::alignment::Horizontal::Center.into(),
+            align_y: iced::alignment::Vertical::Center,
+            ..canvas::Text::default()
+        });
         vec![f.into_geometry()]
     }
 

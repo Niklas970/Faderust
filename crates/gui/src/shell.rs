@@ -173,8 +173,12 @@ pub struct Prefs {
     pub strip_history: bool,
     /// Rotary knobs with an LED ring instead of sliders in the effects.
     pub knobs: bool,
-    /// A bar of preset tiles under the desk.
-    pub scene_bar: bool,
+    /// Look of the keys: empty (standard), flat, glow, pill, neon, hardware, tile.
+    pub button_look: String,
+    /// An echo switch on every strip of the desk.
+    pub echo_button: bool,
+    /// Own colours per element (keys of `style::Part`), "#rrggbb".
+    pub part_colors: std::collections::BTreeMap<String, String>,
     /// Colour of the value display as "#rrggbb"; empty is the signal colour.
     pub lcd_color: String,
     /// "de", "en" or empty for the system language.

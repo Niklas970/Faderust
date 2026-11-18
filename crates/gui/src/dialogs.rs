@@ -37,8 +37,8 @@ fn ctl<'a>(
             step,
             on_change: Box::new(on_change),
         })
-        .width(56)
-        .height(56)
+        .width(64)
+        .height(64)
         .into()
     } else {
         slider(range, value, on_change).step(step).into()
@@ -1095,6 +1095,79 @@ fn design(app: &App) -> Element<'_, Message> {
         ]
         .spacing(10),
     );
+    let looks = [
+        ("", "Standard"),
+        ("flat", "Flach"),
+        ("glow", "Leuchtend"),
+        ("pill", "Pille"),
+        ("neon", "Neon"),
+        ("hardware", "Hardware"),
+        ("tile", "Kachel"),
+    ];
+    let button_card = card(
+        "Knopf-Look",
+        column![
+            segmented(
+                looks[..4]
+                    .iter()
+                    .map(|(k, n)| (
+                        (*n).into(),
+                        app.prefs.button_look == *k,
+                        edit(Edit::ButtonLook(k))
+                    ))
+                    .collect()
+            ),
+            segmented(
+                looks[4..]
+                    .iter()
+                    .map(|(k, n)| (
+                        (*n).into(),
+                        app.prefs.button_look == *k,
+                        edit(Edit::ButtonLook(k))
+                    ))
+                    .collect()
+            ),
+        ]
+        .spacing(8),
+    );
+    let parts_card = card(
+        "Farben einzeln",
+        crate::style::Part::ALL
+            .iter()
+            .fold(column![].spacing(12), |col, &x| {
+                let set = app.prefs.part_colors.get(x.key()).cloned();
+                let shown = match &app.part_input {
+                    Some((p, t)) if *p == x => t.clone(),
+                    _ => set.clone().unwrap_or_default(),
+                };
+                let custom = set.is_some();
+                col.push(
+                    column![
+                        row![
+                            text(tr(x.label())).size(13).font(BOLD),
+                            space().width(Length::Fill),
+                            if custom {
+                                btn(tr("Standard"), edit(Edit::PartHex(x, String::new())), false)
+                            } else {
+                                text(tr("Standard")).size(12).color(muted_color()).into()
+                            },
+                        ]
+                        .align_y(Vertical::Center),
+                        custom_color(
+                            if shown.is_empty() {
+                                app.part_default(x)
+                            } else {
+                                shown
+                            },
+                            Target::Part(x),
+                            app.picker,
+                            move |t| edit(Edit::PartHex(x, t)),
+                        ),
+                    ]
+                    .spacing(6),
+                )
+            }),
+    );
     let edge_card = card(
         "Grüner Rand bei Signal",
         row![
@@ -1182,9 +1255,9 @@ fn design(app: &App) -> Element<'_, Message> {
             check(app.prefs.strip_history)
                 .label(tr("Pegelverlauf im Kopf (30 s)"))
                 .on_toggle(|v| edit(Edit::StripHistory(v))),
-            check(app.prefs.scene_bar)
-                .label(tr("Szenen-Leiste mit den Presets unter dem Pult"))
-                .on_toggle(|v| edit(Edit::SceneBar(v))),
+            check(app.prefs.echo_button)
+                .label(tr("Echo-Taste auf jedem Streifen"))
+                .on_toggle(|v| edit(Edit::EchoButton(v))),
             check(app.prefs.knobs)
                 .label(tr(
                     "Drehregler mit LED-Kranz statt Schiebern in den Effekten"
@@ -1239,6 +1312,18 @@ fn design(app: &App) -> Element<'_, Message> {
                 ),
             ]),
             segmented(vec![
+                (
+                    "Carbon".into(),
+                    mode_now == "carbon",
+                    edit(Edit::Mode("carbon"))
+                ),
+                (
+                    "GitHub-Dunkel".into(),
+                    mode_now == "github",
+                    edit(Edit::Mode("github"))
+                ),
+            ]),
+            segmented(vec![
                 ("English".into(), lang_now == "en", edit(Edit::Lang("en"))),
                 ("Deutsch".into(), lang_now == "de", edit(Edit::Lang("de"))),
             ]),
@@ -1259,7 +1344,17 @@ fn design(app: &App) -> Element<'_, Message> {
             1,
             vec![view_card, hide_card, look_card, head_card, extras_card]
         ),
-        cards(1, vec![accent_card, signal_card, lcd_card, edge_card]),
+        cards(
+            1,
+            vec![
+                accent_card,
+                signal_card,
+                lcd_card,
+                parts_card,
+                button_card,
+                edge_card
+            ]
+        ),
         cards(1, vec![fader_card, meter_card]),
     ]
     .spacing(12)
