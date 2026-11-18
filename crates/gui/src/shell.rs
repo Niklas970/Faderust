@@ -98,6 +98,146 @@ pub fn set_autostart(on: bool) -> Result<(), String> {
     }
 }
 
+/// The design of a profile.
+#[derive(Serialize, Deserialize, Default, Clone)]
+#[serde(default)]
+pub struct DesignSnap {
+    pub mode: String,
+    pub accent: String,
+    pub signal: String,
+    pub lcd_color: String,
+    pub part_colors: std::collections::BTreeMap<String, String>,
+    pub button_look: String,
+    pub meter_look: u8,
+    pub density: Option<u8>,
+    pub glide: Option<u8>,
+    pub cap_square: bool,
+    pub scale_off: bool,
+    pub zero_mark: bool,
+    pub glow_off: bool,
+    pub accent_cap: bool,
+    pub cap_value_off: bool,
+    pub thin_track: bool,
+    pub small_cap: bool,
+    pub grip_cap: bool,
+    pub strip_colors: bool,
+    pub relief: bool,
+    pub readout_display: bool,
+    pub meter_segments: bool,
+    pub meter_line: bool,
+    pub one_color: bool,
+    pub peak_off: bool,
+    pub matrix_meters_off: bool,
+    pub strip_head: bool,
+    pub strip_history: bool,
+    pub knobs: bool,
+    pub echo_button: bool,
+}
+
+impl Prefs {
+    /// The design as JSON, for a profile.
+    pub fn design_json(&self) -> String {
+        let d = DesignSnap {
+            mode: self.mode.clone(),
+            accent: self.accent.clone(),
+            signal: self.signal.clone(),
+            lcd_color: self.lcd_color.clone(),
+            part_colors: self.part_colors.clone(),
+            button_look: self.button_look.clone(),
+            meter_look: self.meter_look,
+            density: self.density,
+            glide: self.glide,
+            cap_square: self.cap_square,
+            scale_off: self.scale_off,
+            zero_mark: self.zero_mark,
+            glow_off: self.glow_off,
+            accent_cap: self.accent_cap,
+            cap_value_off: self.cap_value_off,
+            thin_track: self.thin_track,
+            small_cap: self.small_cap,
+            grip_cap: self.grip_cap,
+            strip_colors: self.strip_colors,
+            relief: self.relief,
+            readout_display: self.readout_display,
+            meter_segments: self.meter_segments,
+            meter_line: self.meter_line,
+            one_color: self.one_color,
+            peak_off: self.peak_off,
+            matrix_meters_off: self.matrix_meters_off,
+            strip_head: self.strip_head,
+            strip_history: self.strip_history,
+            knobs: self.knobs,
+            echo_button: self.echo_button,
+        };
+        serde_json::to_string(&d).unwrap_or_default()
+    }
+
+    /// Takes a profile's design; false when it cannot be read.
+    pub fn set_design(&mut self, json: &str) -> bool {
+        let Ok(d) = serde_json::from_str::<DesignSnap>(json) else {
+            return false;
+        };
+        self.mode = d.mode;
+        self.accent = d.accent;
+        self.signal = d.signal;
+        self.lcd_color = d.lcd_color;
+        self.part_colors = d.part_colors;
+        self.button_look = d.button_look;
+        self.meter_look = d.meter_look;
+        self.density = d.density;
+        self.glide = d.glide;
+        self.cap_square = d.cap_square;
+        self.scale_off = d.scale_off;
+        self.zero_mark = d.zero_mark;
+        self.glow_off = d.glow_off;
+        self.accent_cap = d.accent_cap;
+        self.cap_value_off = d.cap_value_off;
+        self.thin_track = d.thin_track;
+        self.small_cap = d.small_cap;
+        self.grip_cap = d.grip_cap;
+        self.strip_colors = d.strip_colors;
+        self.relief = d.relief;
+        self.readout_display = d.readout_display;
+        self.meter_segments = d.meter_segments;
+        self.meter_line = d.meter_line;
+        self.one_color = d.one_color;
+        self.peak_off = d.peak_off;
+        self.matrix_meters_off = d.matrix_meters_off;
+        self.strip_head = d.strip_head;
+        self.strip_history = d.strip_history;
+        self.knobs = d.knobs;
+        self.echo_button = d.echo_button;
+        true
+    }
+
+    /// Seconds the fader glide takes to settle (0 is off).
+    pub fn glide_smooth(&self) -> f32 {
+        match self.glide.unwrap_or(1) {
+            0 => 0.0,
+            2 => 0.22,
+            _ => 0.08,
+        }
+    }
+
+    /// Space between the strips.
+    pub fn gap(&self) -> f32 {
+        match self.density.unwrap_or(1) {
+            0 => 4.0,
+            2 => 18.0,
+            _ => 10.0,
+        }
+    }
+
+    /// Padding inside a strip card.
+    pub fn card_pad(&self) -> [u16; 2] {
+        match self.density.unwrap_or(1) {
+            0 => [6, 3],
+            2 => [14, 10],
+            _ => [10, 6],
+        }
+    }
+}
+
 /// Window preferences that outlive a start (the Tauri app kept them in the
 /// browser's local storage).
 #[derive(Serialize, Deserialize, Default, Clone, PartialEq)]
@@ -173,6 +313,14 @@ pub struct Prefs {
     pub strip_history: bool,
     /// Rotary knobs with an LED ring instead of sliders in the effects.
     pub knobs: bool,
+    /// Meter shape: 0 bar/segments, 1 dots, 2 blocks.
+    pub meter_look: u8,
+    /// Spacing of the desk: 0 compact, 1 normal (default), 2 airy.
+    pub density: Option<u8>,
+    /// Speed of the fader glide: 0 off, 1 normal (default), 2 slow.
+    pub glide: Option<u8>,
+    /// Saved design profiles: name and the design as JSON.
+    pub profiles: std::collections::BTreeMap<String, String>,
     /// Look of the keys: empty (standard), flat, glow, pill, neon, hardware, tile.
     pub button_look: String,
     /// An echo switch on every strip of the desk.

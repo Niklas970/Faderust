@@ -93,6 +93,8 @@ pub struct Parts {
     pub grip_cap: bool,
     /// The meter as a thin line without frame.
     pub meter_line: bool,
+    /// 0 bar or segments, 1 round dots, 2 wide blocks.
+    pub meter_look: u8,
 }
 
 /// Fader track, scale, cap and LED meter of one strip in a single canvas.
@@ -604,9 +606,15 @@ impl Fader<'_> {
         let base = top + h - 1.0;
         let one = self.parts.one_color;
         let band = |at: f32| band_color(one, at);
-        if self.parts.segments && !line {
+        let look = self.parts.meter_look;
+        if (self.parts.segments || look > 0) && !line {
             // LED segments: 4 px lit, 2 px gap, coloured by height.
-            let n = (inner / 6.0).floor().max(1.0) as usize;
+            let pitch = match look {
+                1 => 9.0,
+                2 => 13.0,
+                _ => 6.0,
+            };
+            let n = (inner / pitch).floor().max(1.0) as usize;
             let seg = inner / n as f32;
             let lit_n = (lit * n as f32).round() as usize;
             let peak_n = if self.parts.peak && !self.muted && self.peak > -60.0 {
@@ -629,11 +637,25 @@ impl Fader<'_> {
                 } else {
                     mix(well(), border(), 0.5)
                 };
-                f.fill_rectangle(
-                    Point::new(mx + 2.0, y + 1.0),
-                    Size::new(mw - 4.0, (seg - 2.0).max(1.0)),
-                    color,
-                );
+                if look == 1 {
+                    let r = ((mw - 4.0) / 2.0).min(seg / 2.0 - 1.0).max(1.5);
+                    f.fill(
+                        &Path::circle(Point::new(mx + mw / 2.0, y + seg / 2.0), r),
+                        Fill::from(color),
+                    );
+                } else if look == 2 {
+                    f.fill_rectangle(
+                        Point::new(mx + 1.0, y + 1.5),
+                        Size::new(mw - 2.0, (seg - 3.0).max(1.0)),
+                        color,
+                    );
+                } else {
+                    f.fill_rectangle(
+                        Point::new(mx + 2.0, y + 1.0),
+                        Size::new(mw - 4.0, (seg - 2.0).max(1.0)),
+                        color,
+                    );
+                }
             }
             return;
         }

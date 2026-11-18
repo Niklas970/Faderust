@@ -257,6 +257,8 @@ pub struct App {
     pub part_input: Option<(style::Part, String)>,
     /// Tab shown in the design dialog: 0 look, 1 colours, 2 general.
     pub design_tab: u8,
+    /// Name typed for a new design profile.
+    pub profile_name: String,
     /// Drawing cache of the sample strips in the design dialog.
     pub preview_cache: canvas::Cache,
     logo: image::Handle,
@@ -434,6 +436,13 @@ pub enum Edit {
     EchoButton(bool),
     ButtonLook(&'static str),
     DesignTab(u8),
+    MeterLook(u8),
+    Density(u8),
+    GlideSpeed(u8),
+    ProfileName(String),
+    ProfileSave,
+    ProfileLoad(String),
+    ProfileDelete(String),
     /// Takes all looks of the design back to the defaults.
     ResetLook,
     Relief(bool),
@@ -676,10 +685,15 @@ fn peak_step(peak: &mut f32, hold: &mut f32, shown: f32, dt: f32) {
 
 /// Glides the drawn fader position towards the real one with a critically
 /// damped spring (soft start, soft stop); true while it moves.
-fn glide(pos: &mut f32, vel: &mut f32, db: f32, dt: f32) -> bool {
+fn glide(pos: &mut f32, vel: &mut f32, db: f32, dt: f32, smooth: f32) -> bool {
     let want = scale::to_pos(db);
     if *pos == want {
         return false;
+    }
+    if smooth <= 0.0 {
+        *pos = want;
+        *vel = 0.0;
+        return true;
     }
     let change = *pos - want;
     if change.abs() < 0.0003 && vel.abs() < 0.01 {
@@ -688,8 +702,7 @@ fn glide(pos: &mut f32, vel: &mut f32, db: f32, dt: f32) -> bool {
         return true;
     }
     // Smooth damping: reaches the target in about `SMOOTH` seconds.
-    const SMOOTH: f32 = 0.08;
-    let omega = 2.0 / SMOOTH;
+    let omega = 2.0 / smooth;
     let x = omega * dt;
     let k = 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x);
     let temp = (*vel + omega * change) * dt;
@@ -1414,6 +1427,7 @@ impl App {
             lcd_input: None,
             part_input: None,
             design_tab: 0,
+            profile_name: String::new(),
             preview_cache: canvas::Cache::new(),
             logo: image::Handle::from_bytes(LOGO),
             #[cfg(windows)]
@@ -1541,6 +1555,7 @@ impl App {
 
     /// Takes the engine's latest snapshot into the strips and outputs.
     fn apply(&mut self, snap: &UiState, dt: f32) {
+        let smooth = self.prefs.glide_smooth();
         let now = Instant::now();
         let secs = hide_secs(self.hide_after);
         let closed_only = hide_closed(self.hide_after);
@@ -1637,7 +1652,7 @@ impl App {
             }
             s.shown = ease(s.shown, s.target, dt);
             peak_step(&mut s.peak, &mut s.peak_hold, s.shown, dt);
-            if glide(&mut s.pos, &mut s.vel, s.db, dt) {
+            if glide(&mut s.pos, &mut s.vel, s.db, dt, smooth) {
                 s.cache.clear();
             }
         }
@@ -1688,7 +1703,7 @@ impl App {
             m.playing = playing;
             m.shown = ease(m.shown, m.target, dt);
             peak_step(&mut m.peak, &mut m.peak_hold, m.shown, dt);
-            if glide(&mut m.pos, &mut m.vel, m.db, dt) {
+            if glide(&mut m.pos, &mut m.vel, m.db, dt, smooth) {
                 m.cache.clear();
             }
         }
@@ -2611,6 +2626,35 @@ impl App {
             Edit::StripHistory(on) => self.set_look(|p| p.strip_history = on),
             Edit::Knobs(on) => self.set_look(|p| p.knobs = on),
             Edit::DesignTab(t) => self.design_tab = t,
+            Edit::MeterLook(v) => self.set_look(|p| p.meter_look = v),
+            Edit::Density(v) => self.set_look(|p| p.density = Some(v)),
+            Edit::GlideSpeed(v) => self.set_look(|p| p.glide = Some(v)),
+            Edit::ProfileName(t) => self.profile_name = t,
+            Edit::ProfileSave => {
+                let name = self.profile_name.trim().to_string();
+                if !name.is_empty() {
+                    self.set_look(|p| {
+                        let json = p.design_json();
+                        p.profiles.insert(name, json);
+                    });
+                    self.profile_name.clear();
+                }
+            }
+            Edit::ProfileLoad(name) => {
+                if let Some(json) = self.prefs.profiles.get(&name).cloned() {
+                    self.accent_input = None;
+                    self.signal_input = None;
+                    self.lcd_input = None;
+                    self.part_input = None;
+                    self.picker = None;
+                    self.set_look(|p| {
+                        p.set_design(&json);
+                    });
+                }
+            }
+            Edit::ProfileDelete(name) => self.set_look(|p| {
+                p.profiles.remove(&name);
+            }),
             Edit::ResetLook => {
                 self.accent_input = None;
                 self.signal_input = None;
@@ -2646,6 +2690,9 @@ impl App {
                     p.strip_history = d.strip_history;
                     p.knobs = d.knobs;
                     p.echo_button = d.echo_button;
+                    p.meter_look = d.meter_look;
+                    p.density = d.density;
+                    p.glide = d.glide;
                 });
             }
             Edit::ButtonLook(l) => self.set_look(|p| p.button_look = l.into()),
@@ -3353,6 +3400,7 @@ impl App {
             small_cap: self.prefs.small_cap,
             grip_cap: self.prefs.grip_cap,
             meter_line: self.prefs.meter_line,
+            meter_look: self.prefs.meter_look,
         }
     }
 
@@ -3466,7 +3514,7 @@ impl App {
             None => content,
         };
         container(content)
-            .padding([10, 6])
+            .padding(self.prefs.card_pad())
             .width(width)
             .height(Length::Fill)
             .align_x(Horizontal::Center)
@@ -3825,8 +3873,9 @@ impl App {
         head: Element<'a, Message>,
         cards: Vec<Element<'a, Message>>,
         fill: bool,
+        gap: f32,
     ) -> Element<'a, Message> {
-        let strips = row(cards).spacing(10).height(Length::Fill);
+        let strips = row(cards).spacing(gap).height(Length::Fill);
         let strips: Element<'a, Message> = if fill {
             // The last group takes the rest of the window and scrolls sideways,
             // so its frame always ends at the window edge.
@@ -3907,6 +3956,7 @@ impl App {
                 .map(|o| self.master(o))
                 .collect(),
             false,
+            self.prefs.gap(),
         );
         let devices = Self::section(
             Self::heading("GERÄTE", None, self.tight()),
@@ -3915,6 +3965,7 @@ impl App {
                 .map(|i| self.strip(i))
                 .collect(),
             false,
+            self.prefs.gap(),
         );
         let add: Element<'_, Message> =
             button(text("+ Programm").size(12).font(BOLD).color(accent_light()))
@@ -3960,6 +4011,7 @@ impl App {
                 .map(|i| self.strip(i))
                 .collect(),
             true,
+            self.prefs.gap(),
         );
         row![outputs, Self::divider(), devices, Self::divider(), programs]
             .spacing(2)
@@ -4782,12 +4834,12 @@ mod glide_tests {
         let want = scale::to_pos(0.0);
         let mut last = pos;
         for _ in 0..300 {
-            glide(&mut pos, &mut vel, 0.0, 1.0 / 90.0);
+            glide(&mut pos, &mut vel, 0.0, 1.0 / 90.0, 0.08);
             assert!(pos >= last - 1e-6 && pos <= want + 1e-4, "overshoot");
             last = pos;
         }
         assert_eq!(pos, want);
-        assert!(!glide(&mut pos, &mut vel, 0.0, 1.0 / 90.0));
+        assert!(!glide(&mut pos, &mut vel, 0.0, 1.0 / 90.0, 0.08));
     }
 }
 
