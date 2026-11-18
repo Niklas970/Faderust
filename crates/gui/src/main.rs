@@ -411,6 +411,9 @@ pub enum Edit {
     CapValue(bool),
     ThinTrack(bool),
     SmallCap(bool),
+    GripCap(bool),
+    MeterLine(bool),
+    StripColors(bool),
     Relief(bool),
     /// A colour for the LCD display, typed or chosen.
     LcdHex(String),
@@ -2568,6 +2571,9 @@ impl App {
             Edit::CapValue(on) => self.set_look(|p| p.cap_value_off = !on),
             Edit::ThinTrack(on) => self.set_look(|p| p.thin_track = on),
             Edit::SmallCap(on) => self.set_look(|p| p.small_cap = on),
+            Edit::GripCap(on) => self.set_look(|p| p.grip_cap = on),
+            Edit::MeterLine(on) => self.set_look(|p| p.meter_line = on),
+            Edit::StripColors(on) => self.set_look(|p| p.strip_colors = on),
             Edit::Relief(on) => self.set_look(|p| p.relief = on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::TestChannel(on) => {
@@ -3160,9 +3166,13 @@ impl App {
         })
         .size(13);
         if !self.prefs.readout_display {
-            return value
-                .color(if muted { muted_color() } else { accent_light() })
-                .into();
+            // On the light design the darker accent reads better.
+            let on = if text_color().r > 0.5 {
+                accent_light()
+            } else {
+                accent()
+            };
+            return value.color(if muted { muted_color() } else { on }).into();
         }
         // The value in a small recessed display, like the window on a cap.
         let lcd = (!self.prefs.lcd_color.is_empty()).then(|| style::hex(&self.prefs.lcd_color));
@@ -3209,7 +3219,23 @@ impl App {
             cap_value: !self.prefs.cap_value_off,
             thin_track: self.prefs.thin_track,
             small_cap: self.prefs.small_cap,
+            grip_cap: self.prefs.grip_cap,
+            meter_line: self.prefs.meter_line,
         }
+    }
+
+    /// The colour of a strip when strips are coloured: stable per input.
+    fn tint_of(&self, id: &str) -> Option<Color> {
+        if !self.prefs.strip_colors {
+            return None;
+        }
+        const COLORS: [&str; 8] = [
+            "#4da3ff", "#ff5a5f", "#b57bff", "#2ec4b6", "#f2c94c", "#ff8fb1", "#7bd88f", "#ff9f43",
+        ];
+        let h = id
+            .bytes()
+            .fold(5381_u32, |h, b| h.wrapping_mul(33) ^ u32::from(b));
+        Some(hex(COLORS[h as usize % COLORS.len()]))
     }
 
     /// Lit keycap: an LED strip on top glows red when muted.
@@ -3256,7 +3282,37 @@ impl App {
         width: f32,
         active: bool,
     ) -> Element<'a, Message> {
+        self.card_tint(content, width, active, None)
+    }
+
+    /// A strip card; with a tint it gets a band of that colour on top.
+    fn card_tint<'a>(
+        &self,
+        content: Element<'a, Message>,
+        width: f32,
+        active: bool,
+        tint: Option<Color>,
+    ) -> Element<'a, Message> {
         let relief = self.prefs.relief;
+        let content = match tint {
+            Some(t) => column![
+                container(space().height(0))
+                    .width(Length::Fill)
+                    .height(3)
+                    .style(move |_| container::Style {
+                        background: Some(Background::Color(t)),
+                        border: Border {
+                            radius: 2.0.into(),
+                            ..Border::default()
+                        },
+                        ..container::Style::default()
+                    }),
+                container(content).height(Length::Fill),
+            ]
+            .spacing(7)
+            .into(),
+            None => content,
+        };
         container(content)
             .padding([10, 6])
             .width(width)
@@ -3332,6 +3388,7 @@ impl App {
             peak: s.peak,
             kind: Kind::Input(i),
             parts: self.parts(),
+            tint: self.tint_of(&s.device),
             post_fader: false,
             narrow,
             labels: !self.is_mini(),
@@ -3409,7 +3466,7 @@ impl App {
         } else {
             self.prefs.device_edge_off
         };
-        self.card(
+        self.card_tint(
             column![
                 top,
                 Self::name_label(&s.label),
@@ -3434,6 +3491,7 @@ impl App {
                 164.0
             },
             !edge_off && !s.muted && s.shown > -60.0,
+            self.tint_of(&s.device),
         )
     }
 
@@ -3450,13 +3508,14 @@ impl App {
                 peak,
                 kind: Kind::Preview,
                 parts: self.parts(),
+                tint: self.tint_of("preview"),
                 post_fader: post,
                 narrow: false,
                 labels: true,
             })
             .width(STRIP_W)
             .height(Length::Fill);
-            self.card(
+            self.card_tint(
                 column![
                     fader,
                     self.readout(db, false),
@@ -3471,6 +3530,7 @@ impl App {
                 } else {
                     self.prefs.device_edge_off
                 }),
+                self.tint_of("preview"),
             )
         };
         row![sample(-6.0, -16.0, -9.0, false)]
@@ -3489,6 +3549,7 @@ impl App {
             peak: m.peak,
             kind: Kind::Master(o),
             parts: self.parts(),
+            tint: None,
             post_fader: true,
             narrow: self.tight(),
             labels: !self.is_mini(),

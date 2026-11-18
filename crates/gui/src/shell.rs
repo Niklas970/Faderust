@@ -161,6 +161,12 @@ pub struct Prefs {
     pub small_cap: bool,
     /// Strips as raised panels.
     pub relief: bool,
+    /// Slim grip cap in the accent colour.
+    pub grip_cap: bool,
+    /// The meter as a thin line.
+    pub meter_line: bool,
+    /// Every strip in its own colour.
+    pub strip_colors: bool,
     /// Colour of the value display as "#rrggbb"; empty is the signal colour.
     pub lcd_color: String,
     /// "de", "en" or empty for the system language.

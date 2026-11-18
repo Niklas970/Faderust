@@ -54,7 +54,7 @@ fn card<'a>(
     .padding(14)
     .width(Length::Fill)
     .style(|_| container::Style {
-        background: Some(Background::Color(well())),
+        background: Some(Background::Color(card_bg())),
         border: Border {
             color: border(),
             width: 1.0,
@@ -1116,6 +1116,12 @@ fn design(app: &App) -> Element<'_, Message> {
             check(app.prefs.small_cap)
                 .label(tr("Kleine Kappe wie bei einer Konsole"))
                 .on_toggle(|v| edit(Edit::SmallCap(v))),
+            check(app.prefs.grip_cap)
+                .label(tr("Schmaler Griff als Kappe"))
+                .on_toggle(|v| edit(Edit::GripCap(v))),
+            check(app.prefs.strip_colors)
+                .label(tr("Eigene Farbe pro Streifen"))
+                .on_toggle(|v| edit(Edit::StripColors(v))),
             check(app.prefs.relief)
                 .label(tr("Streifen als erhabene Platten"))
                 .on_toggle(|v| edit(Edit::Relief(v))),
@@ -1131,6 +1137,9 @@ fn design(app: &App) -> Element<'_, Message> {
             check(app.prefs.meter_segments)
                 .label(tr("LED-Segmente statt Balken"))
                 .on_toggle(|v| edit(Edit::MeterSegments(v))),
+            check(app.prefs.meter_line)
+                .label(tr("Pegel als dünne Linie"))
+                .on_toggle(|v| edit(Edit::MeterLine(v))),
             check(app.prefs.one_color)
                 .label(tr("Pegel einfarbig"))
                 .on_toggle(|v| edit(Edit::OneColor(v))),
