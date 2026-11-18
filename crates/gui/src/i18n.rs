@@ -52,6 +52,17 @@ const TABLE: &[(&str, &str)] = &[
     ("Wert in der Kappe", "Value in the cap"),
     ("Pegel einfarbig", "Meters in one colour"),
     ("Schmale Bahn", "Thin track"),
+    ("Streifen und Leiste", "Strips and bar"),
+    ("Streifenkopf mit Symbol", "Strip head with symbol"),
+    ("Pegelverlauf im Kopf (30 s)", "Level history in the head (30 s)"),
+    (
+        "Szenen-Leiste mit den Presets unter dem Pult",
+        "Scene bar with the presets under the desk",
+    ),
+    (
+        "Drehregler mit LED-Kranz statt Schiebern in den Effekten",
+        "Rotary knobs with an LED ring instead of sliders in the effects",
+    ),
     ("Schmaler Griff als Kappe", "Slim grip as cap"),
     ("Eigene Farbe pro Streifen", "Own colour per strip"),
     ("Pegel als dünne Linie", "Meter as a thin line"),

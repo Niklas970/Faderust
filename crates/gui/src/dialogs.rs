@@ -21,6 +21,30 @@ fn edit(e: Edit) -> Message {
     Message::Edit(e)
 }
 
+/// An effect setting: a slider, or a rotary knob when the design asks for it.
+fn ctl<'a>(
+    app: &App,
+    range: std::ops::RangeInclusive<f32>,
+    value: f32,
+    step: f32,
+    on_change: impl Fn(f32) -> Message + 'a,
+) -> Element<'a, Message> {
+    if app.prefs.knobs {
+        iced::widget::Canvas::new(crate::widgets::Knob {
+            value,
+            min: *range.start(),
+            max: *range.end(),
+            step,
+            on_change: Box::new(on_change),
+        })
+        .width(56)
+        .height(56)
+        .into()
+    } else {
+        slider(range, value, on_change).step(step).into()
+    }
+}
+
 fn close() -> Message {
     Message::Open(None)
 }
@@ -401,10 +425,9 @@ fn fx(app: &App, i: usize) -> Element<'_, Message> {
                 .on_toggle(move |v| edit(Edit::Gate(i, v))),
             row![
                 container(text("Schwelle").size(13).color(text_color())).width(150),
-                slider(-90.0..=-10.0, f.gate_db, move |v| edit(Edit::GateDb(
-                    i,
-                    v.round()
-                ))),
+                ctl(app, -90.0..=-10.0, f.gate_db, 1.0, move |v| edit(
+                    Edit::GateDb(i, v.round())
+                )),
                 container(
                     text(format!("{} dB", f.gate_db))
                         .font(MONO)
@@ -431,11 +454,9 @@ fn fx(app: &App, i: usize) -> Element<'_, Message> {
             echo_row(
                 "Abstand",
                 format!("{} ms", f.echo_ms.round()),
-                slider(50.0..=1000.0, f.echo_ms, move |v| edit(Edit::EchoMs(
-                    i,
-                    (v / 10.0).round() * 10.0
-                )))
-                .into()
+                ctl(app, 50.0..=1000.0, f.echo_ms, 10.0, move |v| edit(
+                    Edit::EchoMs(i, (v / 10.0).round() * 10.0)
+                ))
             ),
             echo_row("Nachhall", String::new(), echo_feedback),
             echo_row("Lautstärke", String::new(), echo_mix),
@@ -486,7 +507,7 @@ fn duck(app: &App, i: usize) -> Element<'static, Message> {
                 make: fn(usize, f32) -> Edit| {
         row![
             container(text(name).size(13).color(text_color())).width(150),
-            slider(range, value, move |v| edit(make(i, v))).step(step),
+            ctl(app, range, value, step, move |v| edit(make(i, v))),
             container(
                 text(format!("{value:.0} {unit}"))
                     .font(MONO)
@@ -1152,6 +1173,26 @@ fn design(app: &App) -> Element<'_, Message> {
         ]
         .spacing(6),
     );
+    let head_card = card(
+        "Streifen und Leiste",
+        column![
+            check(app.prefs.strip_head)
+                .label(tr("Streifenkopf mit Symbol"))
+                .on_toggle(|v| edit(Edit::StripHead(v))),
+            check(app.prefs.strip_history)
+                .label(tr("Pegelverlauf im Kopf (30 s)"))
+                .on_toggle(|v| edit(Edit::StripHistory(v))),
+            check(app.prefs.scene_bar)
+                .label(tr("Szenen-Leiste mit den Presets unter dem Pult"))
+                .on_toggle(|v| edit(Edit::SceneBar(v))),
+            check(app.prefs.knobs)
+                .label(tr(
+                    "Drehregler mit LED-Kranz statt Schiebern in den Effekten"
+                ))
+                .on_toggle(|v| edit(Edit::Knobs(v))),
+        ]
+        .spacing(6),
+    );
     let extras_card = card(
         "Fenster",
         column![
@@ -1214,7 +1255,10 @@ fn design(app: &App) -> Element<'_, Message> {
     );
     let body = row![
         cards(1, vec![preview_card]),
-        cards(1, vec![view_card, hide_card, look_card, extras_card]),
+        cards(
+            1,
+            vec![view_card, hide_card, look_card, head_card, extras_card]
+        ),
         cards(1, vec![accent_card, signal_card, lcd_card, edge_card]),
         cards(1, vec![fader_card, meter_card]),
     ]

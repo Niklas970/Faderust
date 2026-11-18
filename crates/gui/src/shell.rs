@@ -167,6 +167,14 @@ pub struct Prefs {
     pub meter_line: bool,
     /// Every strip in its own colour.
     pub strip_colors: bool,
+    /// A symbol and a colour band in the head of each strip.
+    pub strip_head: bool,
+    /// The last 30 seconds of the level in the strip head.
+    pub strip_history: bool,
+    /// Rotary knobs with an LED ring instead of sliders in the effects.
+    pub knobs: bool,
+    /// A bar of preset tiles under the desk.
+    pub scene_bar: bool,
     /// Colour of the value display as "#rrggbb"; empty is the signal colour.
     pub lcd_color: String,
     /// "de", "en" or empty for the system language.
