@@ -44,11 +44,28 @@ jobs:
           jq -r .Version streamdeck/com.niklas970.faderust.sdPlugin/manifest.json \
             > stage/resources/streamdeck-plugin.version
       # The build id tells the app which test build it is, so it offers only
-      # another one.
+      # another one; the name (0.8.5.3) is what you see. Sub-version of the
+      # latest release: 0.8.5.1, 0.8.5.2 ... The count starts again at 1 after
+      # each release (it empties the package).
       - name: Build
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName | sed 's/^v//')
+          repo=https://ghcr.io/v2/niklas970/faderust-test
+          tok=$(curl -s "https://ghcr.io/token?service=ghcr.io&scope=repository:niklas970/faderust-test:pull" | jq -r '.token // empty')
+          last=0
+          if [ -n "$tok" ]; then
+            for t in $(curl -s -H "Authorization: Bearer $tok" "$repo/tags/list" | jq -r '.tags[]?'); do
+              n=$(curl -s -H "Authorization: Bearer $tok" -H "Accept: application/vnd.oci.image.manifest.v1+json" "$repo/manifests/$t" | jq -r '.annotations.name // empty')
+              case "$n" in "$latest".*) k=${n##*.}; if [ "$k" -gt "$last" ]; then last=$k; fi ;; esac
+            done
+          fi
+          name="$latest.$((last + 1))"
+          echo "Test build $name"
+          echo "NAME=$name" >> "$GITHUB_ENV"
           echo "BUILD=${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-          FADERUST_BUILD="${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" cargo build --release -p faderust
+          FADERUST_BUILD="${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" FADERUST_BUILD_NAME="$name" cargo build --release -p faderust
       - name: Build setup
         run: |
           choco install nsis -y --no-progress
@@ -72,6 +89,7 @@ jobs:
           mkdir release
           cp Faderust_*_x64-setup.exe Faderust_*_x64-setup.exe.sig release/
           echo "$BUILD" > release/build.txt
+          echo "$NAME" > release/name.txt
       - uses: actions/upload-artifact@v7
         with:
           name: test-files
@@ -102,16 +120,7 @@ jobs:
           echo "$GH_TOKEN" | oras login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           cd release
           setup=$(ls *-setup.exe)
-          # Sub-version of the latest release: 0.8.5.1, 0.8.5.2 ... The count
-          # starts again at 1 after each release (it empties the package).
-          latest=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName | sed 's/^v//')
-          last=0
-          for t in $(oras repo tags ghcr.io/niklas970/faderust-test 2>/dev/null || true); do
-            n=$(oras manifest fetch "ghcr.io/niklas970/faderust-test:$t" 2>/dev/null | jq -r '.annotations.name // empty')
-            case "$n" in "$latest".*) k=${n##*.}; [ "$k" -gt "$last" ] && last=$k ;; esac
-          done
-          name="$latest.$((last + 1))"
-          echo "Test build $name"
+          name=$(cat name.txt)
           # One tag per branch; a new run replaces the previous build. The
           # app reads name, build and title from the annotations.
           oras push "ghcr.io/niklas970/faderust-test:$tag" \
