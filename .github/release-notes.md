@@ -1,8 +1,10 @@
-## What's new in 0.8.5
+## What's new in 0.8.6
 
-- **Preview in the Design tab:** a sample strip shows every change right away while you try the switches
-- **Restart after an update:** Faderust starts again by itself and opens its window
-- **Test versions without clutter:** test builds now live in a GitHub package instead of the releases page, so the list of versions stays clean (this fixes the 404 when searching for test versions)
+- **New designs:** Midnight (deep blue), Carbon and GitHub dark, plus a tab layout in the Design window (Look, Colours, General)
+- **Make it yours:** colours per element (fader bar, cap, meter, knobs, strip head), button looks (flat, glowing, pill, neon, hardware, tile), meter shapes (bars, segments, dots, blocks, line), spacing and fader glide, design profiles you can save and load
+- **More options:** echo button on every strip, sort strips with arrows, better rotary knobs, the Mute button follows the design
+- **Fixes:** window position is remembered in pixels (monitors with different scaling), log buttons and the test sub-version are visible
+- Stream Deck plugin 0.3.7: nicer key icons and a fixed profile
 
 ## Installation
 
@@ -14,8 +16,10 @@ All features and a guide are in the [README](https://github.com/Niklas970/faderu
 
 ---
 
-## Neu in 0.8.5
+## Neu in 0.8.6
 
-- **Vorschau im Design-Tab:** ein Beispiel-Streifen zeigt jede Änderung sofort, während du die Schalter ausprobierst
-- **Neustart nach dem Update:** Faderust startet von selbst neu und öffnet sein Fenster wieder
-- **Testversionen ohne Durcheinander:** Test-Builds liegen jetzt in einem GitHub-Package statt auf der Release-Seite, die Versionsliste bleibt sauber (behebt den Fehler 404 bei der Suche nach Testversionen)
+- **Neue Designs:** Mitternacht (tiefes Blau), Carbon und GitHub-Dunkel, dazu Reiter im Design-Fenster (Aussehen, Farben, Allgemein)
+- **Mach es zu deinem:** Farben pro Element (Fader-Bahn, Kappe, Pegel, Drehregler, Streifenkopf), Knopf-Looks (flach, leuchtend, Pille, Neon, Hardware, Kachel), Pegel-Formen (Balken, Segmente, Punkte, Blöcke, Linie), Abstände und Fader-Gleiten, Design-Profile zum Speichern und Laden
+- **Mehr Optionen:** Echo-Taste auf jedem Streifen, Streifen per Pfeil sortieren, bessere Drehregler, der Mute-Knopf folgt dem Design
+- **Fixes:** Fensterposition wird in Pixeln gemerkt (Monitore mit anderer Skalierung), Protokoll-Knöpfe und Test-Unterversion sichtbar
+- Stream-Deck-Plugin 0.3.7: schönere Tasten-Icons und korrigiertes Profil

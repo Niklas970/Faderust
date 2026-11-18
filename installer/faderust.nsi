@@ -1,5 +1,5 @@
 ; Faderust installer (NSIS). Built by the release workflow:
-;   makensis -DVERSION=0.8.5 -DEXE=faderust.exe -DOUTFILE=Faderust_0.8.5_x64-setup.exe \
+;   makensis -DVERSION=0.8.6 -DEXE=faderust.exe -DOUTFILE=Faderust_0.8.6_x64-setup.exe \
 ;            -DRESOURCES=<folder with the Stream Deck plugin files> installer\faderust.nsi
 ; Per user (no administrator rights), follows the Windows display language
 ; (English or German). `/S` installs silently, `/UPDATE` starts Faderust
