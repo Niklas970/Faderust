@@ -206,7 +206,7 @@ mod imp {
             let mut t = wide(&text);
             DrawTextW(dc, &mut t, &mut r, DT_LEFT | DT_SINGLELINE | DT_NOPREFIX);
             SelectObject(dc, old);
-            // The level as a bar: -60 dB empty, +12 dB full.
+            // The level as a bar: -60 dB empty, +24 dB full.
             if let Some(db) = level {
                 let (left, right, top, bottom) = (12, WIDTH - 12, HEIGHT - 16, HEIGHT - 10);
                 let track = CreateSolidBrush(COLORREF(0x303030));
@@ -221,7 +221,7 @@ mod imp {
                     track,
                 );
                 let _ = DeleteObject(track.into());
-                let fraction = ((db + 60.0) / 72.0).clamp(0.0, 1.0);
+                let fraction = ((db + 60.0) / 84.0).clamp(0.0, 1.0);
                 let fill_to = left + ((right - left) as f32 * fraction) as i32;
                 if fill_to > left {
                     let fill = CreateSolidBrush(COLORREF(0x76e600));

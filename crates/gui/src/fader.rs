@@ -307,8 +307,8 @@ impl Fader<'_> {
         };
         let bar_x = sx + (slot_w - bar_w) / 2.0;
         // Scale: numbers on the left, small marks beside the slot.
-        // Fine marks every 3 dB between -24 and +12.
-        for d in (-24..=12)
+        // Fine marks every 3 dB between -24 and +24.
+        for d in (-24..=24)
             .step_by(3)
             .map(|d| d as f32)
             .filter(|_| self.labels && self.parts.scale)

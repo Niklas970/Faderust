@@ -1012,7 +1012,7 @@ fn strip_step(row: &mut [crate::config::Gain], delta: f32) {
             if db <= -60.0 {
                 -120.0
             } else {
-                ((db * 2.0).round() / 2.0).min(12.0)
+                ((db * 2.0).round() / 2.0).min(24.0)
             }
         };
     }
@@ -1125,7 +1125,7 @@ fn osd_mute(muted: bool) -> String {
 
 fn clamp_db(db: f32) -> f32 {
     if db.is_finite() {
-        db.clamp(-120.0, 12.0)
+        db.clamp(-120.0, 24.0)
     } else {
         -120.0
     }

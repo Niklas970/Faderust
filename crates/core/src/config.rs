@@ -211,7 +211,7 @@ fn fit_gains(gains: &mut Vec<Vec<Gain>>, inputs: usize, outputs: usize) {
             if !g.db.is_finite() {
                 g.db = -120.0;
             }
-            g.db = g.db.clamp(-120.0, 12.0);
+            g.db = g.db.clamp(-120.0, 24.0);
         }
     }
 }
