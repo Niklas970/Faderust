@@ -5,6 +5,10 @@ Layout (5 x 3):  Zurück | Preset | Preset | Preset | Alles stumm
                  Streifen 1 … 5 (auswählen)
                  Master 1, 2 (auswählen) | Auswahl leeren | Leiser | Lauter (wirken auf die Auswahl)
 Run: python3 scripts/profile.py
+
+The layout copies what Stream Deck 7.6 itself exports (Profiles > Export): everything lives under
+Profiles/<UUID>.sdProfile/, with one folder per page below it, and the profile's default page is an
+extra empty page next to the page list. Without that layout Stream Deck skips the profile on import.
 """
 import json
 import os
@@ -14,6 +18,7 @@ import zipfile
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 OUT = os.path.join(ROOT, "com.niklas970.faderust.sdPlugin", "Faderust.streamDeckProfile")
 PLUGIN = {"Name": "Faderust", "UUID": "com.niklas970.faderust", "Version": "0.3.6.0"}
+MODEL = "20GBL9901"  # model code of the exported profile this layout was copied from
 NS = uuid.UUID("6f1d3c52-7a0e-4b57-9d2a-0f4d1e9c3a11")  # fixed, so the file is reproducible
 
 
@@ -43,28 +48,33 @@ actions["2,2"] = key("Auswahl leeren", "select", {"target": "clear"}, 2)
 actions["3,2"] = key("Leiser", "group", {"selection": True, "step": -3})
 actions["4,2"] = key("Lauter", "group", {"selection": True, "step": 3})
 
-page = str(uuid.uuid5(NS, "page")).upper()
-folder = f"{str(uuid.uuid5(NS, 'profile')).upper()}.sdProfile"
+page = str(uuid.uuid5(NS, "page"))
+default_page = str(uuid.uuid5(NS, "default-page"))
+folder = f"Profiles/{str(uuid.uuid5(NS, 'profile')).upper()}.sdProfile"
 root = {
-    "Device": {"Model": "20GAA9902", "UUID": ""},
+    "Device": {"Model": MODEL, "UUID": ""},
     "Name": "Faderust",
-    "Pages": {"Current": page, "Default": page, "Pages": [page]},
+    "Pages": {"Current": "00000000-0000-0000-0000-000000000000", "Default": default_page, "Pages": [page]},
     "Version": "3.0",
 }
 package = {
-    "AppVersion": "7.1.0",
-    "DeviceModel": "20GAA9902",
+    "AppVersion": "7.6.1.23033",
+    "DeviceModel": MODEL,
+    "DeviceSettings": None,
     "FormatVersion": 1,
-    "OSType": "windows",
+    "OSType": "Windows",
+    "OSVersion": "10.0.26200",
     "RequiredPlugins": ["com.niklas970.faderust"],
 }
 pagefile = {"Controllers": [{"Type": "Keypad", "Actions": actions}], "Icon": "", "Name": ""}
+emptypage = {"Controllers": [{"Type": "Keypad", "Actions": None}], "Icon": "", "Name": ""}
 
 with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as z:
     for name, data in (
         ("package.json", package),
         (f"{folder}/manifest.json", root),
-        (f"{folder}/Profiles/{page}/manifest.json", pagefile),
+        (f"{folder}/Profiles/{page.upper()}/manifest.json", pagefile),
+        (f"{folder}/Profiles/{default_page.upper()}/manifest.json", emptypage),
     ):
         info = zipfile.ZipInfo(name, (2026, 1, 1, 0, 0, 0))
         z.writestr(info, json.dumps(data, indent=2, ensure_ascii=False))

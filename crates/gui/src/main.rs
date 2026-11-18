@@ -487,6 +487,8 @@ pub enum Message {
     CheckUpdate,
     UpdateChecked(Result<Option<Update>, String>, bool),
     TestBuildsLoaded(Result<Vec<faderust_core::update::TestBuild>, String>),
+    /// A press on an output's device line: release it, or open it again.
+    ToggleRelease(usize),
     InstallUpdate,
     UpdateInstalled(Result<(), String>),
     Open(Option<Dialog>),
@@ -1985,6 +1987,7 @@ impl App {
             Message::Route(i, o) => self.toggle_route(i, o),
             Message::Level(i, db) => self.move_strip(i, db),
             Message::Cell(i, o, pos) => self.set_cell(i, o, scale::clamp(scale::from_pos(pos))),
+            Message::ToggleRelease(o) => self.send(Command::ToggleRelease(o)),
             Message::Master(o, db) => {
                 if let Some(m) = self.outs.get_mut(o) {
                     m.db = db;
@@ -3122,17 +3125,23 @@ impl App {
         .into()
     }
 
-    fn note(text_: &str, on: bool) -> Element<'static, Message> {
-        container(
-            text(text_.to_string())
-                .size(11)
-                .wrapping(iced::widget::text::Wrapping::None)
-                .color(if on { signal() } else { muted_color() }),
+    /// The device line under an output's name. A press on it releases the
+    /// output for another device, or opens it again.
+    fn note(o: usize, text_: &str, on: bool) -> Element<'static, Message> {
+        iced::widget::mouse_area(
+            container(
+                text(text_.to_string())
+                    .size(11)
+                    .wrapping(iced::widget::text::Wrapping::None)
+                    .color(if on { signal() } else { muted_color() }),
+            )
+            .width(Length::Fill)
+            .height(14)
+            .align_x(Horizontal::Center)
+            .clip(true),
         )
-        .width(Length::Fill)
-        .height(14)
-        .align_x(Horizontal::Center)
-        .clip(true)
+        .on_press(Message::ToggleRelease(o))
+        .interaction(iced::mouse::Interaction::Pointer)
         .into()
     }
 
@@ -3592,7 +3601,7 @@ impl App {
                 if self.tight() {
                     Element::from(space().height(0))
                 } else {
-                    Self::note(&m.note, m.note_on)
+                    Self::note(o, &m.note, m.note_on)
                 },
                 fader,
                 if self.is_mini() {
@@ -3926,10 +3935,14 @@ impl App {
                         .size(12)
                         .font(BOLD)
                         .color(text_color()),
-                    text(m.note.clone())
-                        .size(11)
-                        .wrapping(iced::widget::text::Wrapping::None)
-                        .color(if m.note_on { signal() } else { muted_color() }),
+                    iced::widget::mouse_area(
+                        text(m.note.clone())
+                            .size(11)
+                            .wrapping(iced::widget::text::Wrapping::None)
+                            .color(if m.note_on { signal() } else { muted_color() }),
+                    )
+                    .on_press(Message::ToggleRelease(o))
+                    .interaction(iced::mouse::Interaction::Pointer),
                 ]
                 .spacing(1);
                 let master = iced::widget::slider(0.0..=1.0, scale::to_pos(m.db), move |p| {
