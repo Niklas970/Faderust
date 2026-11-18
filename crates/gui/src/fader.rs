@@ -87,6 +87,10 @@ pub struct Parts {
     pub thin_track: bool,
     /// Small console-style cap without a value window.
     pub small_cap: bool,
+    /// Slim grip cap in the accent colour, like a fader handle.
+    pub grip_cap: bool,
+    /// The meter as a thin line without frame.
+    pub meter_line: bool,
 }
 
 /// Fader track, scale, cap and LED meter of one strip in a single canvas.
@@ -107,6 +111,8 @@ pub struct Fader<'a> {
     pub labels: bool,
     pub kind: Kind,
     pub parts: Parts,
+    /// Colour of this strip (the accent of its bar and cap), if strips are coloured.
+    pub tint: Option<Color>,
 }
 
 #[derive(Default)]
@@ -266,6 +272,10 @@ impl canvas::Program<Message> for Fader<'_> {
 
 impl Fader<'_> {
     fn draw_body(&self, f: &mut Frame) {
+        let acc = self.tint.unwrap_or_else(accent);
+        let acc_l = self
+            .tint
+            .map_or_else(accent_light, |t| mix(t, Color::WHITE, 0.3));
         let total = f.height();
         let pos = self.pos;
         let cap_y = Self::y_of(pos, total);
@@ -361,7 +371,7 @@ impl Fader<'_> {
             let (core, glow) = if self.muted {
                 (rgb(85, 90, 97), None)
             } else {
-                (accent(), self.parts.glow.then(accent))
+                (acc, self.parts.glow.then_some(acc))
             };
             if let Some(g) = glow {
                 for (grow, alpha) in [(4.0, 0.06), (2.5, 0.10), (1.0, 0.16)] {
@@ -387,11 +397,18 @@ impl Fader<'_> {
 
         // Cap: graphite gradient, accent edges, index line and a value window.
         let (cw0, ch0) = if wide { (68.0, 44.0) } else { (40.0, 40.0) };
-        let (cw, ch) = if self.parts.small_cap {
+        let grip = self.parts.grip_cap;
+        let (cw, ch) = if grip {
             if wide {
-                (46.0, 32.0)
+                (48.0, 14.0)
             } else {
-                (34.0, 28.0)
+                (36.0, 14.0)
+            }
+        } else if self.parts.small_cap {
+            if wide {
+                (52.0, 36.0)
+            } else {
+                (38.0, 32.0)
             }
         } else {
             (cw0, ch0)
@@ -400,10 +417,12 @@ impl Fader<'_> {
         let cx = cx + (cw0 - cw) / 2.0;
         let cy = cap_y - ch / 2.0;
         let win_w = if wide { 52.0 } else { 34.0 };
-        let radius = if self.parts.square_cap {
+        let radius = if grip {
+            ch / 2.0
+        } else if self.parts.square_cap {
             CAP_RADIUS_SQUARE
         } else if self.parts.small_cap {
-            3.0
+            4.0
         } else {
             CAP_RADIUS
         };
@@ -428,19 +447,19 @@ impl Fader<'_> {
                 }),
             );
         }
-        let (c0, c1, c2, c3) = if self.parts.small_cap && !self.parts.accent_cap {
+        let (c0, c1, c2, c3) = if self.parts.small_cap && !self.parts.accent_cap && !grip {
             (
-                rgb(74, 78, 84),
+                rgb(92, 97, 104),
+                rgb(52, 55, 61),
+                rgb(32, 34, 38),
                 rgb(44, 47, 52),
-                rgb(30, 32, 36),
-                rgb(40, 43, 47),
             )
-        } else if self.parts.accent_cap && !off {
+        } else if (self.parts.accent_cap || grip) && !off {
             (
-                mix(accent(), Color::WHITE, 0.25),
-                accent(),
-                mix(accent(), Color::BLACK, 0.2),
-                mix(accent(), Color::BLACK, 0.1),
+                mix(acc, Color::WHITE, 0.25),
+                acc,
+                mix(acc, Color::BLACK, 0.2),
+                mix(acc, Color::BLACK, 0.1),
             )
         } else {
             (
@@ -458,11 +477,11 @@ impl Fader<'_> {
         let console = self.parts.small_cap;
         let edge = if off {
             rgb(85, 90, 97)
-        } else if console && !self.parts.accent_cap {
+        } else if console && !self.parts.accent_cap && !grip {
             // A console cap is black plastic; the accent stays in the index line.
             rgb(18, 19, 21)
         } else {
-            accent()
+            acc
         };
         f.fill(&cap, Fill::from(edge));
         f.fill(
@@ -478,28 +497,43 @@ impl Fader<'_> {
                 .with_color(rgb(12, 13, 15))
                 .with_width(1.0),
         );
+        if grip {
+            // A slim handle: one dark groove across the middle.
+            f.fill_rectangle(
+                Point::new(cx + ch / 2.0, cap_y - 0.5),
+                Size::new(cw - ch, 1.0),
+                Color {
+                    a: 0.55,
+                    ..Color::BLACK
+                },
+            );
+            return;
+        }
+        let line = if console { 3.0 } else { 2.0 };
         f.fill_rectangle(
-            Point::new(cx + 3.0, cap_y - 1.0),
-            Size::new(cw - 6.0, 2.0),
-            if off {
-                rgb(133, 139, 147)
-            } else {
-                accent_light()
-            },
+            Point::new(cx + 3.0, cap_y - line / 2.0),
+            Size::new(cw - 6.0, line),
+            if off { rgb(133, 139, 147) } else { acc_l },
         );
         if self.parts.small_cap {
             // Light edge along the top, like a bevel.
             f.fill_rectangle(
                 Point::new(cx + 3.0 + radius, cy + 1.0),
                 Size::new(cw - 6.0 - 2.0 * radius, 1.0),
-                rgb(150, 156, 164),
+                rgb(170, 176, 184),
+            );
+            // Dark lower edge, so the cap stands off the slot.
+            f.fill_rectangle(
+                Point::new(cx + 3.0 + radius, cy + ch - 2.0),
+                Size::new(cw - 6.0 - 2.0 * radius, 1.0),
+                rgb(10, 11, 13),
             );
             // Grip ridges like on a console fader: a dark groove with a light
             // edge below it, two above and two below the index line.
             let gx = cx + 6.0;
             let gw = cw - 12.0;
-            for k in [-2.0_f32, -1.0, 1.0, 2.0] {
-                let y = cap_y + k * 4.5 - k.signum() * 1.5;
+            for k in [-3.0_f32, -2.0, -1.0, 1.0, 2.0, 3.0] {
+                let y = cap_y + k * 4.0 - k.signum() * 2.0;
                 f.fill_rectangle(Point::new(gx, y - 1.0), Size::new(gw, 1.0), rgb(14, 15, 17));
                 f.fill_rectangle(Point::new(gx, y), Size::new(gw, 1.0), rgb(120, 126, 134));
             }
@@ -539,13 +573,21 @@ impl Fader<'_> {
         } else {
             (106.0, 16.0)
         };
+        let line = self.parts.meter_line;
+        let (mx, mw) = if line {
+            (mx + (mw - 5.0) / 2.0, 5.0)
+        } else {
+            (mx, mw)
+        };
         let mx = mx - self.shift();
         let frame = Path::rounded_rectangle(Point::new(mx, top), Size::new(mw, h), 2.0.into());
         f.fill(&frame, Fill::from(well()));
-        f.stroke(
-            &frame,
-            Stroke::default().with_color(border()).with_width(1.0),
-        );
+        if !line {
+            f.stroke(
+                &frame,
+                Stroke::default().with_color(border()).with_width(1.0),
+            );
+        }
         let offset = if self.post_fader {
             0.0
         } else {
@@ -557,7 +599,7 @@ impl Fader<'_> {
         let base = top + h - 1.0;
         let one = self.parts.one_color;
         let band = |at: f32| band_color(one, at);
-        if self.parts.segments {
+        if self.parts.segments && !line {
             // LED segments: 4 px lit, 2 px gap, coloured by height.
             let n = (inner / 6.0).floor().max(1.0) as usize;
             let seg = inner / n as f32;

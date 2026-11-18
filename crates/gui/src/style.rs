@@ -117,13 +117,13 @@ pub fn set_theme(mode: &str, accent: &str, signal: &str) {
             signal: mix(signal, black, 0.3),
             amber: rgb(183, 134, 15),
             danger: rgb(197, 59, 59),
-            bg: rgb(228, 230, 233),
-            panel: rgb(243, 244, 246),
-            panel_2: rgb(233, 235, 238),
-            well: rgb(42, 45, 50),
-            border: rgb(140, 147, 156),
-            text: rgb(18, 20, 23),
-            muted: rgb(68, 75, 83),
+            bg: rgb(219, 222, 227),
+            panel: rgb(241, 243, 246),
+            panel_2: rgb(229, 232, 236),
+            well: rgb(34, 37, 42),
+            border: rgb(122, 130, 141),
+            text: rgb(16, 18, 21),
+            muted: rgb(58, 65, 74),
         }
     } else {
         Palette {
@@ -190,6 +190,15 @@ pub fn panel() -> Color {
 }
 pub fn panel_2() -> Color {
     pal().panel_2
+}
+/// Background of the cards in dialogs: black on dark, a step darker than the
+/// dialog on light (the dark meter well would swallow their text there).
+pub fn card_bg() -> Color {
+    if text_color().r > 0.5 {
+        well()
+    } else {
+        mix(panel(), border(), 0.16)
+    }
 }
 pub fn well() -> Color {
     pal().well
