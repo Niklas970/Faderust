@@ -49,7 +49,7 @@ pub fn init(path: PathBuf) {
     }));
     write(&format!(
         "Faderust {} gestartet (pid {}, {} {})",
-        env!("CARGO_PKG_VERSION"),
+        crate::update::own_version(),
         std::process::id(),
         std::env::consts::OS,
         std::env::consts::ARCH
