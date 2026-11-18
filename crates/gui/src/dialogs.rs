@@ -1228,6 +1228,23 @@ fn design(app: &App) -> Element<'_, Message> {
     let meter_card = card(
         "Pegel",
         column![
+            segmented(vec![
+                (
+                    "Balken".into(),
+                    app.prefs.meter_look == 0,
+                    edit(Edit::MeterLook(0))
+                ),
+                (
+                    "Punkte".into(),
+                    app.prefs.meter_look == 1,
+                    edit(Edit::MeterLook(1))
+                ),
+                (
+                    "Blöcke".into(),
+                    app.prefs.meter_look == 2,
+                    edit(Edit::MeterLook(2))
+                ),
+            ]),
             check(app.prefs.meter_segments)
                 .label(tr("LED-Segmente statt Balken"))
                 .on_toggle(|v| edit(Edit::MeterSegments(v))),
@@ -1333,6 +1350,80 @@ fn design(app: &App) -> Element<'_, Message> {
             ("Deutsch".into(), lang_now == "de", edit(Edit::Lang("de"))),
         ]),
     );
+    let density = app.prefs.density.unwrap_or(1);
+    let glide = app.prefs.glide.unwrap_or(1);
+    let space_card = card(
+        "Dichte und Bewegung",
+        column![
+            hint("Abstand der Streifen"),
+            segmented(vec![
+                ("Kompakt".into(), density == 0, edit(Edit::Density(0))),
+                ("Normal".into(), density == 1, edit(Edit::Density(1))),
+                ("Luftig".into(), density == 2, edit(Edit::Density(2))),
+            ]),
+            hint("Fader gleiten"),
+            segmented(vec![
+                ("Aus".into(), glide == 0, edit(Edit::GlideSpeed(0))),
+                ("Normal".into(), glide == 1, edit(Edit::GlideSpeed(1))),
+                ("Langsam".into(), glide == 2, edit(Edit::GlideSpeed(2))),
+            ]),
+        ]
+        .spacing(8),
+    );
+    let profile_rows = app
+        .prefs
+        .profiles
+        .keys()
+        .fold(column![].spacing(6), |col, name| {
+            col.push(
+                row![
+                    button(
+                        text(name.clone())
+                            .size(13)
+                            .color(look_text(Look::Secondary))
+                    )
+                    .width(Length::Fill)
+                    .padding([6, 12])
+                    .on_press(edit(Edit::ProfileLoad(name.clone())))
+                    .style(flat(Look::Secondary)),
+                    button(
+                        text("✕")
+                            .size(12)
+                            .color(look_text(Look::Secondary))
+                            .center()
+                    )
+                    .width(28)
+                    .padding([6, 0])
+                    .on_press(edit(Edit::ProfileDelete(name.clone())))
+                    .style(flat(Look::Secondary)),
+                ]
+                .spacing(6),
+            )
+        });
+    let mut save = text_input("Name", &app.profile_name)
+        .on_input(|t| edit(Edit::ProfileName(t)))
+        .width(Length::Fill);
+    if !app.profile_name.trim().is_empty() {
+        save = save.on_submit(edit(Edit::ProfileSave));
+    }
+    let profile_card = card(
+        "Profile",
+        column![
+            hint("Speichert das ganze Design unter einem Namen. Ein Klick lädt es wieder."),
+            profile_rows,
+            row![
+                save,
+                if app.profile_name.trim().is_empty() {
+                    Element::from(text(tr("Speichern")).size(13).color(muted_color()))
+                } else {
+                    btn(tr("Speichern"), edit(Edit::ProfileSave), true)
+                },
+            ]
+            .spacing(8)
+            .align_y(Vertical::Center),
+        ]
+        .spacing(8),
+    );
     let reset_card = card(
         "Zurücksetzen",
         column![
@@ -1365,7 +1456,7 @@ fn design(app: &App) -> Element<'_, Message> {
         .into(),
         2 => row![
             cards(1, vec![view_card, hide_card, lang_card]),
-            cards(1, vec![extras_card]),
+            cards(1, vec![space_card, extras_card]),
         ]
         .spacing(12)
         .align_y(Vertical::Top)
@@ -1379,7 +1470,7 @@ fn design(app: &App) -> Element<'_, Message> {
         .into(),
     };
     let body = row![
-        cards(1, vec![preview_card, reset_card]),
+        cards(1, vec![preview_card, profile_card, reset_card]),
         column![tabs, content]
             .spacing(12)
             .width(Length::FillPortion(2)),
