@@ -147,6 +147,19 @@ pub fn own_build() -> &'static str {
     option_env!("FADERUST_BUILD").unwrap_or("")
 }
 
+/// The sub-version of this test build ("0.8.5.3"); empty for every other build.
+pub fn own_name() -> &'static str {
+    option_env!("FADERUST_BUILD_NAME").unwrap_or("")
+}
+
+/// The version to show: the release version, or the test build's sub-version.
+pub fn own_version() -> &'static str {
+    match own_name() {
+        "" => env!("CARGO_PKG_VERSION"),
+        name => name,
+    }
+}
+
 /// The release signing key, as the Tauri updater stores it: the public key
 /// file, base64 encoded.
 const PUBKEY: &str = "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg2QkYyMEVDMUZBNjkzNkEKUldScWs2WWY3Q0MvaHBVK25RbzlRMXBaUXN0NTJPVTcvTW5YTWt4aWNtOFRhdU1vT0pCU0N0R20K";

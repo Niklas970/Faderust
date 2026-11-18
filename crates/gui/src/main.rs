@@ -2876,7 +2876,7 @@ impl App {
                 logo,
                 text("FADERUST").size(13).font(BOLD).color(text_color()),
                 button(
-                    text(concat!("v", env!("CARGO_PKG_VERSION")))
+                    text(format!("v{}", faderust_core::update::own_version()))
                         .size(12)
                         .font(MONO)
                         .color(muted_color())

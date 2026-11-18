@@ -1348,6 +1348,10 @@ fn error_text(e: &str) -> Element<'static, Message> {
 }
 
 fn log(app: &App) -> Element<'_, Message> {
+    // As high as the window allows, so the buttons never fall off the bottom.
+    let log_height = app
+        .size_keep
+        .map_or(480.0, |s| (s.height - 360.0).clamp(140.0, 520.0));
     let empty = match &app.log_text {
         None => Some("Lade …"),
         Some(t) if t.trim().is_empty() => Some("Noch nichts protokolliert."),
@@ -1358,7 +1362,7 @@ fn log(app: &App) -> Element<'_, Message> {
         None => iced::widget::text_editor(&app.log_view)
             .on_action(Message::LogAction)
             .size(12)
-            .height(480)
+            .height(log_height)
             .padding(10)
             .style(|_, _| iced::widget::text_editor::Style {
                 background: Background::Color(bg()),
@@ -1375,23 +1379,17 @@ fn log(app: &App) -> Element<'_, Message> {
     };
     let body = column![
         hint("Was Faderust zuletzt gemeldet hat. Gezeigt sind die letzten 150 Zeilen; Text lässt sich markieren und mit Strg+C kopieren. „Kopieren“ legt die gezeigten Zeilen in die Zwischenablage, „Alles kopieren“ die ganze Datei. Bei einem Fehler bitte in ein Issue einfügen."),
-        view,
-    ]
-    .spacing(10);
-    frame(
-        "Protokoll".into(),
-        900.0,
-        true,
-        body.into(),
         row![
             btn("Aktualisieren", edit(Edit::Refresh), false),
             btn("Kopieren", edit(Edit::CopyLog), false),
             btn("Alles kopieren", edit(Edit::CopyLogAll), false),
             btn("Ordner öffnen", edit(Edit::OpenLogFolder), false),
         ]
-        .spacing(8)
-        .into(),
-    )
+        .spacing(8),
+        view,
+    ]
+    .spacing(10);
+    frame("Protokoll".into(), 900.0, false, body.into(), no_footer())
 }
 
 fn selftest(app: &App) -> Element<'_, Message> {
@@ -1677,7 +1675,13 @@ fn settings(app: &App) -> Element<'_, Message> {
                 env!("CARGO_PKG_VERSION")
             )
         } else {
-            format!("{} {}", tr("Dieses Faderust ist ein Test-Build:"), build)
+            let name = faderust_core::update::own_name();
+            let label = if name.is_empty() {
+                build.to_string()
+            } else {
+                format!("{name} ({build})")
+            };
+            format!("{} {}", tr("Dieses Faderust ist ein Test-Build:"), label)
         };
         let mut c = column![
             check(app.prefs.test_channel)
