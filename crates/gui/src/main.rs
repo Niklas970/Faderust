@@ -214,6 +214,10 @@ pub struct App {
     mini_count: usize,
     /// Logical window size the user chose, restored after a monitor with a
     /// different scaling changed it (Windows rounds a little on every move).
+    /// Native handle of the main window (0 until known).
+    hwnd: u64,
+    /// While the saved window rect is put back: when it began, the rect, steps done.
+    restore: Option<(Instant, [i32; 4], u8)>,
     size_keep: Option<Size>,
     /// Last known position of the main window (for the next start).
     pos_keep: Option<Point>,
@@ -448,6 +452,7 @@ pub enum Edit {
 pub enum Message {
     SetView(View),
     WinId(Option<window::Id>),
+    Hwnd(u64),
     /// Enter or leave compact mode.
     ToggleMini,
     /// The window size is known: enter mini mode.
@@ -983,6 +988,20 @@ impl App {
             return;
         };
         let win = Some([pos.x, pos.y, size.width, size.height]);
+        if self.restore.is_none() {
+            if let Some(px) = win_rect(self.hwnd) {
+                if Some(px) != self.prefs.win_px {
+                    faderust_core::log::write(&format!(
+                        "Fenster gemerkt (Pixel): {},{} {}x{}",
+                        px[0], px[1], px[2], px[3]
+                    ));
+                    let mut prefs = self.prefs.clone();
+                    prefs.win_px = Some(px);
+                    shell::save_prefs(&self.dir, &prefs);
+                    self.prefs = prefs;
+                }
+            }
+        }
         if win != old {
             faderust_core::log::write(&format!(
                 "Fenster gemerkt: {:.0},{:.0} {:.0}x{:.0}",
@@ -1335,6 +1354,8 @@ impl App {
             popup_hid_main: false,
             popup_draw: Cell::new(false),
             mini_count: 0,
+            hwnd: 0,
+            restore: None,
             size_keep: Some(Size::new(1400.0, 860.0)),
             pos_keep: None,
             win_dirty: None,
@@ -1727,8 +1748,30 @@ impl App {
             }
             Message::WinId(id) => {
                 self.win_id = id;
-                if let (true, Some(id)) = (self.pinned, id) {
-                    return window::set_level(id, window::Level::AlwaysOnTop);
+                let mut tasks = Vec::new();
+                if let Some(id) = id {
+                    tasks.push(window::raw_id::<Message>(id).map(Message::Hwnd));
+                    if self.pinned {
+                        tasks.push(window::set_level(id, window::Level::AlwaysOnTop));
+                    }
+                }
+                return Task::batch(tasks);
+            }
+            Message::Hwnd(h) => {
+                self.hwnd = h;
+                if let Some(rect) = self.prefs.win_px {
+                    if px_on_screen(rect) {
+                        faderust_core::log::write(&format!(
+                            "Fenster setzen (Pixel): {},{} {}x{}",
+                            rect[0], rect[1], rect[2], rect[3]
+                        ));
+                        set_win_rect(h, rect);
+                        self.restore = Some((Instant::now(), rect, 0));
+                    } else {
+                        faderust_core::log::write(
+                            "Gemerktes Fenster (Pixel) liegt auf keinem Bildschirm",
+                        );
+                    }
                 }
             }
             Message::DismissNotice => self.notice = None,
@@ -1825,13 +1868,18 @@ impl App {
             }
             Message::Moved(id, p) => {
                 // A minimised window reports a position far off screen.
-                if Some(id) == self.win_id && !self.mini && p.x > -10000.0 && p.y > -10000.0 {
+                if Some(id) == self.win_id
+                    && !self.mini
+                    && self.restore.is_none()
+                    && p.x > -10000.0
+                    && p.y > -10000.0
+                {
                     self.pos_keep = Some(p);
                     self.win_dirty = Some(Instant::now());
                 }
             }
             Message::Resized(id, size) => {
-                if Some(id) != self.win_id {
+                if Some(id) != self.win_id || self.restore.is_some() {
                     return Task::none();
                 }
                 // Sizes during a scaling change are Windows' rounding, not a wish.
@@ -1851,7 +1899,7 @@ impl App {
                 }
             }
             Message::Rescaled(id) => {
-                if Some(id) != self.win_id {
+                if Some(id) != self.win_id || self.restore.is_some() {
                     return Task::none();
                 }
                 let now = Instant::now();
@@ -2012,6 +2060,26 @@ impl App {
                 if let Some(snap) = snap {
                     self.apply(&snap, dt);
                     self.ready = true;
+                }
+                // Putting the saved rect back: Windows resizes a window that
+                // lands on a monitor with other scaling, so set it again.
+                if let Some((began, rect, step)) = self.restore {
+                    let ms = began.elapsed().as_millis();
+                    if ms > 1500 {
+                        self.restore = None;
+                        self.win_dirty = None;
+                        self.rescaled_at = None;
+                        self.burst_from = None;
+                        if let Some(now) = win_rect(self.hwnd) {
+                            faderust_core::log::write(&format!(
+                                "Fenster steht jetzt: {},{} {}x{}",
+                                now[0], now[1], now[2], now[3]
+                            ));
+                        }
+                    } else if (step == 0 && ms > 250) || (step == 1 && ms > 800) {
+                        set_win_rect(self.hwnd, rect);
+                        self.restore = Some((began, rect, step + 1));
+                    }
                 }
                 // Where the window is gets written once it has been still for a
                 // moment, so it survives any way the program ends (an update's
@@ -4338,6 +4406,69 @@ fn main() -> iced::Result {
         .theme(|app: &App, _| theme(app))
         .title(|_: &App, _| "Faderust".to_string())
         .run()
+}
+
+/// The main window's rect in physical pixels, unless it is minimised or maximised.
+#[cfg(windows)]
+fn win_rect(h: u64) -> Option<[i32; 4]> {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::*;
+    if h == 0 {
+        return None;
+    }
+    let hwnd = HWND(h as usize as *mut std::ffi::c_void);
+    let mut r = RECT::default();
+    // SAFETY: a plain query on the handle iced gave us; failure is handled.
+    unsafe {
+        if IsIconic(hwnd).as_bool()
+            || IsZoomed(hwnd).as_bool()
+            || GetWindowRect(hwnd, &mut r).is_err()
+        {
+            return None;
+        }
+    }
+    let rect = [r.left, r.top, r.right - r.left, r.bottom - r.top];
+    (rect[2] >= 200 && rect[3] >= 200).then_some(rect)
+}
+
+#[cfg(windows)]
+fn set_win_rect(h: u64, r: [i32; 4]) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::*;
+    if h == 0 {
+        return;
+    }
+    let hwnd = HWND(h as usize as *mut std::ffi::c_void);
+    // SAFETY: moves our own window; the result only matters for the log.
+    unsafe {
+        let _ = SetWindowPos(
+            hwnd,
+            None,
+            r[0],
+            r[1],
+            r[2],
+            r[3],
+            SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+    }
+}
+
+#[cfg(windows)]
+fn px_on_screen(r: [i32; 4]) -> bool {
+    window_on_screen([r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32])
+}
+
+#[cfg(not(windows))]
+fn win_rect(_: u64) -> Option<[i32; 4]> {
+    None
+}
+
+#[cfg(not(windows))]
+fn set_win_rect(_: u64, _: [i32; 4]) {}
+
+#[cfg(not(windows))]
+fn px_on_screen(_: [i32; 4]) -> bool {
+    false
 }
 
 /// Whether the saved window still lies on a screen (a monitor may be gone).
