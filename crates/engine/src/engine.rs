@@ -241,7 +241,8 @@ struct Idle {
     releasable: bool,
     /// Set after a failed reopening: when to try again, and since when.
     reopen: Option<(Instant, Instant)>,
-    /// Released by hand: stays closed, signal or not, until opened by hand.
+    /// Released by hand: stays closed while the sound playing at the press
+    /// goes on; once that is quiet, new sound opens it as usual.
     manual: bool,
 }
 
@@ -601,6 +602,11 @@ impl<B: AudioBackend> Engine<B> {
             }
         }
         for o in 0..self.outputs.len() {
+            if self.idle[o].released && self.idle[o].manual && !self.has_signal(o, now) {
+                // The sound that was playing at the press has ended: from
+                // here on, new sound opens the output again.
+                self.idle[o].manual = false;
+            }
             if !(self.idle[o].released && !self.idle[o].manual && self.has_signal(o, now)) {
                 continue;
             }
@@ -1384,7 +1390,7 @@ mod tests {
     }
 
     #[test]
-    fn an_output_released_by_hand_stays_closed_until_opened_by_hand() {
+    fn an_output_released_by_hand_opens_again_with_new_sound() {
         let b = FakeBackend::default();
         b.plug_input("game", 48_000, 2);
         b.plug_output("bt", 48_000, 2);
@@ -1409,8 +1415,14 @@ mod tests {
         assert!(engine.maintain_at(at(20_000)).is_empty());
         assert!(engine.is_released(0));
 
-        // Opened by hand, it plays again.
-        assert_eq!(connected(&engine.reopen_now(0)), 1);
+        // The sound ends; new sound opens the output again.
+        let quiet = |_: &str| 0.0;
+        b.pump(100, quiet);
+        assert!(engine.wake_at(at(30_000)).is_empty());
+        b.pump(100, quiet);
+        assert!(engine.wake_at(at(40_000)).is_empty());
+        b.pump(100, level);
+        assert_eq!(connected(&engine.wake_at(at(40_100))), 1);
         assert!(!engine.is_released(0));
         let out = b.pump(2_500, level);
         assert_level(&out["bt"], 0.4, 1e-2);
