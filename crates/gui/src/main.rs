@@ -217,6 +217,8 @@ pub struct App {
     size_keep: Option<Size>,
     /// Last known position of the main window (for the next start).
     pos_keep: Option<Point>,
+    /// The window moved or changed size at this time and is not saved yet.
+    win_dirty: Option<Instant>,
     /// When the window last changed its scaling or size during a move across
     /// monitors; the size settles after that.
     rescaled_at: Option<Instant>,
@@ -982,6 +984,10 @@ impl App {
         };
         let win = Some([pos.x, pos.y, size.width, size.height]);
         if win != old {
+            faderust_core::log::write(&format!(
+                "Fenster gemerkt: {:.0},{:.0} {:.0}x{:.0}",
+                pos.x, pos.y, size.width, size.height
+            ));
             let mut prefs = self.prefs.clone();
             prefs.win = win;
             shell::save_prefs(&self.dir, &prefs);
@@ -1331,6 +1337,7 @@ impl App {
             mini_count: 0,
             size_keep: Some(Size::new(1400.0, 860.0)),
             pos_keep: None,
+            win_dirty: None,
             rescaled_at: None,
             burst_from: None,
             size_log: Vec::new(),
@@ -1402,6 +1409,13 @@ impl App {
         };
         app.refresh_presets();
         app.refresh_sounds();
+        faderust_core::log::write(&match app.prefs.win {
+            Some(w) => format!(
+                "Fenster beim Start: gemerkt {:.0},{:.0} {:.0}x{:.0}",
+                w[0], w[1], w[2], w[3]
+            ),
+            None => "Fenster beim Start: nichts gemerkt".to_string(),
+        });
         app.pos_keep = app.prefs.win.map(|w| Point::new(w[0], w[1]));
         if let Some(w) = app.prefs.win {
             app.size_keep = Some(Size::new(w[2], w[3]));
@@ -1813,6 +1827,7 @@ impl App {
                 // A minimised window reports a position far off screen.
                 if Some(id) == self.win_id && !self.mini && p.x > -10000.0 && p.y > -10000.0 {
                     self.pos_keep = Some(p);
+                    self.win_dirty = Some(Instant::now());
                 }
             }
             Message::Resized(id, size) => {
@@ -1824,6 +1839,7 @@ impl App {
                 if !self.mini && size.width >= 200.0 && size.height >= 200.0 {
                     if self.rescaled_at.is_none() {
                         self.size_keep = Some(size);
+                        self.win_dirty = Some(Instant::now());
                         self.size_log.push((Instant::now(), size));
                         if self.size_log.len() > 256 {
                             self.size_log.remove(0);
@@ -1884,6 +1900,7 @@ impl App {
             Message::InstallUpdate => {
                 if let (Some(u), false) = (self.update.clone(), self.updating) {
                     self.updating = true;
+                    self.remember_window();
                     return blocking(
                         move || faderust_core::update::install(&u),
                         Message::UpdateInstalled,
@@ -1995,6 +2012,16 @@ impl App {
                 if let Some(snap) = snap {
                     self.apply(&snap, dt);
                     self.ready = true;
+                }
+                // Where the window is gets written once it has been still for a
+                // moment, so it survives any way the program ends (an update's
+                // setup stops it hard).
+                if self
+                    .win_dirty
+                    .is_some_and(|t| t.elapsed() > Duration::from_millis(800))
+                {
+                    self.win_dirty = None;
+                    self.remember_window();
                 }
                 // The window settled on a monitor with another scaling: give it
                 // back the size it had, down to the pixel.
@@ -4343,7 +4370,13 @@ fn window_on_screen(w: [f32; 4]) -> bool {
 /// The main window. The title bar is drawn by the app; closing goes to the tray.
 fn main_window(saved: Option<[f32; 4]>) -> window::Settings {
     let minimized = std::env::args().any(|a| a == shell::MINIMIZED_ARG);
-    let saved = saved.filter(|w| window_on_screen(*w));
+    let kept = saved.filter(|w| window_on_screen(*w));
+    if saved.is_some() && kept.is_none() {
+        faderust_core::log::write(
+            "Gemerktes Fenster liegt auf keinem Bildschirm, Standardposition",
+        );
+    }
+    let saved = kept;
     window::Settings {
         size: saved.map_or(Size::new(1400.0, 860.0), |w| Size::new(w[2], w[3])),
         position: saved.map_or(window::Position::Default, |w| {
