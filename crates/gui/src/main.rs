@@ -40,7 +40,6 @@ use faderust_core::{cable, AppState, Apps, Devices, Host, StreamDeckStatus, Wind
 
 use i18n::text;
 use iced::alignment::{Horizontal, Vertical};
-use iced::gradient;
 use iced::widget::canvas::{self, Canvas};
 use iced::widget::{button, column, container, image, row, space, stack};
 use iced::{
@@ -3476,7 +3475,7 @@ impl App {
             text(label)
                 .size(12)
                 .font(BOLD)
-                .color(if on { Color::WHITE } else { rgb(174, 180, 187) })
+                .color(look_text(if on { Look::Danger } else { Look::Secondary }))
                 .center(),
         )
         .width(72)
@@ -4681,38 +4680,8 @@ impl App {
 }
 
 fn mute_style(on: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
-    move |_, status| {
-        let (top, bottom, border) = if on {
-            (rgb(232, 102, 95), rgb(176, 54, 48), rgb(90, 26, 23))
-        } else if matches!(status, button::Status::Hovered) {
-            (rgb(66, 70, 76), rgb(40, 43, 47), rgb(16, 17, 19))
-        } else {
-            (rgb(59, 63, 69), rgb(36, 39, 43), rgb(16, 17, 19))
-        };
-        button::Style {
-            background: Some(Background::Gradient(
-                gradient::Linear::new(iced::Radians(std::f32::consts::PI))
-                    .add_stop(0.0, top)
-                    .add_stop(1.0, bottom)
-                    .into(),
-            )),
-            text_color: Color::WHITE,
-            border: Border {
-                color: border,
-                width: 1.0,
-                radius: 4.0.into(),
-            },
-            shadow: Shadow {
-                color: Color {
-                    a: 0.5,
-                    ..Color::BLACK
-                },
-                offset: iced::Vector::new(0.0, 2.0),
-                blur_radius: 3.0,
-            },
-            snap: true,
-        }
-    }
+    // Follows the chosen button look and the theme: red when muted.
+    style::key(if on { Look::Danger } else { Look::Secondary })
 }
 
 fn save_png(path: &str, shot: &window::Screenshot) {
