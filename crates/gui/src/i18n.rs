@@ -85,6 +85,7 @@ const TABLE: &[(&str, &str)] = &[
     ("Segmente", "Segments"),
     ("Linie", "Line"),
     ("Farben und Marke", "Colour and mark"),
+    ("Pfeile zum Sortieren auf den Streifen", "Arrows on the strips to sort them"),
     ("Farben einzeln", "Colours per element"),
     ("Fader-Bahn", "Fader bar"),
     ("Fader-Kappe", "Fader cap"),

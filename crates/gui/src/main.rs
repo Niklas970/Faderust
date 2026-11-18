@@ -435,6 +435,9 @@ pub enum Edit {
     EchoButton(bool),
     ButtonLook(&'static str),
     DesignTab(u8),
+    /// Moves a strip one place left (-1) or right (1) on the desk.
+    MoveStrip(usize, i8),
+    SortStrips(bool),
     MeterLook(u8),
     /// Shape of the meter: 0 bar, 1 segments, 2 dots, 3 blocks, 4 line.
     MeterForm(u8),
@@ -2627,6 +2630,27 @@ impl App {
             Edit::StripHistory(on) => self.set_look(|p| p.strip_history = on),
             Edit::Knobs(on) => self.set_look(|p| p.knobs = on),
             Edit::DesignTab(t) => self.design_tab = t,
+            Edit::SortStrips(on) => self.set_look(|p| p.sort_strips = on),
+            Edit::MoveStrip(i, dir) => {
+                let programs = self.strips.get(i).is_some_and(|s| s.program);
+                let mut group = self.ordered(programs);
+                if let Some(at) = group.iter().position(|&x| x == i) {
+                    let to = at as i32 + i32::from(dir);
+                    if to >= 0 && (to as usize) < group.len() {
+                        group.swap(at, to as usize);
+                        let mut order: Vec<String> = group
+                            .iter()
+                            .map(|&k| self.strips[k].device.clone())
+                            .collect();
+                        for d in &self.prefs.strip_order {
+                            if !order.contains(d) {
+                                order.push(d.clone());
+                            }
+                        }
+                        self.set_look(|p| p.strip_order = order);
+                    }
+                }
+            }
             Edit::MeterLook(v) => self.set_look(|p| p.meter_look = v),
             Edit::MeterForm(v) => self.set_look(|p| {
                 p.meter_segments = v == 1;
@@ -3698,8 +3722,22 @@ impl App {
         } else {
             self.prefs.device_edge_off
         };
+        let sorter: Element<'_, Message> = if self.prefs.sort_strips && !self.is_mini() {
+            let arrow = |label: &'static str, dir: i8| {
+                button(text(label).size(12).color(text_color()).center())
+                    .width(34)
+                    .height(22)
+                    .padding(0)
+                    .on_press(Message::Edit(Edit::MoveStrip(i, dir)))
+                    .style(key(Look::Secondary))
+            };
+            row![arrow("◀", -1), arrow("▶", 1)].spacing(6).into()
+        } else {
+            space().height(0).into()
+        };
         self.card_tint(
             column![
+                sorter,
                 top,
                 self.strip_name(s),
                 space().height(if self.is_mini() { 0 } else { 14 }),
@@ -3968,8 +4006,8 @@ impl App {
         );
         let devices = Self::section(
             Self::heading("GERÄTE", None, self.tight()),
-            (0..self.strips.len())
-                .filter(|&i| !self.strips[i].program)
+            self.ordered(false)
+                .into_iter()
                 .map(|i| self.strip(i))
                 .collect(),
             false,
@@ -4014,8 +4052,8 @@ impl App {
         };
         let programs = Self::section(
             Self::heading("PROGRAMME", Some(extra), self.tight()),
-            (0..self.strips.len())
-                .filter(|&i| self.strips[i].program && !self.strips[i].hidden)
+            self.ordered(true)
+                .into_iter()
                 .map(|i| self.strip(i))
                 .collect(),
             true,
@@ -4025,6 +4063,23 @@ impl App {
             .spacing(2)
             .height(Length::Fill)
             .into()
+    }
+
+    /// The strips of a group on the desk (devices or shown programs) in the
+    /// order the user chose; new ones go to the end.
+    fn ordered(&self, programs: bool) -> Vec<usize> {
+        let mut v: Vec<usize> = (0..self.strips.len())
+            .filter(|&i| self.strips[i].program == programs && !(programs && self.strips[i].hidden))
+            .collect();
+        let pos = |i: usize| {
+            self.prefs
+                .strip_order
+                .iter()
+                .position(|d| *d == self.strips[i].device)
+                .unwrap_or(usize::MAX)
+        };
+        v.sort_by_key(|&i| pos(i));
+        v
     }
 
     /// Thin level bar of the matrix, or nothing when the block is switched off.
