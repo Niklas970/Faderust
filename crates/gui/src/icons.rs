@@ -23,6 +23,12 @@ pub enum Glyph {
     Disc,
     /// A music note (soundboard).
     Note,
+    /// A microphone, a globe (browser), a gamepad and a speech bubble (chat):
+    /// the symbols in the strip head.
+    Mic,
+    Globe,
+    Pad,
+    Chat,
     /// Window buttons: minimise, maximise, close.
     WinMin,
     WinMax,
@@ -184,6 +190,61 @@ impl<M> canvas::Program<M> for Icon {
                 });
                 f.stroke(&flag, line);
             }
+            Glyph::Mic => {
+                let capsule = Path::rounded_rectangle(
+                    p(6.0, 1.5),
+                    Size::new(4.0 * k, 7.0 * k),
+                    (2.0 * k).into(),
+                );
+                f.stroke(&capsule, line);
+                let cradle = Path::new(|b| {
+                    b.arc(canvas::path::Arc {
+                        center: p(8.0, 8.0),
+                        radius: 4.6 * k,
+                        start_angle: iced::Radians(0.0),
+                        end_angle: iced::Radians(std::f32::consts::PI),
+                    });
+                });
+                f.stroke(&cradle, line);
+                f.stroke(&Path::line(p(8.0, 12.6), p(8.0, 14.5)), line);
+                f.stroke(&Path::line(p(5.5, 14.5), p(10.5, 14.5)), line);
+            }
+            Glyph::Globe => {
+                f.stroke(&Path::circle(p(8.0, 8.0), 6.3 * k), line);
+                f.stroke(&Path::line(p(1.8, 8.0), p(14.2, 8.0)), line);
+                let meridian = Path::new(|b| {
+                    b.move_to(p(8.0, 1.8));
+                    b.bezier_curve_to(p(11.6, 4.6), p(11.6, 11.4), p(8.0, 14.2));
+                    b.bezier_curve_to(p(4.4, 11.4), p(4.4, 4.6), p(8.0, 1.8));
+                });
+                f.stroke(&meridian, line);
+            }
+            Glyph::Pad => {
+                let body = Path::rounded_rectangle(
+                    p(1.5, 4.5),
+                    Size::new(13.0 * k, 7.5 * k),
+                    (3.7 * k).into(),
+                );
+                f.stroke(&body, line);
+                f.stroke(&Path::line(p(4.2, 8.2), p(7.4, 8.2)), line);
+                f.stroke(&Path::line(p(5.8, 6.6), p(5.8, 9.8)), line);
+                for (x, y) in [(10.4, 7.2), (12.2, 9.2)] {
+                    f.fill(&Path::circle(p(x, y), 0.95 * k), Fill::from(self.color));
+                }
+            }
+            Glyph::Chat => {
+                let bubble = Path::new(|b| {
+                    b.move_to(p(2.0, 3.0));
+                    b.line_to(p(14.0, 3.0));
+                    b.line_to(p(14.0, 11.0));
+                    b.line_to(p(7.2, 11.0));
+                    b.line_to(p(4.0, 14.0));
+                    b.line_to(p(4.0, 11.0));
+                    b.line_to(p(2.0, 11.0));
+                    b.close();
+                });
+                f.stroke(&bubble, line);
+            }
             Glyph::WinMin => {
                 f.stroke(&Path::line(p(3.0, 8.0), p(13.0, 8.0)), line);
             }
@@ -215,5 +276,46 @@ impl<M> canvas::Program<M> for Icon {
             }
         }
         vec![f.into_geometry()]
+    }
+}
+
+/// The symbol for a strip: by what its name says it is.
+pub fn glyph_for(label: &str, program: bool) -> Glyph {
+    let l = label.to_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| l.contains(w));
+    if has(&["mikro", "mic", "headset", "line in", "aufnahme"]) {
+        Glyph::Mic
+    } else if has(&[
+        "brave", "chrome", "firefox", "edge", "opera", "vivaldi", "browser", "safari",
+    ]) {
+        Glyph::Globe
+    } else if has(&[
+        "steam",
+        "epic",
+        "battle",
+        "origin",
+        "game",
+        "minecraft",
+        "valorant",
+        "league",
+        "wow",
+    ]) {
+        Glyph::Pad
+    } else if has(&[
+        "discord",
+        "teams",
+        "zoom",
+        "skype",
+        "telegram",
+        "whatsapp",
+        "teamspeak",
+        "slack",
+        "signal",
+    ]) {
+        Glyph::Chat
+    } else if program {
+        Glyph::Speaker
+    } else {
+        Glyph::Mic
     }
 }

@@ -22,6 +22,7 @@ mod picker;
 mod scale;
 mod shell;
 mod style;
+mod widgets;
 
 use std::cell::Cell;
 use std::path::{Path, PathBuf};
@@ -67,6 +68,9 @@ const CLOSED_ONLY: u64 = u64::MAX;
 /// Row before a strip move and the `(output, dB)` pairs the move applied.
 type Anchor = (Vec<Gain>, Vec<(usize, f32)>);
 
+/// Samples of the level history: two per second, thirty seconds.
+const HIST_LEN: usize = 60;
+
 pub struct Strip {
     pub cache: canvas::Cache,
     pub label: String,
@@ -100,6 +104,8 @@ pub struct Strip {
     heard: Instant,
     /// `gains` row as the engine reports it.
     row: Vec<Gain>,
+    /// Level of the last seconds for the strip head, 0..1, oldest first.
+    hist: Vec<f32>,
     /// Row before the strip fader started moving, see [`App::move_strip`].
     anchor: Option<Anchor>,
 }
@@ -216,6 +222,12 @@ pub struct App {
     /// different scaling changed it (Windows rounds a little on every move).
     /// Native handle of the main window (0 until known).
     hwnd: u64,
+    /// Preset tiles for the scene bar: name and one bar height per input.
+    scenes: Vec<(String, Vec<f32>)>,
+    /// The preset loaded last (highlighted in the scene bar).
+    last_scene: Option<String>,
+    /// When the level history of the strips was last extended.
+    hist_at: Instant,
     /// While the saved window rect is put back: when it began, the rect, steps done.
     restore: Option<(Instant, [i32; 4], u8)>,
     size_keep: Option<Size>,
@@ -414,6 +426,10 @@ pub enum Edit {
     GripCap(bool),
     MeterLine(bool),
     StripColors(bool),
+    StripHead(bool),
+    StripHistory(bool),
+    Knobs(bool),
+    SceneBar(bool),
     Relief(bool),
     /// A colour for the LCD display, typed or chosen.
     LcdHex(String),
@@ -1360,6 +1376,9 @@ impl App {
             popup_draw: Cell::new(false),
             mini_count: 0,
             hwnd: 0,
+            scenes: Vec::new(),
+            last_scene: None,
+            hist_at: Instant::now(),
             restore: None,
             size_keep: Some(Size::new(1400.0, 860.0)),
             pos_keep: None,
@@ -1506,14 +1525,32 @@ impl App {
     }
 
     fn refresh_presets(&mut self) {
-        self.presets = self
-            .core
-            .config
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
+        let cfg = self.core.config.lock().unwrap_or_else(|e| e.into_inner());
+        self.presets = cfg.presets.iter().map(|p| p.name.clone()).collect();
+        // One bar per input: the loudest send of the preset, as a fader position.
+        self.scenes = cfg
             .presets
             .iter()
-            .map(|p| p.name.clone())
+            .map(|p| {
+                let bars = p
+                    .gains
+                    .iter()
+                    .take(8)
+                    .map(|row| {
+                        let db = row
+                            .iter()
+                            .filter(|g| !g.muted)
+                            .map(|g| g.db)
+                            .fold(f32::MIN, f32::max);
+                        if db <= scale::OFF {
+                            0.0
+                        } else {
+                            scale::to_pos(db)
+                        }
+                    })
+                    .collect();
+                (p.name.clone(), bars)
+            })
             .collect();
     }
 
@@ -1547,6 +1584,7 @@ impl App {
                 // programs are gone a few seconds after the start.
                 heard: now - Duration::from_secs(secs.saturating_sub(if startup { 0 } else { 5 })),
                 row: vec![],
+                hist: Vec::new(),
                 anchor: None,
             });
             self.fx.push(CoreFx::default().into());
@@ -2067,6 +2105,16 @@ impl App {
                     self.apply(&snap, dt);
                     self.ready = true;
                 }
+                if self.prefs.strip_history && self.hist_at.elapsed() >= Duration::from_millis(500)
+                {
+                    self.hist_at = Instant::now();
+                    for s in &mut self.strips {
+                        s.hist.push(((s.shown + 60.0) / 60.0).clamp(0.0, 1.0));
+                        if s.hist.len() > HIST_LEN {
+                            s.hist.remove(0);
+                        }
+                    }
+                }
                 // Putting the saved rect back: Windows resizes a window that
                 // lands on a monitor with other scaling, so set it again.
                 if let Some((began, rect, step)) = self.restore {
@@ -2574,6 +2622,10 @@ impl App {
             Edit::GripCap(on) => self.set_look(|p| p.grip_cap = on),
             Edit::MeterLine(on) => self.set_look(|p| p.meter_line = on),
             Edit::StripColors(on) => self.set_look(|p| p.strip_colors = on),
+            Edit::StripHead(on) => self.set_look(|p| p.strip_head = on),
+            Edit::StripHistory(on) => self.set_look(|p| p.strip_history = on),
+            Edit::Knobs(on) => self.set_look(|p| p.knobs = on),
+            Edit::SceneBar(on) => self.set_look(|p| p.scene_bar = on),
             Edit::Relief(on) => self.set_look(|p| p.relief = on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::TestChannel(on) => {
@@ -2708,6 +2760,7 @@ impl App {
                 ));
             }
             Edit::LoadPreset(name) => {
+                self.last_scene = Some(name.clone());
                 if let Err(e) = faderust_core::load_preset(name, &self.core) {
                     self.say("error", e);
                 }
@@ -3104,6 +3157,38 @@ impl App {
 
     // --- desk ------------------------------------------------------------
 
+    /// The name of a strip; with the head options on, with its symbol above
+    /// and the level of the last seconds below.
+    fn strip_name<'a>(&self, s: &'a Strip) -> Element<'a, Message> {
+        let mut col = column![].spacing(4).width(Length::Fill);
+        let full = !self.is_mini();
+        if self.prefs.strip_head && full {
+            let color = self.head_tint(&s.device).unwrap_or_else(accent_light);
+            col = col.push(
+                Canvas::new(icons::Icon {
+                    glyph: icons::glyph_for(&s.label, s.program),
+                    color,
+                    on: false,
+                })
+                .width(Length::Fill)
+                .height(22),
+            );
+        }
+        col = col.push(Self::name_label(&s.label));
+        if self.prefs.strip_history && full {
+            col = col.push(
+                Canvas::new(widgets::Sparkline {
+                    points: s.hist.clone(),
+                    color: self.head_tint(&s.device).unwrap_or_else(signal),
+                    span: HIST_LEN,
+                })
+                .width(Length::Fill)
+                .height(30),
+            );
+        }
+        col.into()
+    }
+
     fn name_label(text_: &str) -> Element<'static, Message> {
         container(
             text(text_.to_uppercase())
@@ -3226,16 +3311,22 @@ impl App {
 
     /// The colour of a strip when strips are coloured: stable per input.
     fn tint_of(&self, id: &str) -> Option<Color> {
-        if !self.prefs.strip_colors {
-            return None;
-        }
+        self.prefs.strip_colors.then(|| Self::palette_color(id))
+    }
+
+    /// The colour of the band and symbol in a strip head.
+    fn head_tint(&self, id: &str) -> Option<Color> {
+        (self.prefs.strip_colors || self.prefs.strip_head).then(|| Self::palette_color(id))
+    }
+
+    fn palette_color(id: &str) -> Color {
         const COLORS: [&str; 8] = [
             "#4da3ff", "#ff5a5f", "#b57bff", "#2ec4b6", "#f2c94c", "#ff8fb1", "#7bd88f", "#ff9f43",
         ];
         let h = id
             .bytes()
             .fold(5381_u32, |h, b| h.wrapping_mul(33) ^ u32::from(b));
-        Some(hex(COLORS[h as usize % COLORS.len()]))
+        hex(COLORS[h as usize % COLORS.len()])
     }
 
     /// Lit keycap: an LED strip on top glows red when muted.
@@ -3469,7 +3560,7 @@ impl App {
         self.card_tint(
             column![
                 top,
-                Self::name_label(&s.label),
+                self.strip_name(s),
                 space().height(if self.is_mini() { 0 } else { 14 }),
                 fader,
                 if self.is_mini() {
@@ -3491,7 +3582,7 @@ impl App {
                 164.0
             },
             !edge_off && !s.muted && s.shown > -60.0,
-            self.tint_of(&s.device),
+            self.head_tint(&s.device),
         )
     }
 
@@ -3530,7 +3621,7 @@ impl App {
                 } else {
                     self.prefs.device_edge_off
                 }),
-                self.tint_of("preview"),
+                self.head_tint("preview"),
             )
         };
         row![sample(-6.0, -16.0, -9.0, false)]
@@ -4165,6 +4256,48 @@ impl App {
             .into()
     }
 
+    /// The presets as tiles under the desk: a click loads one and the
+    /// faders glide to their places.
+    fn scene_bar(&self) -> Element<'_, Message> {
+        let tiles = self.scenes.iter().map(|(name, bars)| {
+            let on = self.last_scene.as_deref() == Some(name.as_str());
+            let look = if on { Look::Primary } else { Look::Secondary };
+            let lit = if on { accent_light() } else { muted_color() };
+            let mini = row(bars.iter().map(|v| {
+                container(space())
+                    .width(5)
+                    .height(3.0 + 22.0 * v)
+                    .style(move |_| container::Style {
+                        background: Some(Background::Color(lit)),
+                        border: Border {
+                            radius: 1.5.into(),
+                            ..Border::default()
+                        },
+                        ..container::Style::default()
+                    })
+                    .into()
+            }))
+            .spacing(3)
+            .align_y(Vertical::Bottom)
+            .height(25);
+            button(
+                column![
+                    text(name.clone())
+                        .size(12)
+                        .font(BOLD)
+                        .color(style::look_text(look)),
+                    mini
+                ]
+                .spacing(5),
+            )
+            .padding([6, 12])
+            .on_press(Message::Edit(Edit::LoadPreset(name.clone())))
+            .style(style::flat(look))
+            .into()
+        });
+        row(tiles).spacing(8).wrap().into()
+    }
+
     fn view(&self) -> Element<'_, Message> {
         let body = match self.view {
             View::Desk => self.desk(),
@@ -4242,6 +4375,14 @@ impl App {
             }
             None => space().height(0).into(),
         };
+        let body: Element<'_, Message> =
+            if self.prefs.scene_bar && !self.is_mini() && !self.scenes.is_empty() {
+                column![container(body).height(Length::Fill), self.scene_bar()]
+                    .spacing(8)
+                    .into()
+            } else {
+                body
+            };
         let page = column![
             self.titlebar(),
             container(body)
