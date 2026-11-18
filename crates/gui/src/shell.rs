@@ -105,6 +105,9 @@ pub fn set_autostart(on: bool) -> Result<(), String> {
 pub struct Prefs {
     /// Where the main window was last: x, y, width, height (logical px).
     pub win: Option<[f32; 4]>,
+    /// The same in physical pixels as Windows has it (x, y, width, height).
+    /// Logical values break when monitors have different scaling.
+    pub win_px: Option<[i32; 4]>,
     /// "desk" or "matrix".
     pub view: String,
     /// Seconds of silence after which a program leaves the desk; `None` is the default.
