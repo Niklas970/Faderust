@@ -637,6 +637,10 @@ impl<B: AudioBackend> Engine<B> {
         // One lane from every connected input.
         let mut lanes = Vec::with_capacity(self.inputs.len());
         let mut producers = Vec::new();
+        // Waiting lanes join after the stream opened: if it does not (a
+        // Bluetooth device often needs a second try), they stay for the next
+        // attempt with the sound they collected.
+        let mut waiting_lanes: Vec<(usize, Box<Lane>)> = Vec::new();
         for (i, state) in self.inputs.iter().enumerate() {
             match (&self.live_in[i], &state.device) {
                 // A stream that just failed is about to be rebuilt: no lane to it.
@@ -648,14 +652,16 @@ impl<B: AudioBackend> Engine<B> {
                     };
                     // A lane that kept collecting while the output was released
                     // starts with the sound that woke it up.
-                    let waiting = self.parked[o][i].take().filter(|l| {
+                    let fits = self.parked[o][i].as_ref().is_some_and(|l| {
                         let s = l.spec();
                         (s.input_rate, s.output_rate, s.target_ms)
                             == (spec.input_rate, spec.output_rate, spec.target_ms)
                     });
-                    if let Some(mut waiting) = waiting {
-                        waiting.catch_up();
-                        lanes.push(Some(waiting));
+                    if fits {
+                        if let Some(waiting) = self.parked[o][i].take() {
+                            waiting_lanes.push((i, waiting));
+                        }
+                        lanes.push(None);
                         continue;
                     }
                     let stats = Arc::clone(&self.lanes[i][o]);
@@ -679,9 +685,19 @@ impl<B: AudioBackend> Engine<B> {
             on_error,
         ) {
             Ok(s) => s,
-            Err(e) => return failed(e),
+            Err(e) => {
+                for (i, lane) in waiting_lanes {
+                    self.parked[o][i] = Some(lane);
+                }
+                return failed(e);
+            }
         };
 
+        let mut handle = handle;
+        for (i, mut lane) in waiting_lanes {
+            lane.catch_up();
+            let _ = handle.send(OutputCommand::SetLane(i, Some(lane)));
+        }
         for (i, lane_input) in producers {
             if let Some(live) = &mut self.live_in[i] {
                 // A full queue means the input stalled; it will be rebuilt.
@@ -1338,6 +1354,42 @@ mod tests {
         b.break_device("bt", false);
         assert_eq!(connected(&engine.wake_at(at(8_200))), 1);
         assert!(!engine.is_released(0));
+    }
+
+    #[test]
+    fn sound_collected_during_a_failed_reopen_is_not_lost() {
+        let b = FakeBackend::default();
+        b.plug_input("game", 48_000, 2);
+        b.plug_output("bt", 48_000, 2);
+        let mut cfg = config(&["game"], &[("bt", 80)]);
+        cfg.outputs[0].release_after = Some(Duration::from_secs(5));
+        let mut engine = Engine::new(b.clone(), cfg).unwrap();
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let quiet = |_: &str| 0.0;
+        engine.maintain_at(at(0));
+        b.pump(100, quiet);
+        engine.maintain_at(at(1_000));
+        b.pump(100, quiet);
+        assert_eq!(
+            engine.maintain_at(at(7_000)),
+            vec![EngineEvent::Released { slot: 0 }]
+        );
+        engine.wake_at(at(7_500));
+
+        // Sound returns; the first attempts fail, the sound keeps coming.
+        b.break_device("bt", true);
+        b.pump_inputs(120, level);
+        assert!(engine
+            .wake_at(at(8_000))
+            .iter()
+            .any(|e| matches!(e, EngineEvent::ConnectFailed { .. })));
+        b.pump_inputs(200, level);
+        b.break_device("bt", false);
+        assert_eq!(connected(&engine.wake_at(at(8_300))), 1);
+        let out = b.pump(30, level);
+        let last = *out["bt"].last().unwrap();
+        assert!(last > 0.3, "bt plays {last}");
     }
 
     #[test]
