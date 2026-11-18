@@ -38,7 +38,9 @@ impl Kind {
 /// Colour of the meter at a height (0..1): signal, amber and clip, or the
 /// signal colour alone when the block "one colour" is on.
 fn band_color(one: bool, at: f32) -> Color {
-    if one || at < 0.72 {
+    if let Some(c) = part(Part::Meter) {
+        c
+    } else if one || at < 0.72 {
         signal()
     } else if at < 0.80 {
         mix(signal(), amber(), 0.5)
@@ -273,8 +275,11 @@ impl canvas::Program<Message> for Fader<'_> {
 impl Fader<'_> {
     fn draw_body(&self, f: &mut Frame) {
         let acc = self.tint.unwrap_or_else(accent);
-        let acc_l = self
-            .tint
+        let cap_own = part(Part::Cap);
+        let capc = cap_own.unwrap_or(acc);
+        let acap = self.parts.accent_cap || cap_own.is_some();
+        let acc_l = cap_own
+            .or(self.tint)
             .map_or_else(accent_light, |t| mix(t, Color::WHITE, 0.3));
         let total = f.height();
         let pos = self.pos;
@@ -447,19 +452,19 @@ impl Fader<'_> {
                 }),
             );
         }
-        let (c0, c1, c2, c3) = if self.parts.small_cap && !self.parts.accent_cap && !grip {
+        let (c0, c1, c2, c3) = if self.parts.small_cap && !acap && !grip {
             (
                 rgb(92, 97, 104),
                 rgb(52, 55, 61),
                 rgb(32, 34, 38),
                 rgb(44, 47, 52),
             )
-        } else if (self.parts.accent_cap || grip) && !off {
+        } else if (acap || grip) && !off {
             (
-                mix(acc, Color::WHITE, 0.25),
-                acc,
-                mix(acc, Color::BLACK, 0.2),
-                mix(acc, Color::BLACK, 0.1),
+                mix(capc, Color::WHITE, 0.25),
+                capc,
+                mix(capc, Color::BLACK, 0.2),
+                mix(capc, Color::BLACK, 0.1),
             )
         } else {
             (
@@ -477,11 +482,11 @@ impl Fader<'_> {
         let console = self.parts.small_cap;
         let edge = if off {
             rgb(85, 90, 97)
-        } else if console && !self.parts.accent_cap && !grip {
+        } else if console && !acap && !grip {
             // A console cap is black plastic; the accent stays in the index line.
             rgb(18, 19, 21)
         } else {
-            acc
+            capc
         };
         f.fill(&cap, Fill::from(edge));
         f.fill(
