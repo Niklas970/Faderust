@@ -409,7 +409,17 @@ pub fn set_button_look(l: &str) {
 /// Reshapes the standard key into the chosen look.
 fn restyle(look: Look, status: button::Status, mut st: button::Style) -> button::Style {
     let kind = BUTTON_LOOK.read().map(|k| k.clone()).unwrap_or_default();
-    let primary = look == Look::Primary;
+    let primary = look != Look::Secondary;
+    let tone = if look == Look::Danger {
+        danger()
+    } else {
+        accent()
+    };
+    let tone_l = if look == Look::Danger {
+        mix(danger(), Color::WHITE, 0.3)
+    } else {
+        accent_light()
+    };
     let (top, bottom, _) = key_colors(look, status);
     let solid = Background::Color(mix(top, bottom, 0.5));
     let hot = matches!(status, button::Status::Hovered | button::Status::Pressed);
@@ -427,36 +437,32 @@ fn restyle(look: Look, status: button::Status, mut st: button::Style) -> button:
         }
         "glow" => {
             if primary {
-                st.border.color = accent_light();
+                st.border.color = tone_l;
                 st.border.width = 2.0;
-                st.shadow = glow(accent_light(), 9.0);
+                st.shadow = glow(tone_l, 9.0);
             } else if hot {
-                st.border.color = mix(border(), accent_light(), 0.5);
+                st.border.color = mix(border(), tone_l, 0.5);
             }
         }
         "pill" => {
             st.border.radius = 99.0.into();
             st.border.width = 1.5;
             if primary {
-                st.background = Some(Background::Color(accent()));
-                st.border.color = accent_light();
+                st.background = Some(Background::Color(tone));
+                st.border.color = tone_l;
             } else {
                 st.background = Some(Background::Color(if hot {
-                    mix(panel(), accent(), 0.2)
+                    mix(panel(), tone, 0.2)
                 } else {
                     Color::TRANSPARENT
                 }));
-                st.border.color = mix(border(), accent_light(), if hot { 0.7 } else { 0.0 });
+                st.border.color = mix(border(), tone_l, if hot { 0.7 } else { 0.0 });
             }
             st.shadow = Shadow::default();
         }
         "neon" => {
-            let c = if primary {
-                accent_light()
-            } else {
-                muted_color()
-            };
-            let c = if hot { accent_light() } else { c };
+            let c = if primary { tone_l } else { muted_color() };
+            let c = if hot { tone_l } else { c };
             st.background = Some(Background::Color(mix(
                 well(),
                 c,
@@ -484,7 +490,7 @@ fn restyle(look: Look, status: button::Status, mut st: button::Style) -> button:
         }
         "tile" => {
             st.background = Some(Background::Color(if primary {
-                mix(panel_2(), accent(), 0.45)
+                mix(panel_2(), tone, 0.45)
             } else if hot {
                 mix(panel_2(), text_color(), 0.1)
             } else {
