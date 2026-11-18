@@ -87,8 +87,6 @@ pub struct Parts {
     pub cap_value: bool,
     /// Thin track instead of the recessed slot.
     pub thin_track: bool,
-    /// Small console-style cap without a value window.
-    pub small_cap: bool,
     /// Slim grip cap in the accent colour, like a fader handle.
     pub grip_cap: bool,
     /// The meter as a thin line without frame.
@@ -411,12 +409,6 @@ impl Fader<'_> {
             } else {
                 (36.0, 14.0)
             }
-        } else if self.parts.small_cap {
-            if wide {
-                (52.0, 36.0)
-            } else {
-                (38.0, 32.0)
-            }
         } else {
             (cw0, ch0)
         };
@@ -428,8 +420,6 @@ impl Fader<'_> {
             ch / 2.0
         } else if self.parts.square_cap {
             CAP_RADIUS_SQUARE
-        } else if self.parts.small_cap {
-            4.0
         } else {
             CAP_RADIUS
         };
@@ -454,14 +444,7 @@ impl Fader<'_> {
                 }),
             );
         }
-        let (c0, c1, c2, c3) = if self.parts.small_cap && !acap && !grip {
-            (
-                rgb(92, 97, 104),
-                rgb(52, 55, 61),
-                rgb(32, 34, 38),
-                rgb(44, 47, 52),
-            )
-        } else if (acap || grip) && !off {
+        let (c0, c1, c2, c3) = if (acap || grip) && !off {
             (
                 mix(capc, Color::WHITE, 0.25),
                 capc,
@@ -481,15 +464,7 @@ impl Fader<'_> {
             .add_stop(0.45, c1)
             .add_stop(0.55, c2)
             .add_stop(1.0, c3);
-        let console = self.parts.small_cap;
-        let edge = if off {
-            rgb(85, 90, 97)
-        } else if console && !acap && !grip {
-            // A console cap is black plastic; the accent stays in the index line.
-            rgb(18, 19, 21)
-        } else {
-            capc
-        };
+        let edge = if off { rgb(85, 90, 97) } else { capc };
         f.fill(&cap, Fill::from(edge));
         f.fill(
             &inner,
@@ -516,36 +491,12 @@ impl Fader<'_> {
             );
             return;
         }
-        let line = if console { 3.0 } else { 2.0 };
+        let line = 2.0;
         f.fill_rectangle(
             Point::new(cx + 3.0, cap_y - line / 2.0),
             Size::new(cw - 6.0, line),
             if off { rgb(133, 139, 147) } else { acc_l },
         );
-        if self.parts.small_cap {
-            // Light edge along the top, like a bevel.
-            f.fill_rectangle(
-                Point::new(cx + 3.0 + radius, cy + 1.0),
-                Size::new(cw - 6.0 - 2.0 * radius, 1.0),
-                rgb(170, 176, 184),
-            );
-            // Dark lower edge, so the cap stands off the slot.
-            f.fill_rectangle(
-                Point::new(cx + 3.0 + radius, cy + ch - 2.0),
-                Size::new(cw - 6.0 - 2.0 * radius, 1.0),
-                rgb(10, 11, 13),
-            );
-            // Grip ridges like on a console fader: a dark groove with a light
-            // edge below it, two above and two below the index line.
-            let gx = cx + 6.0;
-            let gw = cw - 12.0;
-            for k in [-3.0_f32, -2.0, -1.0, 1.0, 2.0, 3.0] {
-                let y = cap_y + k * 4.0 - k.signum() * 2.0;
-                f.fill_rectangle(Point::new(gx, y - 1.0), Size::new(gw, 1.0), rgb(14, 15, 17));
-                f.fill_rectangle(Point::new(gx, y), Size::new(gw, 1.0), rgb(120, 126, 134));
-            }
-            return;
-        }
         if !self.parts.cap_value {
             return;
         }

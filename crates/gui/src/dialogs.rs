@@ -1207,9 +1207,6 @@ fn design(app: &App) -> Element<'_, Message> {
             check(app.prefs.thin_track)
                 .label(tr("Schmale Bahn"))
                 .on_toggle(|v| edit(Edit::ThinTrack(v))),
-            check(app.prefs.small_cap)
-                .label(tr("Kleine Kappe wie bei einer Konsole"))
-                .on_toggle(|v| edit(Edit::SmallCap(v))),
             check(app.prefs.grip_cap)
                 .label(tr("Schmaler Griff als Kappe"))
                 .on_toggle(|v| edit(Edit::GripCap(v))),
@@ -1225,32 +1222,29 @@ fn design(app: &App) -> Element<'_, Message> {
         ]
         .spacing(6),
     );
+    let form = if app.prefs.meter_line {
+        4
+    } else if app.prefs.meter_look == 2 {
+        3
+    } else if app.prefs.meter_look == 1 {
+        2
+    } else if app.prefs.meter_segments {
+        1
+    } else {
+        0
+    };
+    let form_btn = |n: u8, label: &str| (label.to_string(), form == n, edit(Edit::MeterForm(n)));
     let meter_card = card(
         "Pegel",
         column![
+            hint("Form"),
             segmented(vec![
-                (
-                    "Balken".into(),
-                    app.prefs.meter_look == 0,
-                    edit(Edit::MeterLook(0))
-                ),
-                (
-                    "Punkte".into(),
-                    app.prefs.meter_look == 1,
-                    edit(Edit::MeterLook(1))
-                ),
-                (
-                    "Blöcke".into(),
-                    app.prefs.meter_look == 2,
-                    edit(Edit::MeterLook(2))
-                ),
+                form_btn(0, "Balken"),
+                form_btn(1, "Segmente"),
+                form_btn(2, "Punkte"),
             ]),
-            check(app.prefs.meter_segments)
-                .label(tr("LED-Segmente statt Balken"))
-                .on_toggle(|v| edit(Edit::MeterSegments(v))),
-            check(app.prefs.meter_line)
-                .label(tr("Pegel als dünne Linie"))
-                .on_toggle(|v| edit(Edit::MeterLine(v))),
+            segmented(vec![form_btn(3, "Blöcke"), form_btn(4, "Linie")]),
+            hint("Farben und Marke"),
             check(app.prefs.one_color)
                 .label(tr("Pegel einfarbig"))
                 .on_toggle(|v| edit(Edit::OneColor(v))),
@@ -1338,6 +1332,11 @@ fn design(app: &App) -> Element<'_, Message> {
                     "GitHub-Dunkel".into(),
                     mode_now == "github",
                     edit(Edit::Mode("github"))
+                ),
+                (
+                    "Mitternacht".into(),
+                    mode_now == "midnight",
+                    edit(Edit::Mode("midnight"))
                 ),
             ]),
         ]
