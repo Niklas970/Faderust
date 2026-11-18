@@ -73,6 +73,8 @@ pub enum Command {
     /// The gains in the config changed as a whole (preset loaded).
     ApplyGains,
     Reconfigure,
+    /// Releases an output by hand, or opens it again if it was released.
+    ToggleRelease(usize),
     /// Shows the on-screen note for what a remote request just changed.
     Osd(OsdFor),
 }
@@ -362,6 +364,8 @@ fn run(
     let mut notices = Notices::default();
     // The first connections after a (re)build are expected, not news.
     let mut quiet = true;
+    // What commands did to the engine, reported with the next round of events.
+    let mut by_hand: Vec<EngineEvent> = Vec::new();
 
     loop {
         // While an output is released, look for returning sound often: what
@@ -385,6 +389,15 @@ fn run(
                             last_maintain = None;
                             notices = Notices::default();
                             quiet = true;
+                        }
+                        Command::ToggleRelease(o) => {
+                            if let Some(e) = &mut engine {
+                                by_hand.extend(if e.is_released(o) {
+                                    e.reopen_now(o)
+                                } else {
+                                    e.release_now(o)
+                                });
+                            }
                         }
                         Command::ApplyGains => {
                             if let Some(e) = &engine {
@@ -558,7 +571,8 @@ fn run(
         if let Some(e) = &mut engine {
             watch.enter(WAKING);
             let woke_at = Instant::now();
-            let mut events = e.wake();
+            let mut events = std::mem::take(&mut by_hand);
+            events.extend(e.wake());
             if !events.is_empty() && log::debug() {
                 log::write(&format!("wake took {} ms", woke_at.elapsed().as_millis()));
             }

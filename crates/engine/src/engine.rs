@@ -241,6 +241,8 @@ struct Idle {
     releasable: bool,
     /// Set after a failed reopening: when to try again, and since when.
     reopen: Option<(Instant, Instant)>,
+    /// Released by hand: stays closed, signal or not, until opened by hand.
+    manual: bool,
 }
 
 /// Whether a slot has no working stream, so `maintain` must look for its
@@ -467,6 +469,9 @@ impl<B: AudioBackend> Engine<B> {
             let Some(after) = self.config.outputs[o].release_after else {
                 continue;
             };
+            if self.idle[o].manual {
+                continue;
+            }
             if self.has_signal(o, now) {
                 self.idle[o].quiet_since = None;
                 self.idle[o].released = false;
@@ -481,6 +486,7 @@ impl<B: AudioBackend> Engine<B> {
                         device,
                         releasable: true,
                         reopen: None,
+                        manual: false,
                     };
                     let rate = self.outputs[o].device.as_ref().map(|(_, f)| f.sample_rate);
                     self.disconnect_output(o);
@@ -491,6 +497,57 @@ impl<B: AudioBackend> Engine<B> {
                 }
             }
         }
+    }
+
+    /// Closes output `o` now, whatever is playing, for another device to use
+    /// it (a Bluetooth headset switching to the phone). It stays closed until
+    /// [`reopen_now`](Self::reopen_now).
+    pub fn release_now(&mut self, o: usize) -> Vec<EngineEvent> {
+        if o >= self.outputs.len() || self.live_out[o].is_none() {
+            return Vec::new();
+        }
+        let device = self.outputs[o]
+            .device
+            .as_ref()
+            .map(|(d, f)| (d.clone(), f.sample_rate));
+        let Some((device, rate)) = device else {
+            return Vec::new();
+        };
+        self.idle[o] = Idle {
+            quiet_since: None,
+            released: true,
+            device: Some(device),
+            releasable: true,
+            reopen: None,
+            manual: true,
+        };
+        self.disconnect_output(o);
+        self.park_lanes(o, rate);
+        vec![EngineEvent::Released { slot: o }]
+    }
+
+    /// Opens an output released by hand again.
+    pub fn reopen_now(&mut self, o: usize) -> Vec<EngineEvent> {
+        if o >= self.outputs.len() || !self.idle[o].released {
+            return Vec::new();
+        }
+        self.idle[o].manual = false;
+        let Some(device) = self.idle[o].device.clone() else {
+            // Nothing remembered: the next maintain finds the device.
+            self.idle[o].released = false;
+            return Vec::new();
+        };
+        let event = self.connect_output(o, device);
+        if matches!(event, EngineEvent::ConnectFailed { .. }) {
+            // Tried again by wake as soon as sound comes.
+            let now = Instant::now();
+            self.idle[o].reopen = Some((now, now));
+        } else {
+            self.idle[o].released = false;
+            self.idle[o].device = None;
+            self.idle[o].reopen = None;
+        }
+        vec![event]
     }
 
     /// Gives every live input a lane to the released output `o` that nobody
@@ -544,7 +601,7 @@ impl<B: AudioBackend> Engine<B> {
             }
         }
         for o in 0..self.outputs.len() {
-            if !(self.idle[o].released && self.has_signal(o, now)) {
+            if !(self.idle[o].released && !self.idle[o].manual && self.has_signal(o, now)) {
                 continue;
             }
             let (next, since) = self.idle[o].reopen.unwrap_or((now, now));
@@ -1324,6 +1381,39 @@ mod tests {
         let out = b.pump(900, level);
         let last = *out["bt"].last().unwrap();
         assert!(last > 0.3, "bt plays {last}");
+    }
+
+    #[test]
+    fn an_output_released_by_hand_stays_closed_until_opened_by_hand() {
+        let b = FakeBackend::default();
+        b.plug_input("game", 48_000, 2);
+        b.plug_output("bt", 48_000, 2);
+        let cfg = config(&["game"], &[("bt", 80)]);
+        let mut engine = Engine::new(b.clone(), cfg).unwrap();
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        engine.maintain_at(at(0));
+        b.pump(100, level);
+
+        // Sound is playing, and the output is released all the same.
+        assert_eq!(
+            engine.release_now(0),
+            vec![EngineEvent::Released { slot: 0 }]
+        );
+        assert!(engine.is_released(0));
+        assert!(engine.outputs()[0].device.is_none());
+        // Sound goes on: nothing opens it again, neither wake nor maintain.
+        b.pump(100, level);
+        assert!(engine.wake_at(at(1_000)).is_empty());
+        b.pump(100, level);
+        assert!(engine.maintain_at(at(20_000)).is_empty());
+        assert!(engine.is_released(0));
+
+        // Opened by hand, it plays again.
+        assert_eq!(connected(&engine.reopen_now(0)), 1);
+        assert!(!engine.is_released(0));
+        let out = b.pump(2_500, level);
+        assert_level(&out["bt"], 0.4, 1e-2);
     }
 
     #[test]
