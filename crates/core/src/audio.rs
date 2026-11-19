@@ -753,7 +753,16 @@ fn retire(engine: Option<Engine<CpalBackend>>) {
     let Some(engine) = engine else { return };
     let _ = thread::Builder::new()
         .name("faderust-retire".into())
-        .spawn(move || drop(engine));
+        .spawn(move || {
+            let started = Instant::now();
+            drop(engine);
+            // Says whether the old streams ever closed: a thread of theirs
+            // that keeps running after this line is a leftover.
+            log::write(&format!(
+                "old engine closed after {} ms",
+                started.elapsed().as_millis()
+            ));
+        });
 }
 
 /// Holds back the input meters by the time the sound needs to reach the
