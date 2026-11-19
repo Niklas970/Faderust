@@ -20,6 +20,9 @@ const GAIN_SMOOTHING_S: f32 = 0.01;
 /// Fill beyond this many targets is a backlog (e.g. after the output stalled)
 /// that drift control would take minutes to work off: it is cut instead.
 const BACKLOG_TARGETS: usize = 3;
+/// Filter length and table oversampling of the rate converter.
+const SINC_TAPS: usize = 256;
+const SINC_OVERSAMPLING: usize = 256;
 /// Below this applied gain a muted lane counts as silent.
 const SILENT_GAIN: f32 = 1e-5;
 
@@ -53,33 +56,7 @@ pub fn lane(spec: LaneSpec, stats: Arc<LaneStats>) -> (Producer<f32>, Lane) {
     let capacity_frames = (target_frames * 4).max(spec.input_rate as usize / 2);
     let (producer, consumer) = RingBuffer::new(capacity_frames * BUS_CHANNELS);
 
-    let ratio = spec.output_rate as f64 / spec.input_rate as f64;
-    let max_rel = 1.0 + 2.0 * MAX_CORRECTION;
-    let resampler = if spec.input_rate == spec.output_rate {
-        // Only drift to correct: a polynomial is cheap and transparent here.
-        Async::new_poly(
-            ratio,
-            max_rel,
-            PolynomialDegree::Septic,
-            CHUNK_FRAMES,
-            BUS_CHANNELS,
-            FixedAsync::Output,
-        )
-    } else {
-        // Real rate conversion (e.g. 44.1 -> 48 kHz) needs anti-aliasing.
-        let params = SincInterpolationParameters::new(64, WindowFunction::Blackman2)
-            .oversampling_factor(128)
-            .interpolation(SincInterpolationType::Quadratic);
-        Async::new_sinc(
-            ratio,
-            max_rel,
-            &params,
-            CHUNK_FRAMES,
-            BUS_CHANNELS,
-            FixedAsync::Output,
-        )
-    }
-    .expect("valid resampler parameters");
+    let resampler = make_resampler(&spec);
 
     let in_buf = vec![0.0; resampler.input_frames_max() * BUS_CHANNELS];
     let out_buf = vec![0.0; resampler.output_frames_max() * BUS_CHANNELS];
@@ -99,6 +76,43 @@ pub fn lane(spec: LaneSpec, stats: Arc<LaneStats>) -> (Producer<f32>, Lane) {
         stats,
     };
     (producer, lane)
+}
+
+/// The resampler of a lane: a cheap polynomial where only drift is
+/// corrected, a long sinc filter where the rate really changes.
+fn make_resampler(spec: &LaneSpec) -> Async<f32> {
+    let ratio = spec.output_rate as f64 / spec.input_rate as f64;
+    let max_rel = 1.0 + 2.0 * MAX_CORRECTION;
+    if spec.input_rate == spec.output_rate {
+        // Only drift to correct: a polynomial costs a quarter of the sinc.
+        // Under drift it dulls the top octave a little (about -1.4 dB at
+        // 18 kHz with the septic), which a sinc would avoid.
+        Async::new_poly(
+            ratio,
+            max_rel,
+            PolynomialDegree::Septic,
+            CHUNK_FRAMES,
+            BUS_CHANNELS,
+            FixedAsync::Output,
+        )
+    } else {
+        // Real rate conversion (e.g. 44.1 -> 48 kHz) needs anti-aliasing. A
+        // long filter keeps the top octave: 64 taps lost 1.8 dB at 18 kHz and
+        // 20 dB at 20 kHz, 256 taps are flat up to 20 kHz (measured by
+        // `rate_conversion_keeps_the_top_octave`) for little extra CPU.
+        let params = SincInterpolationParameters::new(SINC_TAPS, WindowFunction::Blackman2)
+            .oversampling_factor(SINC_OVERSAMPLING)
+            .interpolation(SincInterpolationType::Cubic);
+        Async::new_sinc(
+            ratio,
+            max_rel,
+            &params,
+            CHUNK_FRAMES,
+            BUS_CHANNELS,
+            FixedAsync::Output,
+        )
+    }
+    .expect("valid resampler parameters")
 }
 
 /// Output side of a lane. Owned by the output callback; never allocates
@@ -332,5 +346,75 @@ mod tests {
         assert!(out.iter().all(|&s| s == 0.0));
         assert!(stats.fill_frames.load(Relaxed) >= 960);
         assert!(lane.consumer.slots() / BUS_CHANNELS <= 960);
+    }
+
+    /// Gain and residual of a sine of `freq` Hz converted from `rin` to `rout`
+    /// by the lane's resampler alone (no drift control).
+    fn convert_sine(rin: f64, rout: f64, freq: f64) -> (f64, f64) {
+        let spec = LaneSpec {
+            input_rate: rin as u32,
+            output_rate: rout as u32,
+            target_ms: 50,
+        };
+        let mut rs = make_resampler(&spec);
+        let two_pi = 2.0 * std::f64::consts::PI;
+        let (mut k, mut out_all) = (0usize, Vec::new());
+        let mut outb = vec![0.0f32; rs.output_frames_max() * BUS_CHANNELS];
+        for _ in 0..400 {
+            let need = rs.input_frames_next();
+            let mut inb = vec![0.0f32; need * BUS_CHANNELS];
+            for (fr, f) in inb.chunks_exact_mut(BUS_CHANNELS).enumerate() {
+                let v = (0.5 * (two_pi * freq * (k + fr) as f64 / rin).sin()) as f32;
+                f.fill(v);
+            }
+            k += need;
+            let input = InterleavedSlice::new(&inb, BUS_CHANNELS, need).unwrap();
+            let frames = outb.len() / BUS_CHANNELS;
+            let mut output = InterleavedSlice::new_mut(&mut outb, BUS_CHANNELS, frames).unwrap();
+            let (_, produced) = rs.process_into_buffer(&input, &mut output, None).unwrap();
+            out_all.extend(outb.chunks_exact(BUS_CHANNELS).take(produced).map(|f| f[0]));
+        }
+        // Fit the amplitude and phase of the output sine after the start-up;
+        // what is left is distortion.
+        let skip = 2_000;
+        let w = two_pi * freq / rout;
+        let (mut ss, mut cc, mut sc, mut ys, mut yc) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        for (n, y) in out_all.iter().enumerate().skip(skip) {
+            let (s_, c_) = ((w * n as f64).sin(), (w * n as f64).cos());
+            ss += s_ * s_;
+            cc += c_ * c_;
+            sc += s_ * c_;
+            ys += *y as f64 * s_;
+            yc += *y as f64 * c_;
+        }
+        let det = ss * cc - sc * sc;
+        let (a, b) = ((ys * cc - yc * sc) / det, (yc * ss - ys * sc) / det);
+        let (mut err, mut sig) = (0.0, 0.0);
+        for (n, y) in out_all.iter().enumerate().skip(skip) {
+            let fit = a * (w * n as f64).sin() + b * (w * n as f64).cos();
+            err += (*y as f64 - fit).powi(2);
+            sig += fit * fit;
+        }
+        (
+            20.0 * ((a * a + b * b).sqrt() / 0.5).log10(),
+            10.0 * (err / sig).log10(),
+        )
+    }
+
+    #[test]
+    fn rate_conversion_keeps_the_top_octave() {
+        for (rin, rout) in [(44_100.0, 48_000.0), (48_000.0, 44_100.0)] {
+            for freq in [1_000.0, 10_000.0, 18_000.0, 20_000.0] {
+                let (gain_db, residual_db) = convert_sine(rin, rout, freq);
+                assert!(
+                    gain_db.abs() < 0.2,
+                    "{rin}->{rout} at {freq} Hz: gain {gain_db:.2} dB"
+                );
+                assert!(
+                    residual_db < -90.0,
+                    "{rin}->{rout} at {freq} Hz: residual {residual_db:.1} dB"
+                );
+            }
+        }
     }
 }

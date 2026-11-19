@@ -232,6 +232,27 @@ fn is_fatal(kind: ErrorKind) -> bool {
     )
 }
 
+/// Names the audio thread cpal started for a stream, so the CPU log can tell
+/// a thread that serves a live stream from one that does not. A constant
+/// string: nothing is allocated on the audio thread.
+#[cfg(windows)]
+fn name_audio_thread(input: bool) {
+    use windows::core::w;
+    use windows::Win32::System::Threading::{GetCurrentThread, SetThreadDescription};
+    let name = if input {
+        w!("audio in")
+    } else {
+        w!("audio out")
+    };
+    // SAFETY: the pseudo handle of the current thread needs no closing.
+    unsafe {
+        let _ = SetThreadDescription(GetCurrentThread(), name);
+    }
+}
+
+#[cfg(not(windows))]
+fn name_audio_thread(_input: bool) {}
+
 fn build_input<T>(
     device: &Device,
     format: StreamFormat,
@@ -246,10 +267,15 @@ where
     // Preallocated so the callback never allocates. Copying even f32 data is
     // negligible next to the mixing and keeps one code path.
     let mut scratch = vec![0.0f32; CONVERT_FRAMES * channels];
+    let mut named = false;
     device
         .build_input_stream::<T, _, _>(
             config(format),
             move |samples: &[T], _| {
+                if !named {
+                    named = true;
+                    name_audio_thread(true);
+                }
                 for chunk in samples.chunks(CONVERT_FRAMES * channels) {
                     let buf = &mut scratch[..chunk.len()];
                     for (d, s) in buf.iter_mut().zip(chunk) {
@@ -279,10 +305,15 @@ where
 {
     let channels = format.channels as usize;
     let mut scratch = vec![0.0f32; CONVERT_FRAMES * channels];
+    let mut named = false;
     device
         .build_output_stream::<T, _, _>(
             config(format),
             move |samples: &mut [T], _| {
+                if !named {
+                    named = true;
+                    name_audio_thread(false);
+                }
                 for chunk in samples.chunks_mut(CONVERT_FRAMES * channels) {
                     let buf = &mut scratch[..chunk.len()];
                     data(buf);
