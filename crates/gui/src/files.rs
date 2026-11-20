@@ -46,18 +46,3 @@ pub fn sound_paths() -> Result<Vec<PathBuf>, String> {
 pub fn sound_paths() -> Result<Vec<PathBuf>, String> {
     Err("Dateiauswahl gibt es nur unter Windows".into())
 }
-
-/// Where to save the design export; `None` if the user cancelled.
-#[cfg(windows)]
-pub fn save_html(name: &str) -> Result<Option<PathBuf>, String> {
-    Ok(rfd::FileDialog::new()
-        .set_title("Design exportieren")
-        .set_file_name(format!("{name}.html"))
-        .add_filter("HTML", &["html"])
-        .save_file())
-}
-
-#[cfg(not(windows))]
-pub fn save_html(_: &str) -> Result<Option<PathBuf>, String> {
-    Err("Dateiauswahl gibt es nur unter Windows".into())
-}
