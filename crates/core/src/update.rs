@@ -112,6 +112,7 @@ fn parse_note(json: &str, key: &str) -> String {
 struct OciBuild {
     version: String,
     build: String,
+    name: String,
     setup: String,
     sig: String,
 }
@@ -136,6 +137,7 @@ fn parse_oci(json: &str) -> Result<OciBuild, String> {
     Ok(OciBuild {
         version: note("version"),
         build: note("build"),
+        name: note("name"),
         setup: layer("-setup.exe")?,
         sig: layer("-setup.exe.sig")?,
     })
@@ -172,6 +174,8 @@ pub struct Update {
     pub version: String,
     /// Set for a test build: which one ("<run>-<commit>").
     pub build: String,
+    /// Sub-version of a test build ("0.8.6.4"), empty otherwise.
+    pub name: String,
     url: String,
     /// The setup lies in the test package: the download needs a pull token.
     registry: bool,
@@ -196,8 +200,10 @@ impl Update {
     pub fn label(&self) -> String {
         if self.build.is_empty() {
             self.version.clone()
+        } else if self.name.is_empty() {
+            format!("Test {}", self.version)
         } else {
-            format!("{} Test {}", self.version, self.build)
+            format!("Test {}", self.name)
         }
     }
 }
@@ -220,6 +226,7 @@ fn offer(m: Manifest) -> Result<Option<Update>, String> {
     Ok(Some(Update {
         version: m.version.trim_start_matches('v').to_string(),
         build: String::new(),
+        name: String::new(),
         url: p.url.clone(),
         registry: false,
         signature: p.signature.clone(),
@@ -265,6 +272,7 @@ pub fn check(current: &str, test: Option<&str>) -> Result<Option<Update>, String
     Ok(Some(Update {
         version: b.version,
         build: b.build,
+        name: b.name,
         url: format!("{REGISTRY}/blobs/{}", b.setup),
         registry: true,
         signature: String::from_utf8_lossy(&sig).trim().to_string(),
@@ -338,6 +346,23 @@ mod tests {
         let u = parse_manifest(MANIFEST, "0.6.4").unwrap().unwrap();
         assert_eq!(u.version, "0.7.0");
         assert_eq!(u.url, "https://example.invalid/setup.exe");
+    }
+
+    #[test]
+    fn update_button_names_the_test_build() {
+        let mut u = Update {
+            version: "0.8.6".into(),
+            build: "12-abc1234".into(),
+            name: "0.8.6.4".into(),
+            url: String::new(),
+            registry: true,
+            signature: String::new(),
+        };
+        assert_eq!(u.label(), "Test 0.8.6.4");
+        u.name.clear();
+        assert_eq!(u.label(), "Test 0.8.6");
+        u.build.clear();
+        assert_eq!(u.label(), "0.8.6");
     }
 
     #[test]

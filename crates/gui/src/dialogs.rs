@@ -2009,37 +2009,22 @@ fn settings(app: &App) -> Element<'_, Message> {
         ]
         .spacing(8);
         if app.prefs.test_channel {
-            let current = app
-                .test_builds
-                .iter()
-                .find(|b| b.tag == app.prefs.test_branch)
-                .cloned();
-            c = c.push(if app.test_builds.is_empty() {
-                hint("Noch keine Test-Builds geladen: „Jetzt suchen“ lädt die Liste.")
-            } else {
-                row![
-                    hint("Test-Build"),
-                    pick_list(app.test_builds.clone(), current, |b| {
-                        edit(Edit::TestBranch(b.tag))
-                    }),
-                ]
-                .spacing(10)
-                .align_y(Vertical::Center)
-                .into()
+            let latest = app.test_builds.iter().find(|b| b.tag == "main");
+            c = c.push(match latest {
+                Some(b) => hint(format!("{} {}", tr("Neueste Testversion:"), b)),
+                None => hint("Noch keine Testversion geladen: „Jetzt suchen“ fragt nach."),
             });
             let found = match &app.update {
                 Some(u) => format!("{} {}", tr("Gefunden:"), u.label()),
                 None => tr("Kein neueres Build gefunden.").to_string(),
             };
-            c = c.push(
-                row![
-                    hint(found),
-                    space().width(Length::Fill),
-                    btn("Jetzt suchen", Message::CheckUpdate, false),
-                ]
+            let mut line = row![hint(found), space().width(Length::Fill)]
                 .spacing(8)
-                .align_y(Vertical::Center),
-            );
+                .align_y(Vertical::Center);
+            if app.update.is_some() && !app.updating {
+                line = line.push(btn("Installieren", Message::InstallUpdate, true));
+            }
+            c = c.push(line.push(btn("Jetzt suchen", Message::CheckUpdate, false)));
         }
         card("Testversionen", c)
     };

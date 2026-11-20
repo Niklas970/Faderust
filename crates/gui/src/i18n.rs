@@ -343,6 +343,9 @@ const TABLE: &[(&str, &str)] = &[
     ("Testversionen", "Test versions"),
     ("Test-Build", "Test build"),
     ("Verbindungen", "Connections"),
+    ("Neueste Testversion:", "Latest test version:"),
+    ("Installieren", "Install"),
+    ("Noch keine Testversion geladen: „Jetzt suchen“ fragt nach.", "No test version loaded yet: \"Search now\" asks."),
     ("Erweitert", "Advanced"),
     (
         "Noch keine Test-Builds geladen: „Jetzt suchen“ lädt die Liste.",
