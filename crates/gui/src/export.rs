@@ -1,49 +1,43 @@
-//! Exports the current look of the desk as one HTML file: real colours,
-//! real strips, the chosen options. Opened in a browser, parts can be clicked
-//! and marked with a note; "Kopieren" gives a list to send back.
+//! Exports the real window as one HTML page: the picture is a screenshot of
+//! the running desk (so it matches exactly), on top of it areas can be drawn
+//! and described. "Liste kopieren" and "Bild speichern" give something to send
+//! back.
 
-/// One strip (input or output) as drawn on the desk.
-pub struct StripDoc {
-    pub name: String,
-    pub sub: String,
-    pub db: f32,
-    pub level: f32,
-    pub muted: bool,
-    /// Output buttons A1.. and whether the strip is routed to each.
-    pub routes: Vec<bool>,
-    pub tint: String,
-}
-
-/// Everything the page shows.
-pub struct Doc {
+/// What the page needs.
+pub struct Page {
     pub version: String,
-    pub colors: Colors,
-    pub outputs: Vec<StripDoc>,
-    pub devices: Vec<StripDoc>,
-    pub programs: Vec<StripDoc>,
-    pub opts: Vec<(&'static str, bool)>,
-    pub design_json: String,
+    /// The screenshot as PNG.
+    pub png: Vec<u8>,
+    /// Size of the window in logical pixels.
     pub width: u32,
     pub height: u32,
+    /// Options that are switched on, for the list.
+    pub opts: Vec<(&'static str, bool)>,
+    pub design_json: String,
 }
 
-/// Colours as "#rrggbb".
-pub struct Colors {
-    pub accent: String,
-    pub signal: String,
-    pub bg: String,
-    pub panel: String,
-    pub panel_2: String,
-    pub well: String,
-    pub border: String,
-    pub text: String,
-    pub muted: String,
-}
-
-impl Doc {
-    fn on(&self, key: &str) -> bool {
-        self.opts.iter().any(|(k, v)| *k == key && *v)
+/// Standard base64 (RFC 4648) with padding.
+pub fn base64(data: &[u8]) -> String {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for c in data.chunks(3) {
+        let n = (u32::from(c[0]) << 16)
+            | (u32::from(*c.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*c.get(2).unwrap_or(&0));
+        out.push(A[(n >> 18) as usize & 63] as char);
+        out.push(A[(n >> 12) as usize & 63] as char);
+        out.push(if c.len() > 1 {
+            A[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            A[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
+    out
 }
 
 fn esc(s: &str) -> String {
@@ -53,311 +47,110 @@ fn esc(s: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// Fader position in percent from the top (0 dB at 36 %, as on the desk).
-fn top_pct(db: f32) -> f32 {
-    let t = if db >= 0.0 {
-        36.0 - db / 12.0 * 18.0
-    } else {
-        36.0 + (-db / 48.0).min(1.0) * 64.0
-    };
-    t.clamp(0.0, 100.0)
-}
-
-fn db_text(db: f32) -> String {
-    if db <= -90.0 {
-        "-∞".into()
-    } else if db > 0.0 {
-        format!("+{db:.1}")
-    } else {
-        format!("{db:.1}")
-    }
-}
-
-const TICKS: [(&str, f32); 9] = [
-    ("+12", 18.0),
-    ("+6", 27.0),
-    ("0", 36.0),
-    ("-6", 44.0),
-    ("-12", 56.0),
-    ("-24", 74.0),
-    ("-48", 90.0),
-    ("-∞", 100.0),
-    ("+24", 0.0),
-];
-
-fn strip(d: &Doc, s: &StripDoc, program: bool, slim: bool) -> String {
-    let abtn: String = s
-        .routes
-        .iter()
-        .enumerate()
-        .map(|(i, on)| {
-            format!(
-                "<i data-p=\"A-Knopf\" class=\"{}\">A{}</i>",
-                if *on { "on" } else { "" },
-                i + 1
-            )
-        })
-        .collect();
-    let ticks: String = if d.on("scale_off") {
-        String::new()
-    } else {
-        TICKS
-            .iter()
-            .map(|(t, p)| format!("<span style=\"top:{p}%\">{t}</span>"))
-            .collect()
-    };
-    let top = top_pct(s.db);
-    let lvl = (s.level.clamp(0.0, 1.0) * 100.0).round();
-    let readout = if d.on("hide_readout") {
-        String::new()
-    } else {
-        format!(
-            "<div class=\"lcd{}\" data-p=\"dB-Anzeige\">{} dB</div>",
-            if d.on("readout_display") { " disp" } else { "" },
-            db_text(s.db)
-        )
-    };
-    let mute = if s.muted { " on" } else { "" };
-    let bottom = if d.on("button_row") {
-        let mut b =
-            format!("<div class=\"row\"><b data-p=\"Mute-Knopf\" class=\"btn{mute}\">M</b>");
-        if program || !s.routes.is_empty() {
-            b.push_str("<b data-p=\"FX-Knopf\" class=\"btn\">FX</b>");
-        }
-        if d.on("echo_button") {
-            b.push_str("<b data-p=\"Echo-Knopf\" class=\"btn\">E</b>");
-        }
-        if program {
-            b.push_str("<b data-p=\"Behalten-Knopf\" class=\"btn\">○</b>");
-        }
-        b.push_str("</div>");
-        b
-    } else {
-        let mut b = format!("<b data-p=\"Mute-Knopf\" class=\"btn wide{mute}\">MUTE</b>");
-        if program {
-            b.push_str("<div class=\"row\"><b data-p=\"FX-Knopf\" class=\"btn\">FX</b><b data-p=\"Behalten-Knopf\" class=\"btn\">○</b></div>");
-        } else {
-            b.push_str("<b data-p=\"FX-Knopf\" class=\"btn sm wide\">Effekte</b>");
-        }
-        if d.on("echo_button") {
-            b.push_str("<b data-p=\"Echo-Knopf\" class=\"btn sm wide\">Echo</b>");
-        }
-        b
-    };
-    let narrow = program || slim;
-    format!(
-        "<div class=\"strip{}\" data-s=\"{name}\" style=\"--tint:{tint}\">\
-<div class=\"bar\" data-p=\"Farbleiste\"></div>\
-<div class=\"ab\">{abtn}</div>\
-<div class=\"nm\" data-p=\"Name\">{name}</div>\
-<div class=\"sub\" data-p=\"Gerätename\">{sub}</div>\
-<div class=\"fw\"><div class=\"sc\" data-p=\"Skala\">{ticks}</div>\
-<div class=\"fd\" data-p=\"Fader-Bahn\"><i style=\"height:{h}%\"></i>\
-<s data-p=\"Fader-Kappe\" style=\"top:{top}%\">{val}</s></div>\
-<div class=\"mt\" data-p=\"Pegelanzeige\"><i style=\"height:{lvl}%\"></i></div></div>\
-{readout}{bottom}</div>",
-        if narrow { " narrow" } else { "" },
-        name = esc(&s.name),
-        sub = esc(&s.sub),
-        tint = s.tint,
-        h = 100.0 - top,
-        val = if d.on("cap_value_off") {
-            String::new()
-        } else {
-            db_text(s.db)
-        },
-    )
-}
-
-fn group(
-    d: &Doc,
-    title: &str,
-    items: &[StripDoc],
-    program: bool,
-    slim: bool,
-    extra: &str,
-) -> String {
-    let strips: String = items.iter().map(|s| strip(d, s, program, slim)).collect();
-    format!(
-        "<section data-s=\"Gruppe {t}\"><h3 data-p=\"Gruppenkopf\">{t}{extra}</h3><div class=\"strips\">{strips}</div></section>",
-        t = esc(title)
-    )
-}
-
 /// The complete page.
-pub fn render(d: &Doc) -> String {
-    let c = &d.colors;
-    let slim = d.on("slim_strips");
-    let scroll = if d.on("slim_scroll") {
-        ""
-    } else {
-        "<div class=\"hs\" data-p=\"Scrollleiste\"><i></i></div>"
-    };
-    let thin = if d.on("thin_track") { "5px" } else { "16px" };
-    let cap_r = if d.on("cap_square") { "4px" } else { "8px" };
-    let body = format!(
-        "{}{}{}",
-        group(d, "AUSGÄNGE", &d.outputs, false, slim, ""),
-        group(d, "GERÄTE", &d.devices, false, slim, ""),
-        group(d, "PROGRAMME", &d.programs, true, false, ""),
-    );
-    let opts: String = d
+pub fn render(p: &Page) -> String {
+    let opts: String = p
         .opts
         .iter()
         .map(|(k, v)| format!("{k}={}", if *v { "an" } else { "aus" }))
         .collect::<Vec<_>>()
         .join(", ");
-    format!(
-        r##"<!doctype html><html lang="de"><meta charset="utf-8">
+    PAGE.replace("%VERSION%", &esc(&p.version))
+        .replace("%W%", &p.width.to_string())
+        .replace("%H%", &p.height.to_string())
+        .replace("%OPTS%", &esc(&opts))
+        .replace("%JSON%", &p.design_json.replace("</", "<\\/"))
+        .replace("%PNG%", &base64(&p.png))
+}
+
+const PAGE: &str = r##"<!doctype html><html lang="de"><meta charset="utf-8">
 <title>Faderust Design-Export</title>
 <style>
-:root{{--accent:{accent};--signal:{signal};--bg:{bg};--panel:{panel};--panel2:{panel2};--well:{well};--border:{border};--text:{text};--muted:{muted};--track:{thin};--cap-r:{cap_r}}}
-*{{box-sizing:border-box;margin:0}}
-body{{background:#14161a;color:var(--text);font:12px "Segoe UI","DejaVu Sans",sans-serif;display:flex;min-height:100vh}}
-#win{{background:var(--bg);border:1px solid var(--border);margin:16px;width:{w}px;min-height:{h}px;display:flex;flex-direction:column;flex:none;position:relative}}
-.top{{height:44px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:10px;font-weight:700}}
-.top small{{color:var(--muted);font-weight:400}}
-.main{{display:flex;padding:8px 6px;flex:1}}
-section{{padding:0 10px;border-right:2px solid var(--accent)}}
-section:last-child{{border-right:0;flex:1}}
-h3{{font-size:10px;letter-spacing:.08em;color:var(--muted);height:26px;display:flex;align-items:center}}
-.strips{{display:flex;gap:6px;height:620px}}
-.strip{{width:136px;border:1px solid var(--border);border-radius:6px;background:var(--panel);padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;overflow:hidden}}
-.strip.narrow{{width:104px}}
-.bar{{position:absolute;left:0;right:0;top:0;height:3px;background:var(--tint)}}
-.ab{{display:flex;gap:3px;margin-top:2px}}
-.ab i{{font:700 9px monospace;font-style:normal;border-radius:10px;padding:2px 6px;color:var(--muted);background:var(--panel2)}}
-.ab i.on{{background:var(--accent);color:var(--bg)}}
-.nm{{width:100%;text-align:center;background:var(--panel2);padding:3px;font-weight:700;font-size:11px;letter-spacing:.04em}}
-.sub{{font-size:9px;color:var(--signal);max-width:100%;white-space:nowrap;overflow:hidden}}
-.fw{{flex:1;width:100%;display:flex;justify-content:center;gap:12px;min-height:0;margin:2px 0}}
-.sc{{width:28px;position:relative;font:8px monospace;color:var(--muted)}}
-.sc span{{position:absolute;right:0;transform:translateY(-50%)}}
-.fd{{width:var(--track);background:var(--well);border:1px solid var(--border);border-radius:8px;position:relative;margin:8px 0}}
-.fd i{{position:absolute;bottom:0;left:2px;right:2px;background:var(--accent);border-radius:6px}}
-.fd s{{position:absolute;left:-12px;right:-12px;height:30px;background:linear-gradient(#41454f,#272a31);border:2px solid var(--accent);border-radius:var(--cap-r);transform:translateY(-50%);font:10px monospace;color:#fff;display:grid;place-items:center;text-decoration:none}}
-.mt{{width:10px;background:var(--well);border:1px solid var(--border);margin:8px 0;position:relative}}
-.mt i{{position:absolute;bottom:0;left:0;right:0;background:var(--signal)}}
-.lcd{{font:700 11px monospace;color:var(--accent);text-align:center}}
-.lcd.disp{{background:var(--well);border:1px solid var(--border);padding:3px 0;width:86%}}
-.btn{{font:700 11px monospace;border:1.5px solid var(--border);border-radius:5px;padding:5px 0;background:var(--panel2);color:var(--text);text-align:center;letter-spacing:.05em;flex:1}}
-.btn.wide{{width:100%;flex:none}}.btn.sm{{font-weight:400;font-size:10px;padding:3px 0}}
-.btn.on{{background:var(--accent);color:var(--bg);border-color:var(--accent)}}
-.row{{display:flex;gap:3px;width:100%}}
-.hs{{height:8px;background:var(--panel2);border-radius:4px;margin-top:6px;position:relative}}
-.hs i{{position:absolute;left:0;width:45%;height:100%;background:var(--muted);border-radius:4px;opacity:.6}}
-[data-p]{{cursor:crosshair}}
-[data-p]:hover{{outline:2px dashed var(--signal);outline-offset:1px}}
-.mark{{outline:2px solid #ff3b81!important;outline-offset:1px}}
-.pin{{position:absolute;z-index:9;background:#ff3b81;color:#fff;font:700 10px monospace;border-radius:9px;min-width:18px;height:18px;display:grid;place-items:center;pointer-events:none;transform:translate(-50%,-50%)}}
-aside{{width:330px;flex:none;padding:16px 16px 16px 0;position:sticky;top:0;height:100vh;overflow:auto;color:#d7dae0}}
-aside h2{{font-size:14px;margin-bottom:6px}}
-aside p{{color:#9aa0ab;margin-bottom:10px;line-height:1.4}}
-.item{{background:#1d2026;border:1px solid #2c3038;border-radius:6px;padding:8px;margin-bottom:8px}}
-.item b{{color:#ff3b81}}
-.item input{{width:100%;margin-top:6px;background:#0f1114;border:1px solid #2c3038;color:#e6e8ec;padding:5px;border-radius:4px}}
-.item button{{float:right;background:none;border:0;color:#9aa0ab;cursor:pointer}}
-#copy{{background:#ff8a1f;border:0;color:#000;font-weight:700;padding:8px 14px;border-radius:6px;cursor:pointer;margin-bottom:12px}}
-#gen{{width:100%;margin-top:6px;background:#0f1114;border:1px solid #2c3038;color:#e6e8ec;padding:5px;border-radius:4px;min-height:60px}}
+*{box-sizing:border-box;margin:0}
+body{background:#14161a;color:#d7dae0;font:13px "Segoe UI","DejaVu Sans",sans-serif;display:flex;min-height:100vh}
+#stage{padding:16px;flex:none}
+#wrap{position:relative;width:%W%px;height:%H%px;border:1px solid #2c3038;cursor:crosshair;user-select:none;touch-action:none}
+#wrap img{display:block;width:100%;height:100%;pointer-events:none}
+.box{position:absolute;border:2px solid #ff3b81;background:rgba(255,59,129,.12)}
+.box.sel{background:rgba(255,59,129,.28);box-shadow:0 0 0 2px #fff}
+.box i{position:absolute;left:-2px;top:-20px;background:#ff3b81;color:#fff;font:700 11px monospace;font-style:normal;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 5px}
+.box.dot{border-radius:50%}
+aside{width:340px;flex:none;padding:16px 16px 16px 0;position:sticky;top:0;height:100vh;overflow:auto}
+aside h2{font-size:15px;margin-bottom:6px}
+aside p{color:#9aa0ab;line-height:1.45;margin-bottom:10px}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+button{background:#ff8a1f;border:0;color:#000;font-weight:700;padding:8px 12px;border-radius:6px;cursor:pointer}
+button.alt{background:#2c3038;color:#e6e8ec}
+.item{background:#1d2026;border:1px solid #2c3038;border-radius:6px;padding:8px;margin-bottom:8px}
+.item.sel{border-color:#ff3b81}
+.item b{color:#ff3b81}.item small{color:#9aa0ab}
+.item input{width:100%;margin-top:6px;background:#0f1114;border:1px solid #2c3038;color:#e6e8ec;padding:6px;border-radius:4px}
+.item .x{float:right;background:none;color:#9aa0ab;padding:0 4px}
+textarea{width:100%;min-height:64px;background:#0f1114;border:1px solid #2c3038;color:#e6e8ec;padding:6px;border-radius:4px}
+.meta{margin-top:10px;font-size:11px;color:#7d8490}
 </style>
-<div id="win"><div class="top"><span data-p="Titelleiste">FADERUST</span><small>v{version}</small></div><div class="main">{body}</div>{scroll}</div>
-<aside><h2>Design markieren</h2>
-<p>Klicke Teile der Oberfläche an, um sie zu markieren, und schreibe dazu, was du dir wünschst. Mit „Kopieren“ bekommst du eine Liste, die du Claude schickst, am besten zusammen mit dieser Datei.</p>
-<button id="copy">Liste kopieren</button>
+<div id="stage"><div id="wrap"><img id="img" alt="Faderust" src="data:image/png;base64,%PNG%"></div></div>
+<aside>
+<h2>Design markieren</h2>
+<p>Das Bild ist ein Screenshot deiner echten Oberfläche. Ziehe ein Rechteck über das, was du meinst, oder klicke einfach auf eine Stelle. Schreibe rechts dazu, was anders sein soll.</p>
+<div class="btns"><button id="copy">Liste kopieren</button><button class="alt" id="save">Bild mit Markierungen</button><button class="alt" id="undo">Letzte weg</button></div>
 <div id="list"></div>
 <textarea id="gen" placeholder="Allgemeine Anmerkung zum Design"></textarea>
-<p style="margin-top:10px;font-size:11px">Optionen: {opts}</p></aside>
-<script type="application/json" id="faderust-design">{json}</script>
+<div class="meta">Faderust v%VERSION% · Fenster %W%×%H% px<br>Optionen: %OPTS%</div>
+</aside>
+<script type="application/json" id="faderust-design">%JSON%</script>
 <script>
-const marks=[];const win=document.getElementById('win');const list=document.getElementById('list');
-function pinAt(m){{const r=m.el.getBoundingClientRect(),w=win.getBoundingClientRect();m.pin.style.left=(r.left-w.left+r.width/2)+'px';m.pin.style.top=(r.top-w.top+r.height/2)+'px'}}
-function redraw(){{list.innerHTML='';marks.forEach((m,i)=>{{m.pin.textContent=i+1;const d=document.createElement('div');d.className='item';
-d.innerHTML='<button title="Entfernen">✕</button><b>'+(i+1)+'.</b> '+m.part+' <span style="color:#9aa0ab">('+m.strip+')</span>';
-d.querySelector('button').onclick=()=>remove(m);const inp=document.createElement('input');inp.placeholder='Was soll anders sein?';inp.value=m.note;inp.oninput=()=>m.note=inp.value;d.appendChild(inp);list.appendChild(d)}})}}
-function remove(m){{m.el.classList.remove('mark');m.pin.remove();marks.splice(marks.indexOf(m),1);redraw()}}
-document.addEventListener('click',e=>{{const el=e.target.closest('[data-p]');if(!el||!win.contains(el))return;
-const ex=marks.find(m=>m.el===el);if(ex){{remove(ex);return}}
-const s=el.closest('[data-s]');const pin=document.createElement('div');pin.className='pin';win.appendChild(pin);
-const m={{el,part:el.dataset.p,strip:s?s.dataset.s:'Fenster',note:'',pin}};marks.push(m);el.classList.add('mark');pinAt(m);redraw()}});
-document.getElementById('copy').onclick=()=>{{const t='Faderust Design-Markierungen (v{version})\n'+marks.map((m,i)=>(i+1)+'. '+m.part+' ['+m.strip+']'+(m.note?': '+m.note:'')).join('\n')+(document.getElementById('gen').value?'\n\nAllgemein: '+document.getElementById('gen').value:'');
-(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).catch(()=>{{const g=document.getElementById('gen');g.value=t;g.select()}})}};
-</script></html>"##,
-        accent = c.accent,
-        signal = c.signal,
-        bg = c.bg,
-        panel = c.panel,
-        panel2 = c.panel_2,
-        well = c.well,
-        border = c.border,
-        text = c.text,
-        muted = c.muted,
-        w = d.width,
-        h = d.height,
-        version = esc(&d.version),
-        json = d.design_json.replace("</", "<\\/"),
-    )
-}
+const W=%W%,H=%H%,wrap=document.getElementById('wrap'),list=document.getElementById('list');
+const marks=[];let sel=null,drag=null;
+const pos=e=>{const r=wrap.getBoundingClientRect();return{x:Math.max(0,Math.min(W,e.clientX-r.left)),y:Math.max(0,Math.min(H,e.clientY-r.top))}};
+function draw(){wrap.querySelectorAll('.box').forEach(b=>b.remove());marks.forEach((m,i)=>{const b=document.createElement('div');b.className='box'+(m===sel?' sel':'')+(m.dot?' dot':'');
+b.style.cssText='left:'+m.x+'px;top:'+m.y+'px;width:'+m.w+'px;height:'+m.h+'px';b.innerHTML='<i>'+(i+1)+'</i>';wrap.appendChild(b)});
+list.innerHTML='';marks.forEach((m,i)=>{const d=document.createElement('div');d.className='item'+(m===sel?' sel':'');
+d.innerHTML='<button class="x" title="Entfernen">✕</button><b>'+(i+1)+'.</b> <small>'+Math.round(m.x)+','+Math.round(m.y)+' · '+Math.round(m.w)+'×'+Math.round(m.h)+' px</small>';
+d.querySelector('.x').onclick=()=>{marks.splice(i,1);sel=null;draw()};
+const inp=document.createElement('input');inp.placeholder='Was soll anders sein?';inp.value=m.note;inp.oninput=()=>m.note=inp.value;inp.onfocus=()=>{sel=m;wrap.querySelectorAll('.box').forEach((b,j)=>b.classList.toggle('sel',marks[j]===m))};d.appendChild(inp);list.appendChild(d)})}
+wrap.addEventListener('pointerdown',e=>{wrap.setPointerCapture(e.pointerId);const p=pos(e);drag={x0:p.x,y0:p.y,m:{x:p.x,y:p.y,w:0,h:0,note:''}};marks.push(drag.m);sel=drag.m;draw()});
+wrap.addEventListener('pointermove',e=>{if(!drag)return;const p=pos(e),m=drag.m;m.x=Math.min(drag.x0,p.x);m.y=Math.min(drag.y0,p.y);m.w=Math.abs(p.x-drag.x0);m.h=Math.abs(p.y-drag.y0);
+const b=wrap.querySelectorAll('.box')[marks.indexOf(m)];if(b){b.style.cssText='left:'+m.x+'px;top:'+m.y+'px;width:'+m.w+'px;height:'+m.h+'px'}});
+wrap.addEventListener('pointerup',()=>{if(!drag)return;const m=drag.m;if(m.w<6&&m.h<6){m.dot=true;m.x=Math.max(0,drag.x0-14);m.y=Math.max(0,drag.y0-14);m.w=28;m.h=28}drag=null;draw();const inp=list.querySelectorAll('input');if(inp.length)inp[inp.length-1].focus()});
+document.getElementById('undo').onclick=()=>{marks.pop();sel=null;draw()};
+function text(){return 'Faderust Design-Markierungen (v%VERSION%, Fenster %W%×%H% px)\n'+marks.map((m,i)=>(i+1)+'. Bereich x='+Math.round(m.x)+' y='+Math.round(m.y)+' b='+Math.round(m.w)+' h='+Math.round(m.h)+(m.note?': '+m.note:'')).join('\n')+(document.getElementById('gen').value?'\n\nAllgemein: '+document.getElementById('gen').value:'')}
+document.getElementById('copy').onclick=()=>{(navigator.clipboard?navigator.clipboard.writeText(text()):Promise.reject()).catch(()=>{const g=document.getElementById('gen');g.value=text();g.select()})};
+document.getElementById('save').onclick=()=>{const img=document.getElementById('img'),c=document.createElement('canvas'),k=img.naturalWidth/W;c.width=img.naturalWidth;c.height=img.naturalHeight;const x=c.getContext('2d');x.drawImage(img,0,0);
+marks.forEach((m,i)=>{x.lineWidth=2*k;x.strokeStyle='#ff3b81';x.fillStyle='rgba(255,59,129,.15)';x.fillRect(m.x*k,m.y*k,m.w*k,m.h*k);x.strokeRect(m.x*k,m.y*k,m.w*k,m.h*k);x.fillStyle='#ff3b81';x.beginPath();x.arc(m.x*k,m.y*k,10*k,0,7);x.fill();x.fillStyle='#fff';x.font='bold '+(12*k)+'px monospace';x.textAlign='center';x.textBaseline='middle';x.fillText(i+1,m.x*k,m.y*k)});
+const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download='faderust-design-markiert.png';a.click()};
+</script></html>"##;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn doc(opts: Vec<(&'static str, bool)>) -> Doc {
-        let s = |n: &str| StripDoc {
-            name: n.into(),
-            sub: "Gerät".into(),
-            db: -6.0,
-            level: 0.5,
-            muted: false,
-            routes: vec![true, false],
-            tint: "#9b6df0".into(),
-        };
-        Doc {
+    #[test]
+    fn base64_matches_the_standard() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+    }
+
+    #[test]
+    fn page_holds_picture_size_and_safe_json() {
+        let h = render(&Page {
             version: "0.8.7".into(),
-            colors: Colors {
-                accent: "#ff8a1f".into(),
-                signal: "#5ccf6a".into(),
-                bg: "#000000".into(),
-                panel: "#0c0d10".into(),
-                panel_2: "#16181d".into(),
-                well: "#050608".into(),
-                border: "#3a404c".into(),
-                text: "#ecedf1".into(),
-                muted: "#8b93a1".into(),
-            },
-            outputs: vec![s("LAUTSPRECHER")],
-            devices: vec![s("MIKROFON")],
-            programs: vec![s("<BRAVE>")],
-            opts,
-            design_json: "{\"a\":\"</script>\"}".into(),
+            png: vec![1, 2, 3],
             width: 1300,
             height: 800,
-        }
-    }
-
-    #[test]
-    fn export_contains_strips_and_escapes() {
-        let h = render(&doc(vec![]));
-        assert!(h.contains("LAUTSPRECHER") && h.contains("MIKROFON"));
-        assert!(h.contains("&lt;BRAVE&gt;"));
-        assert!(!h.contains("<BRAVE>"));
+            opts: vec![("hide_readout", true)],
+            design_json: "{\"a\":\"</script>\"}".into(),
+        });
+        assert!(h.contains("data:image/png;base64,AQID"));
+        assert!(h.contains("width:1300px") || h.contains("W=1300"));
+        assert!(h.contains("hide_readout=an"));
         // The JSON block cannot end the script early.
         assert_eq!(h.matches("</script>").count(), 2);
-    }
-
-    #[test]
-    fn export_follows_the_space_options() {
-        let plain = render(&doc(vec![]));
-        assert!(plain.contains("class=\"lcd\"") && plain.contains("MUTE"));
-        let tight = render(&doc(vec![("hide_readout", true), ("button_row", true)]));
-        assert!(!tight.contains("class=\"lcd") && !tight.contains(">MUTE<"));
-        assert!(tight.contains(">M</b>"));
-    }
-
-    #[test]
-    fn fader_position_matches_the_scale() {
-        assert_eq!(top_pct(0.0), 36.0);
-        assert_eq!(top_pct(12.0), 18.0);
-        assert_eq!(top_pct(-96.0), 100.0);
+        for key in ["%VERSION%", "%W%", "%H%", "%OPTS%", "%JSON%", "%PNG%"] {
+            assert!(!h.contains(key), "{key} not replaced");
+        }
     }
 }

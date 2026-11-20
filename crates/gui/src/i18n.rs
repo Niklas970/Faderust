@@ -301,7 +301,7 @@ const TABLE: &[(&str, &str)] = &[
     ("Windows-Standard", "Windows default"),
     ("Zurücksetzen", "Reset"),
     ("Design exportieren", "Export design"),
-    ("Speichert die Oberfläche mit deinen Farben und Optionen als HTML-Datei. Im Browser kannst du Teile anklicken, markieren und beschreiben.", "Saves the interface with your colours and options as an HTML file. Open it in a browser to click, mark and describe parts."),
+    ("Speichert ein Bild des Hauptfensters als HTML-Datei. Im Browser ziehst du Rechtecke darüber und beschreibst, was anders sein soll.", "Saves a picture of the main window as an HTML file. In a browser, draw rectangles over it and describe what should change."),
     ("Als HTML speichern", "Save as HTML"),
     ("verbinde mit Windows …", "connecting to Windows …"),
     ("verbunden", "connected"),
