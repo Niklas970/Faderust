@@ -3980,9 +3980,8 @@ impl App {
         self.card_tint(
             column![
                 sorter,
-                top,
                 self.strip_name(s),
-                space().height(if self.is_mini() { 0 } else { 14 }),
+                top,
                 fader,
                 if self.is_mini() || self.prefs.hide_readout {
                     Element::from(space().height(0))
@@ -3999,7 +3998,7 @@ impl App {
             } else if narrow {
                 126.0
             } else {
-                164.0
+                156.0
             },
             !edge_off && !s.muted && s.shown > -60.0,
             self.head_tint(&s.device),
@@ -4035,7 +4034,7 @@ impl App {
                 .spacing(8)
                 .align_x(Horizontal::Center)
                 .into(),
-                164.0,
+                156.0,
                 !(if post {
                     self.prefs.output_edge_off
                 } else {
@@ -4107,13 +4106,13 @@ impl App {
         .width(Length::Fill);
         self.card(
             column![
-                tag,
                 Self::name_label(&m.label),
                 if self.slim() {
                     Element::from(space().height(0))
                 } else {
                     Self::note(o, &m.note, m.note_on)
                 },
+                tag,
                 fader,
                 if self.is_mini() || self.prefs.hide_readout {
                     Element::from(space().height(0))
@@ -4159,7 +4158,7 @@ impl App {
             } else if self.slim() {
                 126.0
             } else {
-                164.0
+                156.0
             },
             !self.prefs.output_edge_off && !m.muted && m.shown > -60.0,
         )
