@@ -13,6 +13,7 @@
 
 mod cpu;
 mod dialogs;
+mod export;
 mod fader;
 mod files;
 mod i18n;
@@ -479,6 +480,8 @@ pub enum Edit {
     SavePreset,
     LoadPreset(String),
     ExportPreset(String),
+    /// Saves the current look as an HTML page to mark parts in.
+    ExportDesign,
     ImportPreset,
     DeletePreset(String),
     Soundboard(bool),
@@ -1010,6 +1013,73 @@ impl App {
         if prefs != self.prefs {
             shell::save_prefs(&self.dir, &prefs);
             self.prefs = prefs;
+        }
+    }
+
+    /// The desk as it is now, for the design export.
+    fn export_doc(&self) -> export::Doc {
+        let hex = |c: Color| style::to_hex(c);
+        let bar = style::part(style::Part::Bar).unwrap_or_else(style::accent);
+        let strips = |program: bool| {
+            self.strips
+                .iter()
+                .filter(|s| !s.hidden && s.program == program)
+                .map(|s| export::StripDoc {
+                    name: s.label.clone(),
+                    sub: s.device.trim_start_matches("app:").to_string(),
+                    db: s.db,
+                    level: s.shown,
+                    muted: s.muted,
+                    routes: s.routes.clone(),
+                    tint: hex(self.tint_of(&s.device).unwrap_or(bar)),
+                })
+                .collect::<Vec<_>>()
+        };
+        let p = &self.prefs;
+        export::Doc {
+            version: faderust_core::update::own_version().to_string(),
+            colors: export::Colors {
+                accent: self.accent(),
+                signal: self.signal(),
+                bg: hex(style::bg()),
+                panel: hex(style::panel()),
+                panel_2: hex(style::panel_2()),
+                well: hex(style::well()),
+                border: hex(style::border()),
+                text: hex(text_color()),
+                muted: hex(muted_color()),
+            },
+            outputs: self
+                .outs
+                .iter()
+                .filter(|o| !o.hidden)
+                .map(|o| export::StripDoc {
+                    name: o.label.clone(),
+                    sub: o.note.clone(),
+                    db: o.db,
+                    level: o.shown,
+                    muted: o.muted,
+                    routes: vec![],
+                    tint: hex(bar),
+                })
+                .collect(),
+            devices: strips(false),
+            programs: strips(true),
+            opts: vec![
+                ("scale_off", p.scale_off),
+                ("hide_readout", p.hide_readout),
+                ("readout_display", p.readout_display),
+                ("button_row", p.button_row),
+                ("echo_button", p.echo_button),
+                ("slim_strips", p.slim_strips),
+                ("slim_scroll", p.slim_scroll),
+                ("thin_track", p.thin_track),
+                ("cap_square", p.cap_square),
+                ("cap_value_off", p.cap_value_off),
+            ],
+            design_json: p.design_json(),
+            width: 1300,
+            height: 760,
         }
     }
 
@@ -2982,6 +3052,18 @@ impl App {
                             return Ok(());
                         };
                         std::fs::write(&path, text).map_err(|e| e.to_string())
+                    },
+                    |r| Message::Loaded(Loaded::Done(Then::Nothing, r)),
+                ));
+            }
+            Edit::ExportDesign => {
+                let html = export::render(&self.export_doc());
+                self.jobs.push(blocking(
+                    move || -> Result<(), String> {
+                        let Some(path) = files::save_html("faderust-design")? else {
+                            return Ok(());
+                        };
+                        std::fs::write(&path, html).map_err(|e| e.to_string())
                     },
                     |r| Message::Loaded(Loaded::Done(Then::Nothing, r)),
                 ));

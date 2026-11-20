@@ -1662,6 +1662,14 @@ fn design(app: &App) -> Element<'_, Message> {
         ]
         .spacing(8),
     );
+    let export_card = card(
+        "Design exportieren",
+        column![
+            hint("Speichert die Oberfläche mit deinen Farben und Optionen als HTML-Datei. Im Browser kannst du Teile anklicken, markieren und beschreiben."),
+            btn("Als HTML speichern", edit(Edit::ExportDesign), false),
+        ]
+        .spacing(8),
+    );
     let preview_card = card(
         "Vorschau",
         column![
@@ -1722,7 +1730,7 @@ fn design(app: &App) -> Element<'_, Message> {
         None => content,
     };
     let body = row![
-        cards(1, vec![preview_card, profile_card, reset_card]),
+        cards(1, vec![preview_card, profile_card, export_card, reset_card]),
         column![tabs, content]
             .spacing(12)
             .width(Length::FillPortion(2)),
