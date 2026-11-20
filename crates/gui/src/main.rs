@@ -457,7 +457,6 @@ pub enum Edit {
     ProfileLoad(String),
     ProfileDelete(String),
     /// Takes all looks of the design back to the defaults.
-    ResetLook,
     Relief(bool),
     /// A colour for the LCD display, typed or chosen.
     LcdHex(String),
@@ -2868,49 +2867,6 @@ impl App {
             Edit::ProfileDelete(name) => self.set_look(|p| {
                 p.profiles.remove(&name);
             }),
-            Edit::ResetLook => {
-                self.accent_input = None;
-                self.signal_input = None;
-                self.lcd_input = None;
-                self.part_input = None;
-                self.picker = None;
-                self.set_look(|p| {
-                    let d = shell::Prefs::default();
-                    p.mode = d.mode;
-                    p.accent = d.accent;
-                    p.signal = d.signal;
-                    p.lcd_color = d.lcd_color;
-                    p.part_colors = d.part_colors;
-                    p.button_look = d.button_look;
-                    p.cap_square = d.cap_square;
-                    p.scale_off = d.scale_off;
-                    p.zero_mark = d.zero_mark;
-                    p.glow_off = d.glow_off;
-                    p.accent_cap = d.accent_cap;
-                    p.cap_value_off = d.cap_value_off;
-                    p.thin_track = d.thin_track;
-                    p.grip_cap = d.grip_cap;
-                    p.strip_colors = d.strip_colors;
-                    p.relief = d.relief;
-                    p.readout_display = d.readout_display;
-                    p.meter_segments = d.meter_segments;
-                    p.meter_line = d.meter_line;
-                    p.one_color = d.one_color;
-                    p.peak_off = d.peak_off;
-                    p.matrix_meters_off = d.matrix_meters_off;
-                    p.strip_head = d.strip_head;
-                    p.strip_history = d.strip_history;
-                    p.knobs = d.knobs;
-                    p.echo_button = d.echo_button;
-                    p.hide_readout = d.hide_readout;
-                    p.button_row = d.button_row;
-                    p.slim_strips = d.slim_strips;
-                    p.slim_scroll = d.slim_scroll;
-                    p.meter_look = d.meter_look;
-                    p.density = d.density;
-                    p.glide = d.glide;
-                });
-            }
             Edit::ButtonLook(l) => self.set_look(|p| p.button_look = l.into()),
             Edit::EchoButton(on) => self.set_look(|p| p.echo_button = on),
             Edit::HideReadout(on) => self.set_look(|p| p.hide_readout = on),

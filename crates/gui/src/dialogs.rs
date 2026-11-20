@@ -1654,22 +1654,6 @@ fn design(app: &App) -> Element<'_, Message> {
         ]
         .spacing(8),
     );
-    let reset_card = card(
-        "Zurücksetzen",
-        column![
-            hint("Setzt Farben, Bausteine und Knopf-Look auf die Standardwerte."),
-            btn("Design zurücksetzen", edit(Edit::ResetLook), false),
-        ]
-        .spacing(8),
-    );
-    let export_card = card(
-        "Design exportieren",
-        column![
-            hint("Speichert die Oberfläche mit deinen Farben und Optionen als HTML-Datei. Im Browser kannst du Teile anklicken, markieren und beschreiben."),
-            btn("Als HTML speichern", edit(Edit::ExportDesign), false),
-        ]
-        .spacing(8),
-    );
     let preview_card = card(
         "Vorschau",
         column![
@@ -1730,7 +1714,7 @@ fn design(app: &App) -> Element<'_, Message> {
         None => content,
     };
     let body = row![
-        cards(1, vec![preview_card, profile_card, export_card, reset_card]),
+        cards(1, vec![preview_card, profile_card]),
         column![tabs, content]
             .spacing(12)
             .width(Length::FillPortion(2)),
@@ -2237,6 +2221,14 @@ fn settings(app: &App) -> Element<'_, Message> {
         }
         card("Testversionen", c)
     };
+    let export_card = card(
+        "Design exportieren",
+        column![
+            hint("Speichert die Oberfläche mit deinen Farben und Optionen als HTML-Datei. Im Browser kannst du Teile anklicken, markieren und beschreiben."),
+            btn("Als HTML speichern", edit(Edit::ExportDesign), false),
+        ]
+        .spacing(8),
+    );
     let tab = app.devices_tab;
     let tabs = segmented(vec![
         ("Geräte".into(), tab == 0, edit(Edit::DevicesTab(0))),
@@ -2268,10 +2260,13 @@ fn settings(app: &App) -> Element<'_, Message> {
         .spacing(12)
         .align_y(Vertical::Top)
         .into(),
-        2 => row![cards(1, vec![debug_card]), cards(1, vec![test_card]),]
-            .spacing(12)
-            .align_y(Vertical::Top)
-            .into(),
+        2 => row![
+            cards(1, vec![debug_card, export_card]),
+            cards(1, vec![test_card]),
+        ]
+        .spacing(12)
+        .align_y(Vertical::Top)
+        .into(),
         _ => row![cards(
             3,
             vec![

@@ -66,8 +66,6 @@ const TABLE: &[(&str, &str)] = &[
     ("Kachel", "Tile"),
     ("Aussehen", "Look"),
     ("Allgemein", "General"),
-    ("Design zurücksetzen", "Reset design"),
-    ("Setzt Farben, Bausteine und Knopf-Look auf die Standardwerte.", "Resets colours, blocks and button look to the defaults."),
     ("Balken", "Bars"),
     ("Punkte", "Dots"),
     ("Blöcke", "Blocks"),
