@@ -13,6 +13,7 @@
 
 mod cpu;
 mod dialogs;
+mod export;
 mod fader;
 mod files;
 mod i18n;
@@ -456,7 +457,6 @@ pub enum Edit {
     ProfileLoad(String),
     ProfileDelete(String),
     /// Takes all looks of the design back to the defaults.
-    ResetLook,
     Relief(bool),
     /// A colour for the LCD display, typed or chosen.
     LcdHex(String),
@@ -479,6 +479,8 @@ pub enum Edit {
     SavePreset,
     LoadPreset(String),
     ExportPreset(String),
+    /// Saves the current look as an HTML page to mark parts in.
+    ExportDesign,
     ImportPreset,
     DeletePreset(String),
     Soundboard(bool),
@@ -1010,6 +1012,73 @@ impl App {
         if prefs != self.prefs {
             shell::save_prefs(&self.dir, &prefs);
             self.prefs = prefs;
+        }
+    }
+
+    /// The desk as it is now, for the design export.
+    fn export_doc(&self) -> export::Doc {
+        let hex = |c: Color| style::to_hex(c);
+        let bar = style::part(style::Part::Bar).unwrap_or_else(style::accent);
+        let strips = |program: bool| {
+            self.strips
+                .iter()
+                .filter(|s| !s.hidden && s.program == program)
+                .map(|s| export::StripDoc {
+                    name: s.label.clone(),
+                    sub: s.device.trim_start_matches("app:").to_string(),
+                    db: s.db,
+                    level: s.shown,
+                    muted: s.muted,
+                    routes: s.routes.clone(),
+                    tint: hex(self.tint_of(&s.device).unwrap_or(bar)),
+                })
+                .collect::<Vec<_>>()
+        };
+        let p = &self.prefs;
+        export::Doc {
+            version: faderust_core::update::own_version().to_string(),
+            colors: export::Colors {
+                accent: self.accent(),
+                signal: self.signal(),
+                bg: hex(style::bg()),
+                panel: hex(style::panel()),
+                panel_2: hex(style::panel_2()),
+                well: hex(style::well()),
+                border: hex(style::border()),
+                text: hex(text_color()),
+                muted: hex(muted_color()),
+            },
+            outputs: self
+                .outs
+                .iter()
+                .filter(|o| !o.hidden)
+                .map(|o| export::StripDoc {
+                    name: o.label.clone(),
+                    sub: o.note.clone(),
+                    db: o.db,
+                    level: o.shown,
+                    muted: o.muted,
+                    routes: vec![],
+                    tint: hex(bar),
+                })
+                .collect(),
+            devices: strips(false),
+            programs: strips(true),
+            opts: vec![
+                ("scale_off", p.scale_off),
+                ("hide_readout", p.hide_readout),
+                ("readout_display", p.readout_display),
+                ("button_row", p.button_row),
+                ("echo_button", p.echo_button),
+                ("slim_strips", p.slim_strips),
+                ("slim_scroll", p.slim_scroll),
+                ("thin_track", p.thin_track),
+                ("cap_square", p.cap_square),
+                ("cap_value_off", p.cap_value_off),
+            ],
+            design_json: p.design_json(),
+            width: 1300,
+            height: 760,
         }
     }
 
@@ -2798,49 +2867,6 @@ impl App {
             Edit::ProfileDelete(name) => self.set_look(|p| {
                 p.profiles.remove(&name);
             }),
-            Edit::ResetLook => {
-                self.accent_input = None;
-                self.signal_input = None;
-                self.lcd_input = None;
-                self.part_input = None;
-                self.picker = None;
-                self.set_look(|p| {
-                    let d = shell::Prefs::default();
-                    p.mode = d.mode;
-                    p.accent = d.accent;
-                    p.signal = d.signal;
-                    p.lcd_color = d.lcd_color;
-                    p.part_colors = d.part_colors;
-                    p.button_look = d.button_look;
-                    p.cap_square = d.cap_square;
-                    p.scale_off = d.scale_off;
-                    p.zero_mark = d.zero_mark;
-                    p.glow_off = d.glow_off;
-                    p.accent_cap = d.accent_cap;
-                    p.cap_value_off = d.cap_value_off;
-                    p.thin_track = d.thin_track;
-                    p.grip_cap = d.grip_cap;
-                    p.strip_colors = d.strip_colors;
-                    p.relief = d.relief;
-                    p.readout_display = d.readout_display;
-                    p.meter_segments = d.meter_segments;
-                    p.meter_line = d.meter_line;
-                    p.one_color = d.one_color;
-                    p.peak_off = d.peak_off;
-                    p.matrix_meters_off = d.matrix_meters_off;
-                    p.strip_head = d.strip_head;
-                    p.strip_history = d.strip_history;
-                    p.knobs = d.knobs;
-                    p.echo_button = d.echo_button;
-                    p.hide_readout = d.hide_readout;
-                    p.button_row = d.button_row;
-                    p.slim_strips = d.slim_strips;
-                    p.slim_scroll = d.slim_scroll;
-                    p.meter_look = d.meter_look;
-                    p.density = d.density;
-                    p.glide = d.glide;
-                });
-            }
             Edit::ButtonLook(l) => self.set_look(|p| p.button_look = l.into()),
             Edit::EchoButton(on) => self.set_look(|p| p.echo_button = on),
             Edit::HideReadout(on) => self.set_look(|p| p.hide_readout = on),
@@ -2982,6 +3008,18 @@ impl App {
                             return Ok(());
                         };
                         std::fs::write(&path, text).map_err(|e| e.to_string())
+                    },
+                    |r| Message::Loaded(Loaded::Done(Then::Nothing, r)),
+                ));
+            }
+            Edit::ExportDesign => {
+                let html = export::render(&self.export_doc());
+                self.jobs.push(blocking(
+                    move || -> Result<(), String> {
+                        let Some(path) = files::save_html("faderust-design")? else {
+                            return Ok(());
+                        };
+                        std::fs::write(&path, html).map_err(|e| e.to_string())
                     },
                     |r| Message::Loaded(Loaded::Done(Then::Nothing, r)),
                 ));
