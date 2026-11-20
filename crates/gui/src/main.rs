@@ -72,6 +72,33 @@ type Anchor = (Vec<Gain>, Vec<(usize, f32)>);
 /// Samples of the level history: two per second, thirty seconds.
 const HIST_LEN: usize = 60;
 
+/// A message in the corner of the window.
+pub struct Toast {
+    id: u64,
+    at: Instant,
+    text: String,
+    level: &'static str,
+}
+
+/// Most messages shown at once.
+const MAX_TOASTS: usize = 3;
+
+impl Toast {
+    /// How long it stays: errors longest, they are the ones to read.
+    fn life(&self) -> Duration {
+        Duration::from_secs(match self.level {
+            "error" => 14,
+            "warn" => 10,
+            _ => 6,
+        })
+    }
+
+    /// Share of its time left, 1 → 0.
+    fn left(&self) -> f32 {
+        (1.0 - self.at.elapsed().as_secs_f32() / self.life().as_secs_f32()).clamp(0.0, 1.0)
+    }
+}
+
 pub struct Strip {
     pub cache: canvas::Cache,
     pub label: String,
@@ -280,8 +307,9 @@ pub struct App {
     last_check: Option<Instant>,
     core: Arc<AppState>,
     notices: Arc<Mutex<Vec<Notice>>>,
-    /// Message for the user: when it came, text, level.
-    pub notice: Option<(Instant, String, &'static str)>,
+    /// Messages for the user, newest last (at most [`MAX_TOASTS`]).
+    pub notice: Vec<Toast>,
+    next_toast: u64,
     pub strips: Vec<Strip>,
     pub outs: Vec<Out>,
     pub fx: Vec<Fx>,
@@ -517,7 +545,7 @@ pub enum Message {
     ToggleMini,
     /// The window size is known: enter mini mode.
     MiniEnter(Size),
-    DismissNotice,
+    DismissNotice(u64),
     TogglePin,
     CloseRequested,
     /// A window asked to close (the popup closes, the main window hides).
@@ -1546,7 +1574,8 @@ impl App {
             dialog: None,
             core,
             notices,
-            notice: None,
+            notice: vec![],
+            next_toast: 0,
             strips: vec![],
             outs: vec![],
             fx: vec![],
@@ -1611,7 +1640,22 @@ impl App {
     }
 
     fn say(&mut self, level: &'static str, text: String) {
-        self.notice = Some((Instant::now(), text, level));
+        // The same message again only starts its time over.
+        if let Some(t) = self.notice.iter_mut().find(|t| t.text == text) {
+            t.at = Instant::now();
+            t.level = level;
+            return;
+        }
+        self.next_toast += 1;
+        self.notice.push(Toast {
+            id: self.next_toast,
+            at: Instant::now(),
+            text,
+            level,
+        });
+        if self.notice.len() > MAX_TOASTS {
+            self.notice.remove(0);
+        }
     }
 
     fn refresh_sounds(&mut self) {
@@ -1923,7 +1967,7 @@ impl App {
                     }
                 }
             }
-            Message::DismissNotice => self.notice = None,
+            Message::DismissNotice(id) => self.notice.retain(|t| t.id != id),
             Message::Unfocused(id) => {
                 // Not right after opening: the window is still taking focus.
                 let fresh = self
@@ -2330,13 +2374,7 @@ impl App {
                 if let Some(n) = notices.into_iter().last() {
                     self.say(n.level, n.text);
                 }
-                if self
-                    .notice
-                    .as_ref()
-                    .is_some_and(|(at, ..)| at.elapsed() > Duration::from_secs(12))
-                {
-                    self.notice = None;
-                }
+                self.notice.retain(|t| t.at.elapsed() < t.life());
                 if self
                     .edit_at
                     .is_some_and(|t| t.elapsed() >= Duration::from_millis(800))
@@ -4796,78 +4834,7 @@ impl App {
             View::Desk => self.desk(),
             View::Matrix => self.matrix(),
         };
-        let toast: Element<'_, Message> = match &self.notice {
-            Some((_, text_, level)) => {
-                let (tone, glyph) = match *level {
-                    "error" => (danger(), "!"),
-                    "warn" => (amber(), "!"),
-                    _ => (accent(), "i"),
-                };
-                let badge = container(text(glyph).size(13).font(BOLD).color(Color::WHITE).center())
-                    .width(22)
-                    .height(22)
-                    .center_x(22)
-                    .center_y(22)
-                    .style(move |_| container::Style {
-                        background: Some(Background::Color(tone)),
-                        border: Border {
-                            radius: 11.0.into(),
-                            ..Border::default()
-                        },
-                        ..container::Style::default()
-                    });
-                let close = button(text("×").size(16).color(muted_color()).center())
-                    .width(24)
-                    .height(24)
-                    .padding(0)
-                    .on_press(Message::DismissNotice)
-                    .style(|_, status| button::Style {
-                        background: matches!(status, button::Status::Hovered)
-                            .then(|| Background::Color(panel_2())),
-                        text_color: muted_color(),
-                        border: Border {
-                            radius: 12.0.into(),
-                            ..Border::default()
-                        },
-                        ..button::Style::default()
-                    });
-                container(
-                    container(
-                        row![
-                            badge,
-                            text(text_.clone()).size(13).color(text_color()),
-                            close
-                        ]
-                        .spacing(12)
-                        .align_y(Vertical::Center),
-                    )
-                    .padding([10, 14])
-                    .max_width(620)
-                    .style(move |_| container::Style {
-                        background: Some(Background::Color(panel())),
-                        border: Border {
-                            color: mix(border(), tone, 0.6),
-                            width: 1.0,
-                            radius: 10.0.into(),
-                        },
-                        shadow: Shadow {
-                            color: Color {
-                                a: 0.5,
-                                ..Color::BLACK
-                            },
-                            offset: iced::Vector::new(0.0, 6.0),
-                            blur_radius: 18.0,
-                        },
-                        ..container::Style::default()
-                    }),
-                )
-                .padding(24)
-                .center_x(Length::Fill)
-                .align_bottom(Length::Fill)
-                .into()
-            }
-            None => space().height(0).into(),
-        };
+        let toast = self.toasts();
         let page = column![
             self.titlebar(false),
             container(body)
@@ -4893,6 +4860,115 @@ impl App {
                 ..container::Style::default()
             });
         stack![framed, Self::grips(Message::Resize)].into()
+    }
+
+    /// The messages: cards in the top right corner under the title bar, each
+    /// with a stripe in the colour of its kind, a title, the text and a thin
+    /// line that runs down with the time left.
+    fn toasts(&self) -> Element<'_, Message> {
+        if self.notice.is_empty() {
+            return space().height(0).into();
+        }
+        let mut col = column![].spacing(10).width(Length::Shrink);
+        // Newest on top.
+        for t in self.notice.iter().rev() {
+            let (tone, glyph, title) = match t.level {
+                "error" => (danger(), "!", "Fehler"),
+                "warn" => (amber(), "!", "Achtung"),
+                _ => (accent(), "i", "Hinweis"),
+            };
+            let badge = container(text(glyph).size(13).font(BOLD).color(Color::WHITE).center())
+                .width(24)
+                .height(24)
+                .center_x(24)
+                .center_y(24)
+                .style(move |_| container::Style {
+                    background: Some(Background::Color(tone)),
+                    border: Border {
+                        radius: 12.0.into(),
+                        ..Border::default()
+                    },
+                    ..container::Style::default()
+                });
+            let close = button(text("×").size(16).color(muted_color()).center())
+                .width(24)
+                .height(24)
+                .padding(0)
+                .on_press(Message::DismissNotice(t.id))
+                .style(|_, status| button::Style {
+                    background: matches!(status, button::Status::Hovered)
+                        .then(|| Background::Color(panel_2())),
+                    text_color: muted_color(),
+                    border: Border {
+                        radius: 12.0.into(),
+                        ..Border::default()
+                    },
+                    ..button::Style::default()
+                });
+            let body = column![
+                row![
+                    text(i18n::tr(title)).size(13).font(BOLD).color(tone),
+                    space().width(Length::Fill),
+                    close
+                ]
+                .align_y(Vertical::Center),
+                text(t.text.clone()).size(13).color(text_color()),
+            ]
+            .spacing(2)
+            .width(Length::Fill);
+            let line = iced::widget::progress_bar(0.0..=1.0, t.left())
+                .girth(3)
+                .style(move |_| iced::widget::progress_bar::Style {
+                    background: Background::Color(Color::TRANSPARENT),
+                    bar: Background::Color(Color { a: 0.7, ..tone }),
+                    border: Border::default(),
+                });
+            col = col.push(
+                container(
+                    column![
+                        container(row![badge, body].spacing(12).align_y(Vertical::Top)).padding(
+                            iced::Padding {
+                                top: 12.0,
+                                right: 10.0,
+                                bottom: 10.0,
+                                left: 14.0,
+                            }
+                        ),
+                        line,
+                    ]
+                    .width(Length::Fill),
+                )
+                .width(380)
+                .clip(true)
+                .style(move |_| container::Style {
+                    background: Some(Background::Color(panel())),
+                    border: Border {
+                        color: mix(border(), tone, 0.5),
+                        width: 1.0,
+                        radius: 10.0.into(),
+                    },
+                    shadow: Shadow {
+                        color: Color {
+                            a: 0.5,
+                            ..Color::BLACK
+                        },
+                        offset: iced::Vector::new(0.0, 6.0),
+                        blur_radius: 18.0,
+                    },
+                    ..container::Style::default()
+                }),
+            );
+        }
+        container(col)
+            .padding(iced::Padding {
+                top: 58.0,
+                right: 16.0,
+                bottom: 16.0,
+                left: 16.0,
+            })
+            .align_right(Length::Fill)
+            .align_top(Length::Fill)
+            .into()
     }
 
     /// Invisible strips along the edges and corners that start a resize.

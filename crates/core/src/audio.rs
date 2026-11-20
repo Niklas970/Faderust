@@ -229,6 +229,19 @@ const DEVICE_INVALIDATED: &str = "-2004287484";
 
 /// The cause of a failed connection in words a user can act on. `cable`:
 /// the device is a virtual cable, where the Bluetooth hint does not apply.
+/// The capture of a program failed because the program left or is not
+/// playing: expected when it is closed, nothing to tell the user.
+fn program_gone(error: &str) -> bool {
+    [
+        "läuft nicht mehr",
+        "is no longer running",
+        "spielt gerade keinen Ton ab",
+        "is not playing sound right now",
+    ]
+    .iter()
+    .any(|m| error.contains(m))
+}
+
 fn explain(error: &str, cable: bool) -> String {
     if error.contains(DEVICE_IN_USE) && cable {
         tr(
@@ -323,7 +336,9 @@ impl Notices {
                     Direction::Output => config.outputs.get(*slot).map(|e| &e.device),
                 };
                 let cable = pattern.is_some_and(|d| faderust_engine::apps::is_virtual_cable(d));
-                (previous.as_ref() != Some(error)).then(|| Notice {
+                // A program that was closed (or is silent) is not a fault.
+                let program = pattern.is_some_and(|d| d.starts_with("app:"));
+                (previous.as_ref() != Some(error) && !(program && program_gone(error))).then(|| Notice {
                     level: "error",
                     text: format!(
                         "{} {}",
@@ -1236,7 +1251,10 @@ fn snapshot(config: &Config, engine: Option<&Engine<CpalBackend>>) -> UiState {
 
 #[cfg(test)]
 mod tests {
-    use super::{explain, osd_level, skipped, step_db, strip_step, LevelDelay, UiDevice, UiState};
+    use super::{
+        explain, osd_level, program_gone, skipped, step_db, strip_step, LevelDelay, UiDevice,
+        UiState,
+    };
     use crate::config::Gain;
 
     fn ui_device(connected: bool, level_db: f32, buffer_ms: Option<u32>) -> UiDevice {
@@ -1520,6 +1538,16 @@ mod tests {
         assert!(explain(error, false).contains("Headset-Mikro"));
         assert!(explain(error, true).contains("Windows-Audio"));
         assert!(explain("something else", false).starts_with("something else."));
+    }
+
+    #[test]
+    fn a_closed_program_is_not_reported() {
+        assert!(program_gone("celltosingularity.exe läuft nicht mehr"));
+        assert!(program_gone("celltosingularity.exe is no longer running"));
+        assert!(program_gone("brave.exe spielt gerade keinen Ton ab"));
+        assert!(!program_gone(
+            "Aufnahme von brave.exe ist eben fehlgeschlagen"
+        ));
     }
 
     #[test]
