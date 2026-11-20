@@ -131,6 +131,10 @@ pub struct DesignSnap {
     pub strip_history: bool,
     pub knobs: bool,
     pub echo_button: bool,
+    pub hide_readout: bool,
+    pub button_row: bool,
+    pub slim_strips: bool,
+    pub slim_scroll: bool,
 }
 
 impl Prefs {
@@ -166,6 +170,10 @@ impl Prefs {
             strip_history: self.strip_history,
             knobs: self.knobs,
             echo_button: self.echo_button,
+            hide_readout: self.hide_readout,
+            button_row: self.button_row,
+            slim_strips: self.slim_strips,
+            slim_scroll: self.slim_scroll,
         };
         serde_json::to_string(&d).unwrap_or_default()
     }
@@ -204,6 +212,10 @@ impl Prefs {
         self.strip_history = d.strip_history;
         self.knobs = d.knobs;
         self.echo_button = d.echo_button;
+        self.hide_readout = d.hide_readout;
+        self.button_row = d.button_row;
+        self.slim_strips = d.slim_strips;
+        self.slim_scroll = d.slim_scroll;
         true
     }
 
@@ -324,6 +336,14 @@ pub struct Prefs {
     pub button_look: String,
     /// An echo switch on every strip of the desk.
     pub echo_button: bool,
+    /// Desk: no dB value under the fader.
+    pub hide_readout: bool,
+    /// Desk: mute, effects and echo in one row.
+    pub button_row: bool,
+    /// Desk: outputs and devices as narrow as the programs.
+    pub slim_strips: bool,
+    /// Desk: a thin scroll bar for the programs.
+    pub slim_scroll: bool,
     /// Own colours per element (keys of `style::Part`), "#rrggbb".
     pub part_colors: std::collections::BTreeMap<String, String>,
     /// Colour of the value display as "#rrggbb"; empty is the signal colour.
