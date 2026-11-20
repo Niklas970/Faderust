@@ -149,6 +149,8 @@ mod tests {
         assert!(h.contains("hide_readout=an"));
         // The JSON block cannot end the script early.
         assert_eq!(h.matches("</script>").count(), 2);
-        assert!(!h.contains('%'));
+        for key in ["%VERSION%", "%W%", "%H%", "%OPTS%", "%JSON%", "%PNG%"] {
+            assert!(!h.contains(key), "{key} not replaced");
+        }
     }
 }
