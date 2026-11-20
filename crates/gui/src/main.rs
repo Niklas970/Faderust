@@ -521,6 +521,10 @@ pub enum Message {
     Rescaled(window::Id),
     /// Start resizing the window from an edge or corner.
     Resize(window::Direction),
+    DialogDrag,
+    DialogMin,
+    DialogMax,
+    DialogResize(window::Direction),
     Quit,
     CheckUpdate,
     UpdateChecked(Result<Option<Update>, String>, bool),
@@ -1148,8 +1152,20 @@ impl App {
                     Dialog::Log | Dialog::Selftest => Size::new(900.0, 700.0),
                     _ => Size::new(820.0, 720.0),
                 };
+                // Centred over the main window, above it, like the main window
+                // without system decorations.
+                let position = match (self.pos_keep, self.size_keep) {
+                    (Some(p), Some(m)) => window::Position::Specific(Point::new(
+                        (p.x + (m.width - size.width) / 2.0).max(0.0),
+                        (p.y + (m.height - size.height) / 2.0).max(0.0),
+                    )),
+                    _ => window::Position::Centered,
+                };
                 let settings = window::Settings {
                     size,
+                    position,
+                    decorations: false,
+                    level: window::Level::AlwaysOnTop,
                     min_size: Some(Size::new(520.0, 420.0)),
                     exit_on_close_request: false,
                     icon: window::icon::from_file_data(LOGO, None).ok(),
@@ -2025,6 +2041,26 @@ impl App {
             Message::Drag => {
                 if let Some(id) = self.win_id {
                     return window::drag(id);
+                }
+            }
+            Message::DialogDrag => {
+                if let Some(id) = self.dialog_win {
+                    return window::drag(id);
+                }
+            }
+            Message::DialogMin => {
+                if let Some(id) = self.dialog_win {
+                    return window::minimize(id, true);
+                }
+            }
+            Message::DialogMax => {
+                if let Some(id) = self.dialog_win {
+                    return window::toggle_maximize(id);
+                }
+            }
+            Message::DialogResize(direction) => {
+                if let Some(id) = self.dialog_win {
+                    return window::drag_resize(id, direction);
                 }
             }
             Message::CheckUpdate => {
@@ -3057,7 +3093,7 @@ impl App {
 
     // --- title bar -------------------------------------------------------
 
-    fn titlebar(&self) -> Element<'_, Message> {
+    fn titlebar(&self, dialog: bool) -> Element<'_, Message> {
         let compact = false;
         let nav = |glyph: icons::Glyph, label: &'static str, d: Dialog| {
             let on = self.dialog == Some(d);
@@ -3240,7 +3276,7 @@ impl App {
             .into(),
             None => brand.into(),
         };
-        if self.mini {
+        if self.mini && !dialog {
             let slim = container(
                 row![
                     image(self.logo.clone())
@@ -3301,25 +3337,57 @@ impl App {
                     navs
                 },
                 space().width(16),
-                toggle(
-                    icons::Glyph::Mini,
+                if dialog {
+                    space().width(0).into()
+                } else {
+                    toggle(
+                        icons::Glyph::Mini,
+                        false,
+                        "Kompaktmodus",
+                        Message::ToggleMini,
+                    )
+                },
+                if dialog {
+                    space().width(0).into()
+                } else {
+                    toggle(
+                        icons::Glyph::Pin,
+                        self.pinned,
+                        if self.pinned {
+                            "Nicht mehr im Vordergrund halten"
+                        } else {
+                            "Immer im Vordergrund"
+                        },
+                        Message::TogglePin,
+                    )
+                },
+                win(
+                    icons::Glyph::WinMin,
                     false,
-                    "Kompaktmodus",
-                    Message::ToggleMini
-                ),
-                toggle(
-                    icons::Glyph::Pin,
-                    self.pinned,
-                    if self.pinned {
-                        "Nicht mehr im Vordergrund halten"
+                    if dialog {
+                        Message::DialogMin
                     } else {
-                        "Immer im Vordergrund"
-                    },
-                    Message::TogglePin
+                        Message::Minimize
+                    }
                 ),
-                win(icons::Glyph::WinMin, false, Message::Minimize),
-                win(icons::Glyph::WinMax, false, Message::ToggleMax),
-                win(icons::Glyph::WinClose, true, Message::CloseRequested),
+                win(
+                    icons::Glyph::WinMax,
+                    false,
+                    if dialog {
+                        Message::DialogMax
+                    } else {
+                        Message::ToggleMax
+                    }
+                ),
+                win(
+                    icons::Glyph::WinClose,
+                    true,
+                    if dialog {
+                        Message::Open(None)
+                    } else {
+                        Message::CloseRequested
+                    }
+                ),
             ]
             .spacing(12)
             .align_y(Vertical::Center),
@@ -3337,8 +3405,16 @@ impl App {
             ..container::Style::default()
         });
         iced::widget::mouse_area(bar)
-            .on_press(Message::Drag)
-            .on_double_click(Message::ToggleMax)
+            .on_press(if dialog {
+                Message::DialogDrag
+            } else {
+                Message::Drag
+            })
+            .on_double_click(if dialog {
+                Message::DialogMax
+            } else {
+                Message::ToggleMax
+            })
             .into()
     }
 
@@ -4446,14 +4522,28 @@ impl App {
                     dialogs::set_standalone(true);
                     let v = dialogs::view(self, d);
                     dialogs::set_standalone(false);
-                    container(v)
+                    let page = container(column![
+                        self.titlebar(true),
+                        container(v)
+                            .padding(10)
+                            .width(Length::Fill)
+                            .height(Length::Fill),
+                    ])
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .style(|_| container::Style {
+                        background: Some(Background::Color(bg())),
+                        ..container::Style::default()
+                    });
+                    let framed = container(page)
+                        .padding(1)
                         .width(Length::Fill)
                         .height(Length::Fill)
                         .style(|_| container::Style {
-                            background: Some(Background::Color(bg())),
+                            background: Some(Background::Color(frame_color())),
                             ..container::Style::default()
-                        })
-                        .into()
+                        });
+                    stack![framed, Self::grips(Message::DialogResize)].into()
                 }
                 None => space().into(),
             }
@@ -4611,7 +4701,7 @@ impl App {
             None => space().height(0).into(),
         };
         let page = column![
-            self.titlebar(),
+            self.titlebar(false),
             container(body)
                 .padding(10)
                 .width(Length::Fill)
@@ -4634,11 +4724,11 @@ impl App {
                 background: Some(Background::Color(frame_color())),
                 ..container::Style::default()
             });
-        stack![framed, Self::grips()].into()
+        stack![framed, Self::grips(Message::Resize)].into()
     }
 
     /// Invisible strips along the edges and corners that start a resize.
-    fn grips() -> Element<'static, Message> {
+    fn grips(resize: fn(window::Direction) -> Message) -> Element<'static, Message> {
         use iced::window::Direction as D;
         let grip = |w: Length,
                     h: Length,
@@ -4646,7 +4736,7 @@ impl App {
                     cursor: iced::mouse::Interaction|
          -> Element<'static, Message> {
             iced::widget::mouse_area(space().width(w).height(h))
-                .on_press(Message::Resize(d))
+                .on_press(resize(d))
                 .interaction(cursor)
                 .into()
         };
