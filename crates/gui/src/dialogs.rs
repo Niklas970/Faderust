@@ -2004,7 +2004,7 @@ fn settings(app: &App) -> Element<'_, Message> {
             check(app.prefs.test_channel)
                 .label(tr("Testversionen: Updates auch von Test-Builds"))
                 .on_toggle(|v| edit(Edit::TestChannel(v))),
-            hint("Ein Test-Build ist der Stand eines Branches vor dem Release. Du startest ihn in GitHub unter Actions („Test build“) für einen Branch; hier wählst du den Branch aus."),
+            hint("Ein Test-Build ist der Stand von main vor dem Release. Er entsteht nach jedem Merge automatisch in GitHub (Actions, „Test build“)."),
             hint(mine),
         ]
         .spacing(8);
@@ -2043,36 +2043,57 @@ fn settings(app: &App) -> Element<'_, Message> {
         }
         card("Testversionen", c)
     };
-    let left = cards(
-        3,
-        vec![
-            card(
-                "Eingänge",
-                column![inputs, btn("+ Eingang", edit(Edit::InAdd), false)].spacing(10),
+    let tab = app.devices_tab;
+    let tabs = segmented(vec![
+        ("Geräte".into(), tab == 0, edit(Edit::DevicesTab(0))),
+        ("Verbindungen".into(), tab == 1, edit(Edit::DevicesTab(1))),
+        ("Erweitert".into(), tab == 2, edit(Edit::DevicesTab(2))),
+    ]);
+    let content: Element<'_, Message> = match tab {
+        1 => row![
+            cards(
+                1,
+                vec![
+                    card("Faderust Kabel", cable_section),
+                    card("Stream Deck", deck_section(app)),
+                ]
             ),
-            card(
-                "Ausgänge",
-                column![outputs, btn("+ Ausgang", edit(Edit::OutAdd), false)].spacing(10),
+            cards(
+                1,
+                vec![
+                    card("Programm-Mikro", mic_section(app)),
+                    card(
+                        "Start",
+                        check(app.autostart)
+                            .label(tr("Mit Windows starten (im Tray, ohne Fenster)"))
+                            .on_toggle(|v| edit(Edit::Autostart(v))),
+                    ),
+                ]
             ),
-            debug_card,
-            test_card,
-        ],
-    );
-    let right = cards(
-        2,
-        vec![
-            card("Programm-Mikro", mic_section(app)),
-            card(
-                "Start",
-                check(app.autostart)
-                    .label(tr("Mit Windows starten (im Tray, ohne Fenster)"))
-                    .on_toggle(|v| edit(Edit::Autostart(v))),
-            ),
-            card("Faderust Kabel", cable_section),
-            card("Stream Deck", deck_section(app)),
-        ],
-    );
-    let body = column![error_line(app), row![left, right].spacing(12)].spacing(10);
+        ]
+        .spacing(12)
+        .align_y(Vertical::Top)
+        .into(),
+        2 => row![cards(1, vec![debug_card]), cards(1, vec![test_card]),]
+            .spacing(12)
+            .align_y(Vertical::Top)
+            .into(),
+        _ => row![cards(
+            3,
+            vec![
+                card(
+                    "Eingänge",
+                    column![inputs, btn("+ Eingang", edit(Edit::InAdd), false)].spacing(10),
+                ),
+                card(
+                    "Ausgänge",
+                    column![outputs, btn("+ Ausgang", edit(Edit::OutAdd), false)].spacing(10),
+                ),
+            ]
+        ),]
+        .into(),
+    };
+    let body = column![error_line(app), tabs, content].spacing(12);
     frame(
         "Geräte".into(),
         1180.0,
