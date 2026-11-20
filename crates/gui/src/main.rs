@@ -258,6 +258,8 @@ pub struct App {
     pub part_input: Option<(style::Part, String)>,
     /// Tab shown in the design dialog: 0 look, 1 colours, 2 general.
     pub design_tab: u8,
+    /// Tab shown in the devices dialog: 0 devices, 1 connections, 2 advanced.
+    pub devices_tab: u8,
     /// Name typed for a new design profile.
     pub profile_name: String,
     /// Drawing cache of the sample strips in the design dialog.
@@ -436,6 +438,7 @@ pub enum Edit {
     EchoButton(bool),
     ButtonLook(&'static str),
     DesignTab(u8),
+    DevicesTab(u8),
     /// Moves a strip one place left (-1) or right (1) on the desk.
     MoveStrip(usize, i8),
     SortStrips(bool),
@@ -1503,6 +1506,7 @@ impl App {
             lcd_input: None,
             part_input: None,
             design_tab: 0,
+            devices_tab: 0,
             profile_name: String::new(),
             preview_cache: canvas::Cache::new(),
             logo: image::Handle::from_bytes(LOGO),
@@ -2726,6 +2730,7 @@ impl App {
             Edit::StripHistory(on) => self.set_look(|p| p.strip_history = on),
             Edit::Knobs(on) => self.set_look(|p| p.knobs = on),
             Edit::DesignTab(t) => self.design_tab = t,
+            Edit::DevicesTab(t) => self.devices_tab = t,
             Edit::SortStrips(on) => self.set_look(|p| p.sort_strips = on),
             Edit::MoveStrip(i, dir) => {
                 let programs = self.strips.get(i).is_some_and(|s| s.program);

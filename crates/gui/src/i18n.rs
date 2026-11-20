@@ -342,13 +342,15 @@ const TABLE: &[(&str, &str)] = &[
     ("Update auf", "Update to"),
     ("Testversionen", "Test versions"),
     ("Test-Build", "Test build"),
+    ("Verbindungen", "Connections"),
+    ("Erweitert", "Advanced"),
     (
         "Noch keine Test-Builds geladen: „Jetzt suchen“ lädt die Liste.",
         "No test builds loaded yet: \"Search now\" loads the list.",
     ),
     (
-        "Ein Test-Build ist der Stand eines Branches vor dem Release. Du startest ihn in GitHub unter Actions („Test build“) für einen Branch; hier wählst du den Branch aus.",
-        "A test build is the state of a branch before the release. You start it in GitHub under Actions (\"Test build\") for a branch; here you pick the branch.",
+        "Ein Test-Build ist der Stand von main vor dem Release. Er entsteht nach jedem Merge automatisch in GitHub (Actions, „Test build“).",
+        "A test build is the state of main before the release. It is built automatically after every merge in GitHub (Actions, \"Test build\").",
     ),
     ("Dieses Faderust ist ein Release:", "This Faderust is a release:"),
     ("Dieses Faderust ist ein Test-Build:", "This Faderust is a test build:"),
