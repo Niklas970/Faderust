@@ -302,7 +302,72 @@ pub fn view(app: &App, d: Dialog) -> Element<'_, Message> {
         Dialog::Log => log(app),
         Dialog::Selftest => selftest(app),
         Dialog::Soundboard => soundboard(app),
+        Dialog::Markup => markup(app),
     }
+}
+
+/// The marking window: the picture of the desk, and the list of areas.
+fn markup(app: &App) -> Element<'_, Message> {
+    let Some(mk) = &app.markup else {
+        return hint("Kein Bild: „Design markieren“ unter Geräte → Erweitert macht eins.");
+    };
+    let list = mk
+        .marks
+        .iter()
+        .enumerate()
+        .fold(column![].spacing(8), |col, (i, m)| {
+            col.push(
+                row![
+                    container(
+                        text(format!("{}", i + 1))
+                            .size(12)
+                            .font(BOLD)
+                            .color(Color::WHITE)
+                            .center()
+                    )
+                    .width(24)
+                    .height(24)
+                    .align_x(iced::alignment::Horizontal::Center)
+                    .align_y(Vertical::Center)
+                    .style(|_| container::Style {
+                        background: Some(Background::Color(Color::from_rgb8(255, 59, 129))),
+                        border: Border {
+                            radius: 12.0.into(),
+                            ..Border::default()
+                        },
+                        ..container::Style::default()
+                    }),
+                    text_input("Was soll anders sein?", &m.note)
+                        .on_input(move |t| edit(Edit::MarkupNote(i, t)))
+                        .width(Length::Fill),
+                    button(text("✕").size(12).color(text_color()).center())
+                        .width(28)
+                        .height(28)
+                        .padding(0)
+                        .on_press(edit(Edit::MarkupDelete(i)))
+                        .style(flat(Look::Secondary)),
+                ]
+                .spacing(8)
+                .align_y(Vertical::Center),
+            )
+        });
+    let side = column![
+        hint("Ziehe auf dem Bild ein Rechteck über das, was du meinst, oder klicke auf eine Stelle. Schreibe dazu, was anders sein soll."),
+        scroll(list).height(Length::Fill),
+        row![
+            btn("Alle löschen", edit(Edit::MarkupClear), false),
+            btn("Neues Bild", edit(Edit::MarkupStart), false),
+        ]
+        .spacing(8),
+        btn("Bild und Liste kopieren", edit(Edit::MarkupCopy), true),
+        hint("Das Bild mit den nummerierten Bereichen liegt danach in der Zwischenablage, die Liste als Text dazu."),
+    ]
+    .spacing(12)
+    .width(320);
+    row![crate::markup::surface(mk), side]
+        .spacing(12)
+        .height(Length::Fill)
+        .into()
 }
 
 fn fx(app: &App, i: usize) -> Element<'_, Message> {
@@ -2222,10 +2287,10 @@ fn settings(app: &App) -> Element<'_, Message> {
         card("Testversionen", c)
     };
     let export_card = card(
-        "Design exportieren",
+        "Design markieren",
         column![
-            hint("Speichert ein Bild des Hauptfensters als HTML-Datei. Im Browser ziehst du Rechtecke darüber und beschreibst, was anders sein soll."),
-            btn("Als HTML speichern", edit(Edit::ExportDesign), false),
+            hint("Macht ein Bild des Hauptfensters. Darauf ziehst du Rechtecke, schreibst Notizen und kopierst alles mit einem Klick in die Zwischenablage."),
+            btn("Design markieren", edit(Edit::MarkupStart), false),
         ]
         .spacing(8),
     );

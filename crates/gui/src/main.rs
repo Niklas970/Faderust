@@ -11,13 +11,14 @@
 //! `FADERUST_SHOT=out.png` saves one screenshot after a moment and exits;
 //! `FADERUST_VIEW=matrix` and `FADERUST_DIALOG=<name>` and `FADERUST_MINI=1` pick what it shows.
 
+mod clip;
 mod cpu;
 mod dialogs;
-mod export;
 mod fader;
 mod files;
 mod i18n;
 mod icons;
+mod markup;
 mod osd;
 mod picker;
 mod scale;
@@ -199,6 +200,7 @@ pub enum Dialog {
     Selftest,
     Soundboard,
     Fx(usize),
+    Markup,
 }
 
 pub struct App {
@@ -212,6 +214,8 @@ pub struct App {
     popup_id: Option<window::Id>,
     /// The settings dialog in a window of its own.
     dialog_win: Option<window::Id>,
+    /// Picture of the desk with the areas marked on it.
+    markup: Option<markup::Markup>,
     popup_at: Option<Instant>,
     /// The main window was hidden when the popup opened, and goes back to
     /// hidden when it closes (the engine only sends levels while shown).
@@ -479,8 +483,15 @@ pub enum Edit {
     SavePreset,
     LoadPreset(String),
     ExportPreset(String),
-    /// Saves the current look as an HTML page to mark parts in.
-    ExportDesign,
+    /// Takes a picture of the desk and opens the marking window.
+    MarkupStart,
+    /// A new area (fractions of the picture: x0, y0, x1, y1).
+    MarkupAdd([f32; 4]),
+    MarkupNote(usize, String),
+    MarkupDelete(usize),
+    MarkupClear,
+    /// Picture with the areas and the list onto the clipboard.
+    MarkupCopy,
     ImportPreset,
     DeletePreset(String),
     Soundboard(bool),
@@ -554,8 +565,8 @@ pub enum Message {
     /// Refreshes the list of open programs (only while "Beendete" is chosen).
     PollApps,
     Shot(window::Screenshot),
-    /// Picture of the desk for the design export.
-    DesignShot(window::Screenshot),
+    /// Picture of the desk for the marking window.
+    MarkupShot(window::Screenshot),
     Id(Option<window::Id>),
     Loaded(Loaded),
     Failed(String),
@@ -1161,7 +1172,7 @@ impl App {
         match (self.dialog, self.dialog_win) {
             (Some(d), None) => {
                 let size = match d {
-                    Dialog::Design => Size::new(1320.0, 840.0),
+                    Dialog::Design | Dialog::Markup => Size::new(1320.0, 840.0),
                     Dialog::Fx(_) => Size::new(1120.0, 820.0),
                     Dialog::Settings => Size::new(1120.0, 820.0),
                     Dialog::Log | Dialog::Selftest => Size::new(900.0, 700.0),
@@ -1217,6 +1228,7 @@ impl App {
             Dialog::Selftest => "Selbsttest",
             Dialog::Soundboard => "Soundboard",
             Dialog::Fx(_) => "Effekte",
+            Dialog::Markup => "Markieren",
         }
     }
 
@@ -1508,6 +1520,7 @@ impl App {
             },
             visible,
             win_id: None,
+            markup: None,
             dir,
             autostart: shell::autostart_enabled(),
             mic_device: None,
@@ -2345,36 +2358,15 @@ impl App {
             }
             Message::Id(Some(id)) => return window::screenshot(id).map(Message::Shot),
             Message::Id(None) => {}
-            Message::DesignShot(shot) => {
-                let p = &self.prefs;
-                let page = export::Page {
-                    version: faderust_core::update::own_version().to_string(),
-                    png: png_bytes(&shot),
-                    width: (shot.size.width as f32 / shot.scale_factor).round() as u32,
-                    height: (shot.size.height as f32 / shot.scale_factor).round() as u32,
-                    opts: vec![
-                        ("scale_off", p.scale_off),
-                        ("hide_readout", p.hide_readout),
-                        ("readout_display", p.readout_display),
-                        ("button_row", p.button_row),
-                        ("echo_button", p.echo_button),
-                        ("slim_strips", p.slim_strips),
-                        ("slim_scroll", p.slim_scroll),
-                        ("thin_track", p.thin_track),
-                        ("cap_square", p.cap_square),
-                        ("cap_value_off", p.cap_value_off),
-                    ],
-                    design_json: p.design_json(),
-                };
-                self.jobs.push(blocking(
-                    move || -> Result<(), String> {
-                        let Some(path) = files::save_html("faderust-design")? else {
-                            return Ok(());
-                        };
-                        std::fs::write(&path, export::render(&page)).map_err(|e| e.to_string())
-                    },
-                    |r| Message::Loaded(Loaded::Done(Then::Nothing, r)),
+            Message::MarkupShot(shot) => {
+                self.markup = Some(markup::Markup::new(
+                    &shot.rgba,
+                    shot.size.width,
+                    shot.size.height,
+                    shot.scale_factor,
+                    faderust_core::update::own_version().to_string(),
                 ));
+                return self.open(Some(Dialog::Markup));
             }
             Message::Shot(shot) => {
                 if let Some(path) = self.shot.take() {
@@ -2978,12 +2970,48 @@ impl App {
                     |r| Message::Loaded(Loaded::Done(Then::Nothing, r)),
                 ));
             }
-            Edit::ExportDesign => match self.win_id {
+            Edit::MarkupStart => match self.win_id {
                 Some(id) => self
                     .jobs
-                    .push(window::screenshot(id).map(Message::DesignShot)),
+                    .push(window::screenshot(id).map(Message::MarkupShot)),
                 None => self.say("error", "Kein Fenster zum Fotografieren".into()),
             },
+            Edit::MarkupAdd([x0, y0, x1, y1]) => {
+                if let Some(mk) = &mut self.markup {
+                    mk.marks.push(markup::Mark {
+                        x0,
+                        y0,
+                        x1,
+                        y1,
+                        note: String::new(),
+                    });
+                }
+            }
+            Edit::MarkupNote(i, t) => {
+                if let Some(mark) = self.markup.as_mut().and_then(|mk| mk.marks.get_mut(i)) {
+                    mark.note = t;
+                }
+            }
+            Edit::MarkupDelete(i) => {
+                if let Some(mk) = &mut self.markup {
+                    if i < mk.marks.len() {
+                        mk.marks.remove(i);
+                    }
+                }
+            }
+            Edit::MarkupClear => {
+                if let Some(mk) = &mut self.markup {
+                    mk.marks.clear();
+                }
+            }
+            Edit::MarkupCopy => {
+                if let Some(mk) = &self.markup {
+                    match clip::set_image_and_text(mk.w, mk.h, &mk.annotated(), &mk.list()) {
+                        Ok(()) => self.say("info", "Bild mit Markierungen kopiert".into()),
+                        Err(e) => self.say("error", e),
+                    }
+                }
+            }
             Edit::ImportPreset => {
                 let core = self.core.clone();
                 self.jobs.push(blocking(
@@ -4987,18 +5015,6 @@ impl App {
 fn mute_style(on: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
     // Follows the chosen button look and the theme: red when muted.
     style::key(if on { Look::Danger } else { Look::Secondary })
-}
-
-/// The screenshot as PNG data.
-fn png_bytes(shot: &window::Screenshot) -> Vec<u8> {
-    let mut out = Vec::new();
-    let mut enc = png::Encoder::new(&mut out, shot.size.width, shot.size.height);
-    enc.set_color(png::ColorType::Rgba);
-    enc.set_depth(png::BitDepth::Eight);
-    if let Ok(mut w) = enc.write_header() {
-        let _ = w.write_image_data(&shot.rgba);
-    }
-    out
 }
 
 fn save_png(path: &str, shot: &window::Screenshot) {
