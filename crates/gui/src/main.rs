@@ -209,6 +209,8 @@ pub struct App {
     /// The tray popup: a window of its own (compact mixer) that closes when
     /// it loses focus. The main window is not touched by it.
     popup_id: Option<window::Id>,
+    /// The settings dialog in a window of its own.
+    dialog_win: Option<window::Id>,
     popup_at: Option<Instant>,
     /// The main window was hidden when the popup opened, and goes back to
     /// hidden when it closes (the engine only sends levels while shown).
@@ -1134,6 +1136,59 @@ impl App {
         window::close(id)
     }
 
+    /// Keeps the settings window in step with the open dialog: opens it,
+    /// closes it, or retitles it when another dialog takes its place.
+    fn sync_dialog_window(&mut self) -> Task<Message> {
+        match (self.dialog, self.dialog_win) {
+            (Some(d), None) => {
+                let size = match d {
+                    Dialog::Design => Size::new(1320.0, 840.0),
+                    Dialog::Fx(_) => Size::new(1120.0, 820.0),
+                    Dialog::Settings => Size::new(1120.0, 820.0),
+                    Dialog::Log | Dialog::Selftest => Size::new(900.0, 700.0),
+                    _ => Size::new(820.0, 720.0),
+                };
+                let settings = window::Settings {
+                    size,
+                    min_size: Some(Size::new(520.0, 420.0)),
+                    exit_on_close_request: false,
+                    icon: window::icon::from_file_data(LOGO, None).ok(),
+                    ..window::Settings::default()
+                };
+                let (id, open) = window::open(settings);
+                self.dialog_win = Some(id);
+                open.map(Message::PopupOpened)
+            }
+            (None, Some(id)) => {
+                self.dialog_win = None;
+                window::close(id)
+            }
+            _ => Task::none(),
+        }
+    }
+
+    /// Window title of a dialog.
+    fn window_title(&self, id: window::Id) -> String {
+        match (self.dialog_win == Some(id), self.dialog) {
+            (true, Some(d)) => format!("Faderust: {}", i18n::tr(Self::dialog_title(d))),
+            _ => "Faderust".to_string(),
+        }
+    }
+
+    fn dialog_title(d: Dialog) -> &'static str {
+        match d {
+            Dialog::Presets => "Presets",
+            Dialog::Windows => "Windows",
+            Dialog::Settings => "Geräte",
+            Dialog::Design => "Design",
+            Dialog::Apps => "Programme",
+            Dialog::Log => "Protokoll",
+            Dialog::Selftest => "Selbsttest",
+            Dialog::Soundboard => "Soundboard",
+            Dialog::Fx(_) => "Effekte",
+        }
+    }
+
     fn show(&mut self) -> Task<Message> {
         self.visible.store(true, Ordering::Relaxed);
         self.popup_hid_main = false;
@@ -1398,6 +1453,7 @@ impl App {
             mini: std::env::var_os("FADERUST_MINI").is_some(),
             mini_prev: None,
             popup_id: None,
+            dialog_win: None,
             popup_at: None,
             popup_hid_main: false,
             popup_draw: Cell::new(false),
@@ -1784,6 +1840,7 @@ impl App {
         let direct = self.handle(message);
         let mut jobs = std::mem::take(&mut self.jobs);
         jobs.push(direct);
+        jobs.push(self.sync_dialog_window());
         Task::batch(jobs)
     }
 
@@ -1835,6 +1892,10 @@ impl App {
             Message::PopupOpened(_) => {}
             Message::ClosePopup => return self.close_popup(),
             Message::WindowClose(id) => {
+                if self.dialog_win == Some(id) {
+                    self.dialog_win = None;
+                    return Task::batch([self.open(None), window::close(id)]);
+                }
                 return if self.popup_id == Some(id) {
                     self.close_popup()
                 } else {
@@ -4379,6 +4440,23 @@ impl App {
     fn view_of(&self, id: window::Id) -> Element<'_, Message> {
         if self.popup_id == Some(id) {
             self.popup_view()
+        } else if self.dialog_win == Some(id) {
+            match self.dialog {
+                Some(d) => {
+                    dialogs::set_standalone(true);
+                    let v = dialogs::view(self, d);
+                    dialogs::set_standalone(false);
+                    container(v)
+                        .width(Length::Fill)
+                        .height(Length::Fill)
+                        .style(|_| container::Style {
+                            background: Some(Background::Color(bg())),
+                            ..container::Style::default()
+                        })
+                        .into()
+                }
+                None => space().into(),
+            }
         } else {
             self.view()
         }
@@ -4546,10 +4624,7 @@ impl App {
                 background: Some(Background::Color(bg())),
                 ..container::Style::default()
             });
-        let content: Element<'_, Message> = match self.dialog {
-            Some(d) => stack![page, dialogs::view(self, d), toast].into(),
-            None => stack![page, toast].into(),
-        };
+        let content: Element<'_, Message> = stack![page, toast].into();
         // A visible edge around the borderless window, with grips to resize it.
         let framed = container(content)
             .padding(1)
@@ -4738,7 +4813,7 @@ fn main() -> iced::Result {
     iced::daemon(App::new, App::update, App::view_of)
         .subscription(App::subscription)
         .theme(|app: &App, _| theme(app))
-        .title(|_: &App, _| "Faderust".to_string())
+        .title(|app: &App, id| app.window_title(id))
         .run()
 }
 

@@ -128,6 +128,16 @@ fn segmented(items: Vec<(String, bool, Message)>) -> Element<'static, Message> {
     .into()
 }
 
+thread_local! {
+    /// True while the dialog is drawn in a window of its own.
+    static STANDALONE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Draws the next dialog for a window of its own instead of an overlay.
+pub fn set_standalone(on: bool) {
+    STANDALONE.with(|s| s.set(on));
+}
+
 fn frame<'a>(
     title: String,
     width: f32,
@@ -148,11 +158,15 @@ fn frame<'a>(
                     .style(flat(Look::Secondary)),
             ]
             .align_y(Vertical::Center),
-            scroll(container(body).padding(iced::Padding::default().right(28))).height(if tall {
-                Length::Fixed(680.0)
-            } else {
-                Length::Shrink
-            }),
+            scroll(container(body).padding(iced::Padding::default().right(28))).height(
+                if STANDALONE.with(|s| s.get()) {
+                    Length::Fill
+                } else if tall {
+                    Length::Fixed(680.0)
+                } else {
+                    Length::Shrink
+                }
+            ),
             container(footer)
                 .width(Length::Fill)
                 .align_x(iced::alignment::Horizontal::Right),
@@ -161,8 +175,23 @@ fn frame<'a>(
     )
     .padding(20)
     .width(Length::Fill)
-    .max_width(width)
-    .max_height(if tall { 780.0 } else { 760.0 })
+    .max_width(if STANDALONE.with(|s| s.get()) {
+        f32::MAX
+    } else {
+        width
+    })
+    .height(if STANDALONE.with(|s| s.get()) {
+        Length::Fill
+    } else {
+        Length::Shrink
+    })
+    .max_height(if STANDALONE.with(|s| s.get()) {
+        f32::MAX
+    } else if tall {
+        780.0
+    } else {
+        760.0
+    })
     .style(|_| container::Style {
         background: Some(Background::Color(panel())),
         border: Border {
@@ -172,6 +201,12 @@ fn frame<'a>(
         },
         ..container::Style::default()
     });
+    if STANDALONE.with(|s| s.get()) {
+        return container(card)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
+    }
     // The backdrop swallows clicks; a click on it closes the dialog.
     opaque(
         mouse_area(
