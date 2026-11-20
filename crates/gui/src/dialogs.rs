@@ -97,6 +97,54 @@ fn cards<'a>(portion: u16, items: Vec<Element<'a, Message>>) -> Element<'a, Mess
         .into()
 }
 
+/// One option as a switch with a title and a short explanation: easier to
+/// read than a bare check box.
+fn opt<'a>(
+    title: &'static str,
+    desc: &'static str,
+    on: bool,
+    msg: impl Fn(bool) -> Message + 'a,
+) -> Element<'a, Message> {
+    row![
+        column![
+            text(title).size(13).font(BOLD).color(text_color()),
+            text(desc).size(12).color(muted_color()),
+        ]
+        .spacing(2)
+        .width(Length::Fill),
+        iced::widget::toggler(on)
+            .on_toggle(msg)
+            .size(22)
+            .style(|_, status| {
+                use iced::widget::toggler::Status;
+                let (on, hot) = match status {
+                    Status::Active { is_toggled } => (is_toggled, false),
+                    Status::Hovered { is_toggled } => (is_toggled, true),
+                    Status::Disabled { is_toggled } => (is_toggled, false),
+                };
+                iced::widget::toggler::Style {
+                    background: Background::Color(if on { accent() } else { well_light() }),
+                    background_border_width: 1.0,
+                    background_border_color: if on || hot { accent() } else { border() },
+                    foreground: Background::Color(if on { on_accent() } else { muted_color() }),
+                    foreground_border_width: 0.0,
+                    foreground_border_color: Color::TRANSPARENT,
+                    text_color: Some(text_color()),
+                    border_radius: None,
+                    padding_ratio: 0.2,
+                }
+            }),
+    ]
+    .spacing(14)
+    .align_y(Vertical::Center)
+    .into()
+}
+
+/// Options of one card, one under the other.
+fn opts<'a>(items: Vec<Element<'a, Message>>) -> Element<'a, Message> {
+    column(items).spacing(12).into()
+}
+
 fn hint(label: impl Into<String>) -> Element<'static, Message> {
     text(label.into()).size(12).color(muted_color()).into()
 }
@@ -1219,57 +1267,85 @@ fn design(app: &App) -> Element<'_, Message> {
     );
     let edge_card = card(
         "Grüner Rand bei Signal",
-        row![
-            check(!app.prefs.output_edge_off)
-                .label(tr("Ausgänge"))
-                .on_toggle(|v| edit(Edit::OutputEdge(v))),
-            check(!app.prefs.device_edge_off)
-                .label(tr("Geräte"))
-                .on_toggle(|v| edit(Edit::DeviceEdge(v))),
-            check(!app.prefs.program_edge_off)
-                .label(tr("Programme"))
-                .on_toggle(|v| edit(Edit::ProgramEdge(v))),
-        ]
-        .spacing(18),
+        opts(vec![
+            opt(
+                "Ausgänge",
+                "Der Streifen leuchtet grün, solange Ton durchläuft.",
+                !app.prefs.output_edge_off,
+                |v| edit(Edit::OutputEdge(v)),
+            ),
+            opt(
+                "Geräte",
+                "Wie bei den Ausgängen, für Mikrofone und andere Geräte.",
+                !app.prefs.device_edge_off,
+                |v| edit(Edit::DeviceEdge(v)),
+            ),
+            opt(
+                "Programme",
+                "Wie bei den Ausgängen, für Programme.",
+                !app.prefs.program_edge_off,
+                |v| edit(Edit::ProgramEdge(v)),
+            ),
+        ]),
     );
     let fader_card = card(
         "Fader",
-        column![
-            check(app.prefs.cap_square)
-                .label(tr("Eckige Fader-Kappe"))
-                .on_toggle(|v| edit(Edit::CapSquare(v))),
-            check(!app.prefs.scale_off)
-                .label(tr("Skala am Fader"))
-                .on_toggle(|v| edit(Edit::Scale(v))),
-            check(app.prefs.zero_mark)
-                .label(tr("Nullstrich am Fader"))
-                .on_toggle(|v| edit(Edit::ZeroMark(v))),
-            check(!app.prefs.glow_off)
-                .label(tr("Leuchten am Fader"))
-                .on_toggle(|v| edit(Edit::Glow(v))),
-            check(app.prefs.accent_cap)
-                .label(tr("Kappe in Akzentfarbe"))
-                .on_toggle(|v| edit(Edit::AccentCap(v))),
-            check(!app.prefs.cap_value_off)
-                .label(tr("Wert in der Kappe"))
-                .on_toggle(|v| edit(Edit::CapValue(v))),
-            check(app.prefs.thin_track)
-                .label(tr("Schmale Bahn"))
-                .on_toggle(|v| edit(Edit::ThinTrack(v))),
-            check(app.prefs.grip_cap)
-                .label(tr("Schmaler Griff als Kappe"))
-                .on_toggle(|v| edit(Edit::GripCap(v))),
-            check(app.prefs.strip_colors)
-                .label(tr("Eigene Farbe pro Streifen"))
-                .on_toggle(|v| edit(Edit::StripColors(v))),
-            check(app.prefs.relief)
-                .label(tr("Streifen als erhabene Platten"))
-                .on_toggle(|v| edit(Edit::Relief(v))),
-            check(app.prefs.readout_display)
-                .label(tr("Wert im Display"))
-                .on_toggle(|v| edit(Edit::ReadoutDisplay(v))),
-        ]
-        .spacing(6),
+        opts(vec![
+            opt(
+                "Skala am Fader",
+                "Zahlen in dB neben der Bahn.",
+                !app.prefs.scale_off,
+                |v| edit(Edit::Scale(v)),
+            ),
+            opt(
+                "Wert in der Kappe",
+                "Die aktuelle dB-Zahl steht auf der Fader-Kappe.",
+                !app.prefs.cap_value_off,
+                |v| edit(Edit::CapValue(v)),
+            ),
+            opt(
+                "Nullstrich am Fader",
+                "Eine Linie markiert 0 dB.",
+                app.prefs.zero_mark,
+                |v| edit(Edit::ZeroMark(v)),
+            ),
+            opt(
+                "Leuchten am Fader",
+                "Die Bahn leuchtet bis zur Kappe.",
+                !app.prefs.glow_off,
+                |v| edit(Edit::Glow(v)),
+            ),
+            opt(
+                "Eckige Fader-Kappe",
+                "Statt der runden Kappe.",
+                app.prefs.cap_square,
+                |v| edit(Edit::CapSquare(v)),
+            ),
+            opt(
+                "Kappe in Akzentfarbe",
+                "Die Kappe nimmt die Akzentfarbe an.",
+                app.prefs.accent_cap,
+                |v| edit(Edit::AccentCap(v)),
+            ),
+            opt(
+                "Schmale Bahn",
+                "Dünnere Führungsschiene.",
+                app.prefs.thin_track,
+                |v| edit(Edit::ThinTrack(v)),
+            ),
+            opt(
+                "Schmaler Griff als Kappe",
+                "Ein flacher Griff statt der großen Kappe.",
+                app.prefs.grip_cap,
+                |v| edit(Edit::GripCap(v)),
+            ),
+            opt(
+                "Wert im Display",
+                "Die dB-Zahl unter dem Fader steht in einem eigenen Display.",
+                app.prefs.readout_display,
+                |v| edit(Edit::ReadoutDisplay(v)),
+            ),
+        ]),
     );
     let form = if app.prefs.meter_line {
         4
@@ -1286,73 +1362,154 @@ fn design(app: &App) -> Element<'_, Message> {
     let meter_card = card(
         "Pegel",
         column![
-            hint("Form"),
+            hint("Form der Pegelanzeige am Fader"),
             segmented(vec![
                 form_btn(0, "Balken"),
                 form_btn(1, "Segmente"),
                 form_btn(2, "Punkte"),
             ]),
             segmented(vec![form_btn(3, "Blöcke"), form_btn(4, "Linie")]),
-            hint("Farben und Marke"),
-            check(app.prefs.one_color)
-                .label(tr("Pegel einfarbig"))
-                .on_toggle(|v| edit(Edit::OneColor(v))),
-            check(!app.prefs.peak_off)
-                .label(tr("Spitzenwert-Marke"))
-                .on_toggle(|v| edit(Edit::PeakMark(v))),
-            check(!app.prefs.matrix_meters_off)
-                .label(tr("Pegelbalken in der Matrix"))
-                .on_toggle(|v| edit(Edit::MatrixMeters(v))),
+            opts(vec![
+                opt(
+                    "Pegel einfarbig",
+                    "Ohne Farbverlauf von Grün nach Rot, auch in der Matrix.",
+                    app.prefs.one_color,
+                    |v| edit(Edit::OneColor(v)),
+                ),
+                opt(
+                    "Spitzenwert-Marke",
+                    "Eine Marke hält kurz den höchsten Pegel, auch in der Matrix.",
+                    !app.prefs.peak_off,
+                    |v| edit(Edit::PeakMark(v)),
+                ),
+            ]),
         ]
-        .spacing(6),
+        .spacing(10),
+    );
+    let matrix_card = card(
+        "Matrix",
+        opts(vec![
+            opt(
+                "Pegelbalken in der Matrix",
+                "Ein dünner Pegelbalken unter jeder Zeile.",
+                !app.prefs.matrix_meters_off,
+                |v| edit(Edit::MatrixMeters(v)),
+            ),
+            opt(
+                "Spitzenwert-Marke",
+                "Gilt für Pult und Matrix, die Matrix zeigt sie auf dem Balken.",
+                !app.prefs.peak_off,
+                |v| edit(Edit::PeakMark(v)),
+            ),
+            opt(
+                "Pegel einfarbig",
+                "Gilt für Pult und Matrix.",
+                app.prefs.one_color,
+                |v| edit(Edit::OneColor(v)),
+            ),
+        ]),
+    );
+    let matrix_fx_card = card(
+        "Effekte",
+        opts(vec![opt(
+            "Drehregler mit LED-Kranz",
+            "Die Regler der Effekte sind Drehknöpfe statt Schieber.",
+            app.prefs.knobs,
+            |v| edit(Edit::Knobs(v)),
+        )]),
+    );
+    let space_save_card = card(
+        "Platz sparen",
+        opts(vec![
+            opt(
+                "dB-Zahl unter dem Fader ausblenden",
+                "Der Wert steht schon in der Kappe, die Zeile wird frei.",
+                app.prefs.hide_readout,
+                |v| edit(Edit::HideReadout(v)),
+            ),
+            opt(
+                "Mute, Effekte und Echo in einer Reihe",
+                "Drei kleine Tasten nebeneinander statt untereinander.",
+                app.prefs.button_row,
+                |v| edit(Edit::ButtonRow(v)),
+            ),
+            opt(
+                "Schmale Ausgänge und Geräte",
+                "So schmal wie die Programme: mehr Programme auf einmal sichtbar.",
+                app.prefs.slim_strips,
+                |v| edit(Edit::SlimStrips(v)),
+            ),
+            opt(
+                "Dünne Scrollleiste bei den Programmen",
+                "Weniger freier Rand unter den Streifen.",
+                app.prefs.slim_scroll,
+                |v| edit(Edit::SlimScroll(v)),
+            ),
+        ]),
     );
     let head_card = card(
         "Streifen und Leiste",
-        column![
-            check(app.prefs.strip_head)
-                .label(tr("Streifenkopf mit Symbol"))
-                .on_toggle(|v| edit(Edit::StripHead(v))),
-            check(app.prefs.strip_history)
-                .label(tr("Pegelverlauf im Kopf (30 s)"))
-                .on_toggle(|v| edit(Edit::StripHistory(v))),
-            check(app.prefs.sort_strips)
-                .label(tr("Pfeile zum Sortieren auf den Streifen"))
-                .on_toggle(|v| edit(Edit::SortStrips(v))),
-            check(app.prefs.echo_button)
-                .label(tr("Echo-Taste auf jedem Streifen"))
-                .on_toggle(|v| edit(Edit::EchoButton(v))),
-            check(app.prefs.knobs)
-                .label(tr(
-                    "Drehregler mit LED-Kranz statt Schiebern in den Effekten"
-                ))
-                .on_toggle(|v| edit(Edit::Knobs(v))),
-        ]
-        .spacing(6),
+        opts(vec![
+            opt(
+                "Streifenkopf mit Symbol",
+                "Symbol und Farbe des Programms oben am Streifen.",
+                app.prefs.strip_head,
+                |v| edit(Edit::StripHead(v)),
+            ),
+            opt(
+                "Pegelverlauf im Kopf (30 s)",
+                "Eine kleine Kurve zeigt die letzten 30 Sekunden.",
+                app.prefs.strip_history,
+                |v| edit(Edit::StripHistory(v)),
+            ),
+            opt(
+                "Pfeile zum Sortieren auf den Streifen",
+                "Streifen lassen sich nach links und rechts schieben.",
+                app.prefs.sort_strips,
+                |v| edit(Edit::SortStrips(v)),
+            ),
+            opt(
+                "Echo-Taste auf jedem Streifen",
+                "Schaltet den Echo-Effekt direkt am Streifen.",
+                app.prefs.echo_button,
+                |v| edit(Edit::EchoButton(v)),
+            ),
+            opt(
+                "Eigene Farbe pro Streifen",
+                "Jeder Streifen bekommt seinen eigenen Farbton.",
+                app.prefs.strip_colors,
+                |v| edit(Edit::StripColors(v)),
+            ),
+            opt(
+                "Streifen als erhabene Platten",
+                "Die Streifen wirken wie Platten mit Schatten.",
+                app.prefs.relief,
+                |v| edit(Edit::Relief(v)),
+            ),
+        ]),
     );
     let extras_card = card(
         "Fenster",
-        column![
-            text(tr("Soundboard")).size(13).color(text_color()),
-            segmented(vec![
-                (
-                    "An".into(),
-                    app.prefs.soundboard,
-                    edit(Edit::Soundboard(true))
-                ),
-                (
-                    "Aus".into(),
-                    !app.prefs.soundboard,
-                    edit(Edit::Soundboard(false))
-                ),
-            ]),
-            check(!app.prefs.osd_off)
-                .label(tr("Kurze Einblendung am Bildschirmrand bei Stream Deck"))
-                .on_toggle(|v| edit(Edit::Osd(v))),
-            check(app.prefs.tray_popup)
-                .label(tr("Klick öffnet einen kleinen Mixer neben der Taskbar"))
-                .on_toggle(|v| edit(Edit::TrayPopup(v))),
-        ]
-        .spacing(8),
+        opts(vec![
+            opt(
+                "Soundboard",
+                "Zeigt das Soundboard oben in der Leiste.",
+                app.prefs.soundboard,
+                |v| edit(Edit::Soundboard(v)),
+            ),
+            opt(
+                "Einblendung bei Stream Deck",
+                "Kurze Anzeige am Bildschirmrand, wenn du am Stream Deck drehst.",
+                !app.prefs.osd_off,
+                |v| edit(Edit::Osd(v)),
+            ),
+            opt(
+                "Kleiner Mixer neben der Taskbar",
+                "Ein Klick auf das Tray-Symbol öffnet einen kleinen Mixer.",
+                app.prefs.tray_popup,
+                |v| edit(Edit::TrayPopup(v)),
+            ),
+        ]),
     );
     let look_card = card(
         "Design",
@@ -1516,31 +1673,53 @@ fn design(app: &App) -> Element<'_, Message> {
     let tab = app.design_tab;
     let tabs = segmented(vec![
         ("Aussehen".into(), tab == 0, edit(Edit::DesignTab(0))),
-        ("Farben".into(), tab == 1, edit(Edit::DesignTab(1))),
-        ("Allgemein".into(), tab == 2, edit(Edit::DesignTab(2))),
+        ("Pult".into(), tab == 1, edit(Edit::DesignTab(1))),
+        ("Matrix".into(), tab == 2, edit(Edit::DesignTab(2))),
+        ("Farben".into(), tab == 3, edit(Edit::DesignTab(3))),
+        ("Allgemein".into(), tab == 4, edit(Edit::DesignTab(4))),
     ]);
+    let tab_hint = match tab {
+        1 => Some("Gilt nur für die Ansicht „Pult“."),
+        2 => Some("Gilt nur für die Ansicht „Matrix“."),
+        _ => None,
+    };
     let content: Element<'_, Message> = match tab {
         1 => row![
-            cards(1, vec![accent_card, signal_card, lcd_card]),
-            cards(1, vec![parts_card, edge_card]),
-        ]
-        .spacing(12)
-        .align_y(Vertical::Top)
-        .into(),
-        2 => row![
-            cards(1, vec![view_card, hide_card, lang_card]),
-            cards(1, vec![space_card, extras_card]),
-        ]
-        .spacing(12)
-        .align_y(Vertical::Top)
-        .into(),
-        _ => row![
-            cards(1, vec![look_card, head_card, button_card]),
+            cards(1, vec![space_save_card, head_card, edge_card]),
             cards(1, vec![fader_card, meter_card]),
         ]
         .spacing(12)
         .align_y(Vertical::Top)
         .into(),
+        2 => row![cards(1, vec![matrix_card]), cards(1, vec![matrix_fx_card]),]
+            .spacing(12)
+            .align_y(Vertical::Top)
+            .into(),
+        3 => row![
+            cards(1, vec![accent_card, signal_card, lcd_card]),
+            cards(1, vec![parts_card]),
+        ]
+        .spacing(12)
+        .align_y(Vertical::Top)
+        .into(),
+        4 => row![
+            cards(1, vec![hide_card, lang_card]),
+            cards(1, vec![extras_card]),
+        ]
+        .spacing(12)
+        .align_y(Vertical::Top)
+        .into(),
+        _ => row![
+            cards(1, vec![look_card, button_card]),
+            cards(1, vec![view_card, space_card]),
+        ]
+        .spacing(12)
+        .align_y(Vertical::Top)
+        .into(),
+    };
+    let content: Element<'_, Message> = match tab_hint {
+        Some(h) => column![hint(h), content].spacing(10).into(),
+        None => content,
     };
     let body = row![
         cards(1, vec![preview_card, profile_card, reset_card]),

@@ -436,6 +436,10 @@ pub enum Edit {
     StripHistory(bool),
     Knobs(bool),
     EchoButton(bool),
+    HideReadout(bool),
+    ButtonRow(bool),
+    SlimStrips(bool),
+    SlimScroll(bool),
     ButtonLook(&'static str),
     DesignTab(u8),
     DevicesTab(u8),
@@ -1023,6 +1027,11 @@ impl App {
     /// Narrow strips: compact mode.
     fn tight(&self) -> bool {
         self.is_mini()
+    }
+
+    /// Narrow strips for outputs and devices: compact mode or the chosen block.
+    fn slim(&self) -> bool {
+        self.is_mini() || self.prefs.slim_strips
     }
 
     /// The narrow layout: compact mode, or the tray popup being drawn.
@@ -2823,6 +2832,10 @@ impl App {
                     p.strip_history = d.strip_history;
                     p.knobs = d.knobs;
                     p.echo_button = d.echo_button;
+                    p.hide_readout = d.hide_readout;
+                    p.button_row = d.button_row;
+                    p.slim_strips = d.slim_strips;
+                    p.slim_scroll = d.slim_scroll;
                     p.meter_look = d.meter_look;
                     p.density = d.density;
                     p.glide = d.glide;
@@ -2830,6 +2843,10 @@ impl App {
             }
             Edit::ButtonLook(l) => self.set_look(|p| p.button_look = l.into()),
             Edit::EchoButton(on) => self.set_look(|p| p.echo_button = on),
+            Edit::HideReadout(on) => self.set_look(|p| p.hide_readout = on),
+            Edit::ButtonRow(on) => self.set_look(|p| p.button_row = on),
+            Edit::SlimStrips(on) => self.set_look(|p| p.slim_strips = on),
+            Edit::SlimScroll(on) => self.set_look(|p| p.slim_scroll = on),
             Edit::Relief(on) => self.set_look(|p| p.relief = on),
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::TestChannel(on) => {
@@ -3757,7 +3774,7 @@ impl App {
 
     fn strip(&self, i: usize) -> Element<'_, Message> {
         let s = &self.strips[i];
-        let narrow = s.program || self.tight();
+        let narrow = s.program || self.slim();
         let fader = Canvas::new(Fader {
             cache: &s.cache,
             db: s.db,
@@ -3845,6 +3862,86 @@ impl App {
         } else {
             foot
         };
+        // Mute, effects and echo in one row when the block is on.
+        let bottom: Element<'_, Message> = if self.prefs.button_row && !self.is_mini() {
+            let cell = |label: &'static str,
+                        msg: Message,
+                        look: Look,
+                        hint: &'static str|
+             -> Element<'_, Message> {
+                dialogs::tip(
+                    button(text(label).size(12).color(look_text(look)).center())
+                        .width(Length::Fill)
+                        .height(28)
+                        .padding(0)
+                        .on_press(msg)
+                        .style(key(look)),
+                    hint,
+                )
+            };
+            let mute = button(
+                text("M")
+                    .size(12)
+                    .font(BOLD)
+                    .color(look_text(if s.muted {
+                        Look::Danger
+                    } else {
+                        Look::Secondary
+                    }))
+                    .center(),
+            )
+            .width(Length::Fill)
+            .height(28)
+            .padding(0)
+            .on_press(Message::Mute(i))
+            .style(mute_style(s.muted));
+            let mut r = row![
+                dialogs::tip(mute, "Stumm"),
+                cell(
+                    "FX",
+                    Message::Open(Some(Dialog::Fx(i))),
+                    Look::Secondary,
+                    "Effekte"
+                ),
+            ]
+            .spacing(3)
+            .align_y(Vertical::Center);
+            if self.prefs.echo_button {
+                let on = self.fx.get(i).is_some_and(|f| f.echo);
+                r = r.push(cell(
+                    "E",
+                    Message::Edit(Edit::Echo(i, !on)),
+                    if on { Look::Primary } else { Look::Secondary },
+                    if on {
+                        "Echo ausschalten"
+                    } else {
+                        "Echo einschalten"
+                    },
+                ));
+            }
+            if s.program {
+                r = r.push(cell(
+                    if s.keep { "◉" } else { "○" },
+                    Message::Edit(Edit::Keep(i)),
+                    if s.keep {
+                        Look::Primary
+                    } else {
+                        Look::Secondary
+                    },
+                    if s.keep {
+                        "Bleibt auf dem Pult, auch wenn still"
+                    } else {
+                        "Immer anzeigen, auch wenn still"
+                    },
+                ));
+            }
+            r.into()
+        } else {
+            column![Self::mute_button(s.muted, Message::Mute(i), "MUTE"), foot]
+                .spacing(8)
+                .align_x(Horizontal::Center)
+                .into()
+        };
         let top: Element<'_, Message> = if s.program {
             row![
                 Self::chips(&s.routes, Some(i), narrow),
@@ -3889,13 +3986,12 @@ impl App {
                 self.strip_name(s),
                 space().height(if self.is_mini() { 0 } else { 14 }),
                 fader,
-                if self.is_mini() {
+                if self.is_mini() || self.prefs.hide_readout {
                     Element::from(space().height(0))
                 } else {
                     self.readout(s.db, s.muted)
                 },
-                Self::mute_button(s.muted, Message::Mute(i), "MUTE"),
-                foot,
+                bottom,
             ]
             .spacing(8)
             .align_x(Horizontal::Center)
@@ -3968,12 +4064,12 @@ impl App {
             parts: self.parts(),
             tint: None,
             post_fader: true,
-            narrow: self.tight(),
+            narrow: self.slim(),
             labels: !self.is_mini(),
         })
         .width(if self.is_mini() {
             78.0
-        } else if self.tight() {
+        } else if self.slim() {
             104.0
         } else {
             STRIP_W
@@ -4015,26 +4111,54 @@ impl App {
             column![
                 tag,
                 Self::name_label(&m.label),
-                if self.tight() {
+                if self.slim() {
                     Element::from(space().height(0))
                 } else {
                     Self::note(o, &m.note, m.note_on)
                 },
                 fader,
-                if self.is_mini() {
+                if self.is_mini() || self.prefs.hide_readout {
                     Element::from(space().height(0))
                 } else {
                     self.readout(m.db, m.muted)
                 },
-                Self::mute_button(m.muted, Message::MasterMute(o), "MUTE"),
-                space().height(if self.is_mini() { 0 } else { 24 }),
+                if self.prefs.button_row && !self.is_mini() {
+                    // Same height as the one-row keys of the strips.
+                    Element::from(
+                        button(
+                            text("M")
+                                .width(Length::Fill)
+                                .size(12)
+                                .font(BOLD)
+                                .color(look_text(if m.muted {
+                                    Look::Danger
+                                } else {
+                                    Look::Secondary
+                                }))
+                                .center(),
+                        )
+                        .width(Length::Fill)
+                        .height(28)
+                        .padding(0)
+                        .on_press(Message::MasterMute(o))
+                        .style(mute_style(m.muted)),
+                    )
+                } else {
+                    column![
+                        Self::mute_button(m.muted, Message::MasterMute(o), "MUTE"),
+                        space().height(if self.is_mini() { 0 } else { 24 }),
+                    ]
+                    .spacing(8)
+                    .align_x(Horizontal::Center)
+                    .into()
+                },
             ]
             .spacing(8)
             .align_x(Horizontal::Center)
             .into(),
             if self.is_mini() {
                 124.0
-            } else if self.tight() {
+            } else if self.slim() {
                 126.0
             } else {
                 164.0
@@ -4067,26 +4191,31 @@ impl App {
         cards: Vec<Element<'a, Message>>,
         fill: bool,
         gap: f32,
+        slim_bar: bool,
     ) -> Element<'a, Message> {
+        let pad = if slim_bar { 4.0 } else { 10.0 };
+        let bar = if slim_bar { 4.0 } else { 8.0 };
         let strips = row(cards).spacing(gap).height(Length::Fill);
         let strips: Element<'a, Message> = if fill {
             // The last group takes the rest of the window and scrolls sideways,
             // so its frame always ends at the window edge.
-            iced::widget::scrollable(container(strips).padding(iced::Padding::default().bottom(10)))
-                .direction(iced::widget::scrollable::Direction::Horizontal(
-                    iced::widget::scrollable::Scrollbar::new()
-                        .width(8)
-                        .scroller_width(8)
-                        .margin(2),
-                ))
-                .style(style::scroll_style)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .into()
+            iced::widget::scrollable(
+                container(strips).padding(iced::Padding::default().bottom(pad)),
+            )
+            .direction(iced::widget::scrollable::Direction::Horizontal(
+                iced::widget::scrollable::Scrollbar::new()
+                    .width(bar)
+                    .scroller_width(bar)
+                    .margin(if slim_bar { 0 } else { 2 }),
+            ))
+            .style(style::scroll_style)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
         } else {
             // Same bottom gap as the scrolling group, so all frames end together.
             container(strips)
-                .padding(iced::Padding::default().bottom(10))
+                .padding(iced::Padding::default().bottom(pad))
                 .height(Length::Fill)
                 .into()
         };
@@ -4150,6 +4279,7 @@ impl App {
                 .collect(),
             false,
             self.prefs.gap(),
+            self.prefs.slim_scroll,
         );
         let devices = Self::section(
             Self::heading("GERÄTE", None, self.tight()),
@@ -4159,6 +4289,7 @@ impl App {
                 .collect(),
             false,
             self.prefs.gap(),
+            self.prefs.slim_scroll,
         );
         let add: Element<'_, Message> =
             button(text("+ Programm").size(12).font(BOLD).color(accent_light()))
@@ -4205,6 +4336,7 @@ impl App {
                 .collect(),
             true,
             self.prefs.gap(),
+            self.prefs.slim_scroll,
         );
         row![outputs, Self::divider(), devices, Self::divider(), programs]
             .spacing(2)

@@ -665,7 +665,7 @@ where
 }
 
 /// Fields: a light recess so they read against the dialog.
-fn well_light() -> Color {
+pub fn well_light() -> Color {
     mix(
         panel(),
         if text_color().r > 0.5 {
