@@ -145,19 +145,33 @@ fn frame<'a>(
     body: Element<'a, Message>,
     footer: Element<'a, Message>,
 ) -> Element<'a, Message> {
+    // In the settings window the bar above already names the dialog and has
+    // the close button; only dialogs without a button there keep a title.
+    let standalone = STANDALONE.with(|s| s.get());
+    let in_nav = ["Presets", "Windows", "Geräte", "Design", "Soundboard"].contains(&title.as_str());
+    let head: Element<'a, Message> = if standalone {
+        if in_nav {
+            space().height(0).into()
+        } else {
+            text(title).size(18).color(text_color()).into()
+        }
+    } else {
+        row![
+            text(title).size(18).color(text_color()),
+            space().width(Length::Fill),
+            button(text("✕").size(12).color(text_color()).center())
+                .width(28)
+                .height(28)
+                .padding(0)
+                .on_press(close())
+                .style(flat(Look::Secondary)),
+        ]
+        .align_y(Vertical::Center)
+        .into()
+    };
     let card = container(
         column![
-            row![
-                text(title).size(18).color(text_color()),
-                space().width(Length::Fill),
-                button(text("✕").size(12).color(text_color()).center())
-                    .width(28)
-                    .height(28)
-                    .padding(0)
-                    .on_press(close())
-                    .style(flat(Look::Secondary)),
-            ]
-            .align_y(Vertical::Center),
+            head,
             scroll(container(body).padding(iced::Padding::default().right(28))).height(
                 if STANDALONE.with(|s| s.get()) {
                     Length::Fill
