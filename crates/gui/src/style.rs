@@ -160,11 +160,23 @@ pub fn frame_color() -> Color {
 /// Sets the palette; `mode` is "dark", "light" or "system".
 pub fn set_theme(mode: &str, accent: &str, signal: &str) {
     let light = match mode {
-        "light" => true,
+        "light" | "paper" => true,
         "dark" => false,
         _ => system_light(),
     };
-    let accent = parse_hex(accent).unwrap_or_else(|| parse_hex(DEFAULT_ACCENT).unwrap());
+    // A design brings its own accent unless one was chosen by hand.
+    let own = match mode {
+        "sunset" => Some("#ff7a45"),
+        "terminal" => Some("#39ff7a"),
+        "paper" => Some("#c2410c"),
+        "neon" => Some("#22d3ee"),
+        _ => None,
+    };
+    let accent = match own {
+        Some(a) if accent.eq_ignore_ascii_case(DEFAULT_ACCENT) => parse_hex(a),
+        _ => parse_hex(accent),
+    }
+    .unwrap_or_else(|| parse_hex(DEFAULT_ACCENT).unwrap());
     let signal = parse_hex(signal).unwrap_or_else(|| parse_hex(DEFAULT_SIGNAL).unwrap());
     let black = Color::BLACK;
     let white = Color::WHITE;
@@ -229,6 +241,42 @@ pub fn set_theme(mode: &str, accent: &str, signal: &str) {
             pal.muted = rgb(139, 148, 158);
             pal.amber = rgb(210, 153, 34);
             pal.danger = rgb(248, 81, 73);
+        }
+        "sunset" => {
+            pal.bg = rgb(22, 10, 13);
+            pal.panel = rgb(36, 18, 22);
+            pal.panel_2 = rgb(58, 29, 34);
+            pal.well = rgb(12, 5, 7);
+            pal.border = rgb(132, 66, 68);
+            pal.text = rgb(255, 233, 214);
+            pal.muted = rgb(196, 152, 132);
+        }
+        "terminal" => {
+            pal.bg = rgb(2, 10, 5);
+            pal.panel = rgb(4, 17, 10);
+            pal.panel_2 = rgb(8, 30, 16);
+            pal.well = rgb(1, 6, 3);
+            pal.border = rgb(36, 120, 62);
+            pal.text = rgb(185, 245, 200);
+            pal.muted = rgb(96, 168, 116);
+        }
+        "neon" => {
+            pal.bg = rgb(11, 7, 20);
+            pal.panel = rgb(18, 11, 34);
+            pal.panel_2 = rgb(30, 18, 58);
+            pal.well = rgb(6, 3, 14);
+            pal.border = rgb(88, 62, 160);
+            pal.text = rgb(233, 226, 255);
+            pal.muted = rgb(156, 142, 198);
+        }
+        "paper" => {
+            pal.bg = rgb(243, 239, 230);
+            pal.panel = rgb(251, 248, 241);
+            pal.panel_2 = rgb(232, 226, 211);
+            pal.well = rgb(36, 32, 26);
+            pal.border = rgb(96, 88, 72);
+            pal.text = rgb(29, 27, 23);
+            pal.muted = rgb(84, 77, 63);
         }
         _ => {}
     }

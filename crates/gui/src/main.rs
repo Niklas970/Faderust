@@ -938,6 +938,10 @@ impl App {
             "carbon" => "carbon",
             "github" => "github",
             "midnight" => "midnight",
+            "sunset" => "sunset",
+            "terminal" => "terminal",
+            "paper" => "paper",
+            "neon" => "neon",
             _ => "dark",
         }
     }

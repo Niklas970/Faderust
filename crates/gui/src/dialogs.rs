@@ -1391,6 +1391,28 @@ fn design(app: &App) -> Element<'_, Message> {
                     edit(Edit::Mode("midnight"))
                 ),
             ]),
+            segmented(vec![
+                (
+                    "Sonnenuntergang".into(),
+                    mode_now == "sunset",
+                    edit(Edit::Mode("sunset"))
+                ),
+                (
+                    "Terminal-Grün".into(),
+                    mode_now == "terminal",
+                    edit(Edit::Mode("terminal"))
+                ),
+                (
+                    "Neon-Pult".into(),
+                    mode_now == "neon",
+                    edit(Edit::Mode("neon"))
+                ),
+                (
+                    "Papier".into(),
+                    mode_now == "paper",
+                    edit(Edit::Mode("paper"))
+                ),
+            ]),
         ]
         .spacing(8),
     );
