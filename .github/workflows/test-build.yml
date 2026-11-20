@@ -17,9 +17,10 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
 
+# Runs one after the other; a running build is never cancelled by a newer push.
 concurrency:
   group: test-build-${{ github.ref_name }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   installer:
