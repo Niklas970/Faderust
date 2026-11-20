@@ -1,13 +1,14 @@
 name: Test build
 
-# Builds the branch you pick (Run workflow, "Use workflow from") as a signed
-# setup and pushes it to the package ghcr.io/niklas970/faderust-test under the
-# tag "<branch>" (one per branch, each run replaces the previous one of its
-# branch). Faderust lists the tags when "Testversionen" is on in the Devices
+# Builds main only (after every merge, or by hand with Run workflow) as a
+# signed setup and pushes it to the package ghcr.io/niklas970/faderust-test
+# under the tag "main" (each run replaces the previous one). Faderust lists the tags when "Testversionen" is on in the Devices
 # dialog; you pick the branch there and it updates itself: no download, no
 # version bump, no release, nothing on the releases page. A real release
 # deletes the package again (release.yml).
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +23,7 @@ concurrency:
 
 jobs:
   installer:
+    if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     defaults:
       run:
