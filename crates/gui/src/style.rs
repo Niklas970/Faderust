@@ -356,7 +356,7 @@ pub fn muted_color() -> Color {
     pal().muted
 }
 
-pub const STRIP_W: f32 = 136.0;
+pub const STRIP_W: f32 = 128.0;
 pub const PAD: f32 = 18.0;
 pub const MONO: Font = Font::MONOSPACE;
 

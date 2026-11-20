@@ -128,9 +128,9 @@ impl Fader<'_> {
     /// Width of the track; the meter lies to the right of it.
     fn hit_width(&self) -> f32 {
         if self.narrow {
-            80.0 - self.shift()
+            83.0 - self.shift()
         } else {
-            100.0
+            104.0
         }
     }
     /// Without the scale the whole drawing moves left by this much.
@@ -289,13 +289,13 @@ impl Fader<'_> {
 
         // Narrow: no scale, the cap and slot move left (58 px track).
         let wide = !self.narrow;
-        let (sx, cx) = if wide { (49.0, 24.0) } else { (44.0, 30.0) };
+        let (sx, cx) = if wide { (53.0, 28.0) } else { (47.0, 33.0) };
         let (sx, cx) = (sx - self.shift(), cx - self.shift());
         // The scale sits left of the slot: labels end at `lx`, marks follow.
         let (lx, marks) = if wide {
-            (22.0, [29.0, 47.0])
+            (26.0, [33.0, 51.0])
         } else {
-            (18.0, [22.0, 0.0])
+            (21.0, [25.0, 0.0])
         };
         let slot_w = if wide { 18.0 } else { 12.0 };
         let bar_w = if wide { 10.0 } else { 6.0 };
@@ -331,7 +331,7 @@ impl Fader<'_> {
                 content: label.to_string(),
                 position: Point::new(lx, y),
                 color: if zero { text_color() } else { muted_color() },
-                size: Pixels(if wide { 11.0 } else { 10.0 }),
+                size: Pixels(if wide { 13.0 } else { 11.0 }),
                 font: MONO,
                 align_x: Horizontal::Right.into(),
                 align_y: Vertical::Center,
@@ -527,9 +527,9 @@ impl Fader<'_> {
         let total = f.height();
         let (top, h) = (Self::top(), Self::height(total));
         let (mx, mw) = if self.narrow {
-            (82.0, 14.0)
+            (85.0, 14.0)
         } else {
-            (106.0, 16.0)
+            (110.0, 16.0)
         };
         let line = self.parts.meter_line;
         let (mx, mw) = if line {
