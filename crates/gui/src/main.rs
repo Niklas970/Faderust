@@ -554,6 +554,8 @@ pub enum Message {
     /// Refreshes the list of open programs (only while "Beendete" is chosen).
     PollApps,
     Shot(window::Screenshot),
+    /// Picture of the desk for the design export.
+    DesignShot(window::Screenshot),
     Id(Option<window::Id>),
     Loaded(Loaded),
     Failed(String),
@@ -1012,73 +1014,6 @@ impl App {
         if prefs != self.prefs {
             shell::save_prefs(&self.dir, &prefs);
             self.prefs = prefs;
-        }
-    }
-
-    /// The desk as it is now, for the design export.
-    fn export_doc(&self) -> export::Doc {
-        let hex = |c: Color| style::to_hex(c);
-        let bar = style::part(style::Part::Bar).unwrap_or_else(style::accent);
-        let strips = |program: bool| {
-            self.strips
-                .iter()
-                .filter(|s| !s.hidden && s.program == program)
-                .map(|s| export::StripDoc {
-                    name: s.label.clone(),
-                    sub: s.device.trim_start_matches("app:").to_string(),
-                    db: s.db,
-                    level: s.shown,
-                    muted: s.muted,
-                    routes: s.routes.clone(),
-                    tint: hex(self.tint_of(&s.device).unwrap_or(bar)),
-                })
-                .collect::<Vec<_>>()
-        };
-        let p = &self.prefs;
-        export::Doc {
-            version: faderust_core::update::own_version().to_string(),
-            colors: export::Colors {
-                accent: self.accent(),
-                signal: self.signal(),
-                bg: hex(style::bg()),
-                panel: hex(style::panel()),
-                panel_2: hex(style::panel_2()),
-                well: hex(style::well()),
-                border: hex(style::border()),
-                text: hex(text_color()),
-                muted: hex(muted_color()),
-            },
-            outputs: self
-                .outs
-                .iter()
-                .filter(|o| !o.hidden)
-                .map(|o| export::StripDoc {
-                    name: o.label.clone(),
-                    sub: o.note.clone(),
-                    db: o.db,
-                    level: o.shown,
-                    muted: o.muted,
-                    routes: vec![],
-                    tint: hex(bar),
-                })
-                .collect(),
-            devices: strips(false),
-            programs: strips(true),
-            opts: vec![
-                ("scale_off", p.scale_off),
-                ("hide_readout", p.hide_readout),
-                ("readout_display", p.readout_display),
-                ("button_row", p.button_row),
-                ("echo_button", p.echo_button),
-                ("slim_strips", p.slim_strips),
-                ("slim_scroll", p.slim_scroll),
-                ("thin_track", p.thin_track),
-                ("cap_square", p.cap_square),
-                ("cap_value_off", p.cap_value_off),
-            ],
-            design_json: p.design_json(),
-            width: 1300,
-            height: 760,
         }
     }
 
@@ -2410,6 +2345,37 @@ impl App {
             }
             Message::Id(Some(id)) => return window::screenshot(id).map(Message::Shot),
             Message::Id(None) => {}
+            Message::DesignShot(shot) => {
+                let p = &self.prefs;
+                let page = export::Page {
+                    version: faderust_core::update::own_version().to_string(),
+                    png: png_bytes(&shot),
+                    width: (shot.size.width as f32 / shot.scale_factor).round() as u32,
+                    height: (shot.size.height as f32 / shot.scale_factor).round() as u32,
+                    opts: vec![
+                        ("scale_off", p.scale_off),
+                        ("hide_readout", p.hide_readout),
+                        ("readout_display", p.readout_display),
+                        ("button_row", p.button_row),
+                        ("echo_button", p.echo_button),
+                        ("slim_strips", p.slim_strips),
+                        ("slim_scroll", p.slim_scroll),
+                        ("thin_track", p.thin_track),
+                        ("cap_square", p.cap_square),
+                        ("cap_value_off", p.cap_value_off),
+                    ],
+                    design_json: p.design_json(),
+                };
+                self.jobs.push(blocking(
+                    move || -> Result<(), String> {
+                        let Some(path) = files::save_html("faderust-design")? else {
+                            return Ok(());
+                        };
+                        std::fs::write(&path, export::render(&page)).map_err(|e| e.to_string())
+                    },
+                    |r| Message::Loaded(Loaded::Done(Then::Nothing, r)),
+                ));
+            }
             Message::Shot(shot) => {
                 if let Some(path) = self.shot.take() {
                     save_png(&path, &shot);
@@ -3012,18 +2978,12 @@ impl App {
                     |r| Message::Loaded(Loaded::Done(Then::Nothing, r)),
                 ));
             }
-            Edit::ExportDesign => {
-                let html = export::render(&self.export_doc());
-                self.jobs.push(blocking(
-                    move || -> Result<(), String> {
-                        let Some(path) = files::save_html("faderust-design")? else {
-                            return Ok(());
-                        };
-                        std::fs::write(&path, html).map_err(|e| e.to_string())
-                    },
-                    |r| Message::Loaded(Loaded::Done(Then::Nothing, r)),
-                ));
-            }
+            Edit::ExportDesign => match self.win_id {
+                Some(id) => self
+                    .jobs
+                    .push(window::screenshot(id).map(Message::DesignShot)),
+                None => self.say("error", "Kein Fenster zum Fotografieren".into()),
+            },
             Edit::ImportPreset => {
                 let core = self.core.clone();
                 self.jobs.push(blocking(
@@ -5028,6 +4988,18 @@ impl App {
 fn mute_style(on: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
     // Follows the chosen button look and the theme: red when muted.
     style::key(if on { Look::Danger } else { Look::Secondary })
+}
+
+/// The screenshot as PNG data.
+fn png_bytes(shot: &window::Screenshot) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut enc = png::Encoder::new(&mut out, shot.size.width, shot.size.height);
+    enc.set_color(png::ColorType::Rgba);
+    enc.set_depth(png::BitDepth::Eight);
+    if let Ok(mut w) = enc.write_header() {
+        let _ = w.write_image_data(&shot.rgba);
+    }
+    out
 }
 
 fn save_png(path: &str, shot: &window::Screenshot) {

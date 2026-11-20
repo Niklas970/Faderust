@@ -2224,7 +2224,7 @@ fn settings(app: &App) -> Element<'_, Message> {
     let export_card = card(
         "Design exportieren",
         column![
-            hint("Speichert die Oberfläche mit deinen Farben und Optionen als HTML-Datei. Im Browser kannst du Teile anklicken, markieren und beschreiben."),
+            hint("Speichert ein Bild des Hauptfensters als HTML-Datei. Im Browser ziehst du Rechtecke darüber und beschreibst, was anders sein soll."),
             btn("Als HTML speichern", edit(Edit::ExportDesign), false),
         ]
         .spacing(8),
