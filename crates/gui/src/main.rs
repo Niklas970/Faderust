@@ -3228,28 +3228,40 @@ impl App {
             row![
                 logo,
                 text("FADERUST").size(13).font(BOLD).color(text_color()),
-                button(
-                    text(format!("v{}", faderust_core::update::own_version()))
-                        .size(12)
-                        .font(MONO)
-                        .color(muted_color())
-                )
-                .padding([2, 6])
-                .on_press(Message::CheckUpdate)
-                .style(|_, status| button::Style {
-                    background: None,
-                    text_color: muted_color(),
-                    border: Border {
-                        color: if matches!(status, button::Status::Hovered) {
-                            border()
-                        } else {
-                            Color::TRANSPARENT
-                        },
-                        width: 1.0,
-                        radius: 3.0.into(),
-                    },
-                    ..button::Style::default()
-                }),
+                {
+                    let e: Element<'_, Message> = if let (true, Some(d)) = (dialog, self.dialog) {
+                        text(i18n::tr(Self::dialog_title(d)))
+                            .size(14)
+                            .font(BOLD)
+                            .color(accent_light())
+                            .into()
+                    } else {
+                        button(
+                            text(format!("v{}", faderust_core::update::own_version()))
+                                .size(12)
+                                .font(MONO)
+                                .color(muted_color()),
+                        )
+                        .padding([2, 6])
+                        .on_press(Message::CheckUpdate)
+                        .style(|_, status| button::Style {
+                            background: None,
+                            text_color: muted_color(),
+                            border: Border {
+                                color: if matches!(status, button::Status::Hovered) {
+                                    border()
+                                } else {
+                                    Color::TRANSPARENT
+                                },
+                                width: 1.0,
+                                radius: 3.0.into(),
+                            },
+                            ..button::Style::default()
+                        })
+                        .into()
+                    };
+                    e
+                },
             ]
         }
         .spacing(8)
