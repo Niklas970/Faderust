@@ -386,10 +386,15 @@ fn key_colors(look: Look, status: button::Status) -> (Color, Color, Color) {
         button::Status::Hovered => (mix(base, lift, 0.16), mix(base, lift, 0.06), accent_light()),
         button::Status::Disabled => (mix(base, bg(), 0.5), mix(base, bg(), 0.5), border()),
         button::Status::Active => (
-            mix(base, lift, 0.09),
+            mix(
+                base,
+                lift,
+                if look == Look::Secondary { 0.14 } else { 0.09 },
+            ),
             base,
             if look == Look::Secondary {
-                border()
+                // Clearly set off from the strip behind it in every design.
+                mix(border(), text_color(), 0.4)
             } else {
                 mix(base, Color::BLACK, 0.3)
             },
