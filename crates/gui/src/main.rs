@@ -463,7 +463,6 @@ pub enum Edit {
     Debug(bool),
     TestChannel(bool),
     /// The test build to follow, by tag.
-    TestBranch(String),
     TrayPopup(bool),
     AccentHex(String),
     SignalHex(String),
@@ -771,11 +770,7 @@ impl App {
         }
         self.checking = true;
         self.last_check = Some(Instant::now());
-        let test = self
-            .prefs
-            .test_channel
-            .then(|| self.prefs.test_branch.clone())
-            .filter(|b| !b.is_empty());
+        let test = self.prefs.test_channel.then(|| "main".to_string());
         blocking(
             move || faderust_core::update::check(env!("CARGO_PKG_VERSION"), test.as_deref()),
             move |r| Message::UpdateChecked(r, manual),
@@ -2841,11 +2836,6 @@ impl App {
                     let t = self.load_test_builds();
                     self.jobs.push(t);
                 }
-            }
-            Edit::TestBranch(tag) => {
-                self.set_look(|p| p.test_branch = tag);
-                self.last_check = None;
-                self.update = None;
             }
             Edit::Debug(on) => self.set_look(|p| p.debug = on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),
