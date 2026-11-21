@@ -54,18 +54,19 @@
 - **Compact and on top.** Two buttons in the title bar: a narrow view without labels and "Always on top", e.g. next to a game. Both are remembered.
 - **Mini mixer in the tray (optional).** Under "Design" you can make a click on the tray icon open a small mixer at the bottom right, above the taskbar. It closes when you click elsewhere.
 - **Volume display (optional).** When the Stream Deck changes a level or mutes something, a short note with the name and the new value appears at the bottom of the screen. It takes no focus, lets clicks through and can be switched off under "Design".
-- **Your own colors:** accent and signal color freely selectable, dark (OLED black) or light.
+- **Echo and soundboard.** Echo as an effect per input (slapback, room, hall) and a soundboard that plays WAV and MP3 files on its own strip.
+- **Design to taste.** Many looks (dark, light, Carbon, Midnight, Sunset, Terminal green, Paper and more), fader cap styles, meter shapes, density and your own accent and signal colors. The preview in the Design window shows every change at once, and a profile saves the whole look under a name.
+- **Messages as cards.** Notices appear at the top right as small cards that fade out by themselves.
+- **Design markup for feedback.** Under "Devices → Advanced" you mark areas in a screenshot of the window, add notes and copy picture and list to the clipboard to send with a wish.
 
 ## Views
 
 <table>
   <tr>
-    <td width="68%"><img src="assets/matrix.png" alt="Matrix: every input on every output set individually"></td>
-    <td><img src="assets/design.png" alt="Design dialog with view, colors and appearance"></td>
+    <td><img src="assets/matrix.png" alt="Matrix: every input on every output set individually"><br><b>Matrix:</b> every input on every output individually, e.g. the microphone quieter on the headphones than in the stream.</td>
   </tr>
   <tr>
-    <td><b>Matrix:</b> every input on every output individually, e.g. the microphone quieter on the headphones than in the stream.</td>
-    <td><b>Design:</b> desk or matrix, side of the outputs, colors, dark or light.</td>
+    <td><img src="assets/design.png" alt="Design window with live preview, looks and profiles"><br><b>Design:</b> live preview with sample strips, looks, fader caps, density and colors.</td>
   </tr>
 </table>
 
