@@ -3626,7 +3626,7 @@ impl App {
                 row![
                     Self::name_label(&s.label),
                     dialogs::tip(
-                        button(text("✕").size(10).color(text_color()).center())
+                        button(Self::close_glyph())
                             .width(22)
                             .height(22)
                             .padding(0)
@@ -3653,6 +3653,18 @@ impl App {
             );
         }
         col.into()
+    }
+
+    /// The ✕ of a close button, raised a little: the glyph sits low in its
+    /// box otherwise and looks off-centre.
+    fn close_glyph() -> Element<'static, Message> {
+        container(text("✕").size(10).color(text_color()).center())
+            .center(Length::Fill)
+            .padding(iced::Padding {
+                bottom: 3.0,
+                ..iced::Padding::ZERO
+            })
+            .into()
     }
 
     fn name_label(text_: &str) -> Element<'static, Message> {
@@ -4193,7 +4205,7 @@ impl App {
         // The close button sits next to the name.
         let head = row![
             Self::name_label(&m.label),
-            button(text("✕").size(10).color(text_color()).center())
+            button(Self::close_glyph())
                 .width(22)
                 .height(22)
                 .padding(0)
