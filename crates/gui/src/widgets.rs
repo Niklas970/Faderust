@@ -8,6 +8,38 @@ use iced::{Color, Point, Rectangle, Renderer, Size, Theme};
 use crate::style::*;
 use crate::Message;
 
+/// A small ✕ drawn as two lines, so it sits exactly in the middle of its
+/// button whatever font the system has.
+pub struct Cross {
+    pub color: Color,
+}
+
+impl canvas::Program<Message> for Cross {
+    type State = ();
+
+    fn draw(
+        &self,
+        _state: &(),
+        renderer: &Renderer,
+        _theme: &Theme,
+        bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> Vec<Geometry> {
+        let mut f = Frame::new(renderer, bounds.size());
+        let (cx, cy) = (bounds.width / 2.0, bounds.height / 2.0);
+        let r = 3.5;
+        let mut line = |a: Point, b: Point| {
+            f.stroke(
+                &Path::line(a, b),
+                Stroke::default().with_color(self.color).with_width(1.5),
+            )
+        };
+        line(Point::new(cx - r, cy - r), Point::new(cx + r, cy + r));
+        line(Point::new(cx - r, cy + r), Point::new(cx + r, cy - r));
+        vec![f.into_geometry()]
+    }
+}
+
 /// The last seconds of a strip's level as a small filled curve.
 pub struct Sparkline {
     /// 0..1, oldest first.
