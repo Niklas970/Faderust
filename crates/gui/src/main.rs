@@ -4157,10 +4157,11 @@ impl App {
             },
             ..container::Style::default()
         });
-        // The A button stays under the name; the close button sits top right.
+        // The A button stays under the name.
         let tag = container(chip).center_x(Length::Fill);
-        let close = row![
-            space().width(Length::Fill),
+        // The close button sits next to the name.
+        let head = row![
+            Self::name_label(&m.label),
             button(text("✕").size(10).color(text_color()).center())
                 .width(22)
                 .height(22)
@@ -4168,11 +4169,12 @@ impl App {
                 .on_press(Message::Edit(Edit::HideOut(o, true)))
                 .style(key(Look::Secondary)),
         ]
+        .spacing(4)
+        .align_y(Vertical::Center)
         .width(Length::Fill);
         self.card(
             column![
-                close,
-                Self::name_label(&m.label),
+                head,
                 if self.slim() {
                     Element::from(space().height(0))
                 } else {
