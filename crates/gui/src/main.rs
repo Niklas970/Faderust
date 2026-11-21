@@ -160,6 +160,71 @@ pub struct Out {
     playing: bool,
 }
 
+/// Index the design preview's sample strips carry: messages for it are
+/// ignored, so a click in the preview changes nothing.
+pub const SAMPLE: usize = usize::MAX;
+
+impl Strip {
+    /// A strip for the design preview.
+    fn sample(
+        label: &str,
+        device: &str,
+        program: bool,
+        routes: Vec<bool>,
+        db: f32,
+        shown: f32,
+    ) -> Self {
+        Self {
+            cache: canvas::Cache::new(),
+            label: label.into(),
+            db,
+            muted: false,
+            shown,
+            peak: shown + 8.0,
+            peak_hold: 1.0,
+            pos: scale::to_pos(db),
+            vel: 0.0,
+            target: shown,
+            connected: true,
+            device: device.into(),
+            routes,
+            program,
+            hidden: false,
+            keep: false,
+            revealed: false,
+            dismissed: false,
+            heard: Instant::now(),
+            row: vec![],
+            hist: (0..HIST_LEN)
+                .map(|k| 0.45 + 0.35 * (k as f32 * 0.35).sin() * (k as f32 / HIST_LEN as f32))
+                .collect(),
+            anchor: None,
+        }
+    }
+}
+
+impl Out {
+    /// An output for the design preview.
+    fn sample(label: &str, note: &str, db: f32, shown: f32) -> Self {
+        Self {
+            cache: canvas::Cache::new(),
+            label: label.into(),
+            note: note.into(),
+            note_on: true,
+            hidden: false,
+            db,
+            muted: false,
+            shown,
+            peak: shown + 8.0,
+            peak_hold: 1.0,
+            pos: scale::to_pos(db),
+            vel: 0.0,
+            target: shown,
+            playing: true,
+        }
+    }
+}
+
 #[derive(Clone, PartialEq)]
 pub struct Fx {
     pub denoise: bool,
@@ -294,8 +359,8 @@ pub struct App {
     pub devices_tab: u8,
     /// Name typed for a new design profile.
     pub profile_name: String,
-    /// Drawing cache of the sample strips in the design dialog.
-    pub preview_cache: canvas::Cache,
+    /// Sample strips of the design preview: output, device, program.
+    sample: (Out, Strip, Strip),
     logo: image::Handle,
     #[cfg(windows)]
     tray: Option<shell::tray::Tray>,
@@ -598,6 +663,29 @@ pub enum Message {
     Id(Option<window::Id>),
     Loaded(Loaded),
     Failed(String),
+}
+
+impl Message {
+    /// A press or move on one of the design preview's sample strips.
+    fn is_for_sample(&self) -> bool {
+        matches!(
+            self,
+            Message::Route(SAMPLE, _)
+                | Message::Level(SAMPLE, _)
+                | Message::Mute(SAMPLE)
+                | Message::Master(SAMPLE, _)
+                | Message::MasterMute(SAMPLE)
+                | Message::ToggleRelease(SAMPLE)
+                | Message::Open(Some(Dialog::Fx(SAMPLE)))
+                | Message::Edit(
+                    Edit::Keep(SAMPLE)
+                        | Edit::Dismiss(SAMPLE)
+                        | Edit::MoveStrip(SAMPLE, _)
+                        | Edit::Echo(SAMPLE, _)
+                        | Edit::HideOut(SAMPLE, _)
+                )
+        )
+    }
 }
 
 /// What a background job brings back.
@@ -1013,7 +1101,9 @@ impl App {
     }
 
     fn clear_caches(&self) {
-        self.preview_cache.clear();
+        self.sample.0.cache.clear();
+        self.sample.1.cache.clear();
+        self.sample.2.cache.clear();
         for s in &self.strips {
             s.cache.clear();
         }
@@ -1561,7 +1651,25 @@ impl App {
             design_tab: 0,
             devices_tab: 0,
             profile_name: String::new(),
-            preview_cache: canvas::Cache::new(),
+            sample: (
+                Out::sample("Lautsprecher", "Kopfhörer (EarFun)", -6.0, -20.0),
+                Strip::sample(
+                    "Mikrofon",
+                    "mic",
+                    false,
+                    vec![true, true, false, false],
+                    -8.0,
+                    -26.0,
+                ),
+                Strip::sample(
+                    "Brave",
+                    "app:brave.exe",
+                    true,
+                    vec![false, false, true, true],
+                    3.0,
+                    -16.0,
+                ),
+            ),
             logo: image::Handle::from_bytes(LOGO),
             #[cfg(windows)]
             tray: tray_icon(),
@@ -1926,6 +2034,10 @@ impl App {
     }
 
     fn update(&mut self, message: Message) -> Task<Message> {
+        // The design preview's sample strips only look like strips.
+        if message.is_for_sample() {
+            return Task::none();
+        }
         let direct = self.handle(message);
         let mut jobs = std::mem::take(&mut self.jobs);
         jobs.push(direct);
@@ -3837,7 +3949,11 @@ impl App {
     }
 
     fn strip(&self, i: usize) -> Element<'_, Message> {
-        let s = &self.strips[i];
+        self.strip_view(&self.strips[i], i)
+    }
+
+    /// A strip; `i` is its index, or [`SAMPLE`] in the design preview.
+    fn strip_view<'a>(&'a self, s: &'a Strip, i: usize) -> Element<'a, Message> {
         let narrow = s.program || self.slim();
         let fader = Canvas::new(Fader {
             cache: &s.cache,
@@ -4074,48 +4190,23 @@ impl App {
     /// A sample strip with the current look, for
     /// the design dialog: each switch shows its effect right there.
     pub fn preview(&self) -> Element<'_, Message> {
-        let sample = |db: f32, level: f32, peak: f32, post: bool| {
-            let fader = Canvas::new(Fader {
-                cache: &self.preview_cache,
-                db,
-                pos: scale::to_pos(db),
-                muted: false,
-                level,
-                peak,
-                kind: Kind::Preview,
-                parts: self.parts(),
-                tint: self.tint_of("preview"),
-                post_fader: post,
-                narrow: false,
-                labels: true,
-            })
-            .width(STRIP_W)
-            .height(Length::Fill);
-            self.card_tint(
-                column![
-                    fader,
-                    self.readout(db, false),
-                    Self::mute_button(false, Message::Open(Some(Dialog::Design)), "MUTE"),
-                ]
-                .spacing(8)
-                .align_x(Horizontal::Center)
-                .into(),
-                156.0,
-                !(if post {
-                    self.prefs.output_edge_off
-                } else {
-                    self.prefs.device_edge_off
-                }),
-                self.head_tint("preview"),
-            )
-        };
-        row![sample(-6.0, -16.0, -9.0, false)]
-            .height(Length::Fixed(390.0))
-            .into()
+        let (out, dev, prog) = (&self.sample.0, &self.sample.1, &self.sample.2);
+        row![
+            self.master_view(out, SAMPLE),
+            self.strip_view(dev, SAMPLE),
+            self.strip_view(prog, SAMPLE),
+        ]
+        .spacing(10)
+        .height(Length::Fixed(440.0))
+        .into()
     }
 
     fn master(&self, o: usize) -> Element<'_, Message> {
-        let m = &self.outs[o];
+        self.master_view(&self.outs[o], o)
+    }
+
+    /// An output strip; `o` is its index, or [`SAMPLE`] in the design preview.
+    fn master_view<'a>(&'a self, m: &'a Out, o: usize) -> Element<'a, Message> {
         let fader = Canvas::new(Fader {
             cache: &m.cache,
             db: m.db,
@@ -4142,7 +4233,7 @@ impl App {
             space().width(22),
             space().width(Length::Fill),
             container(
-                text(format!("A{}", o + 1))
+                text(format!("A{}", if o == SAMPLE { 1 } else { o + 1 }))
                     .size(11)
                     .font(BOLD)
                     .color(on_accent())

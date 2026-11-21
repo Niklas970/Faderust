@@ -1624,6 +1624,8 @@ fn design(app: &App) -> Element<'_, Message> {
                     mode_now == "terminal",
                     edit(Edit::Mode("terminal"))
                 ),
+            ]),
+            segmented(vec![
                 (
                     "Neon-Pult".into(),
                     mode_now == "neon",
@@ -1779,10 +1781,10 @@ fn design(app: &App) -> Element<'_, Message> {
         None => content,
     };
     let body = row![
-        cards(1, vec![preview_card, profile_card]),
+        cards(5, vec![preview_card, profile_card]),
         column![tabs, content]
             .spacing(12)
-            .width(Length::FillPortion(2)),
+            .width(Length::FillPortion(8)),
     ]
     .spacing(12)
     .align_y(Vertical::Top);
