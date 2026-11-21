@@ -4138,29 +4138,30 @@ impl App {
             STRIP_W
         })
         .height(Length::Fill);
-        let tag = row![
-            space().width(22),
-            space().width(Length::Fill),
-            container(
-                text(format!("A{}", o + 1))
-                    .size(11)
-                    .font(BOLD)
-                    .color(on_accent())
-                    .center()
-            )
-            .width(34)
-            .height(22)
-            .align_x(Horizontal::Center)
-            .align_y(Vertical::Center)
-            .style(|_| container::Style {
-                background: Some(Background::Color(accent())),
-                border: Border {
-                    radius: 3.0.into(),
-                    ..Border::default()
-                },
-                ..container::Style::default()
-            }),
-            space().width(Length::Fill),
+        let chip = container(
+            text(format!("A{}", o + 1))
+                .size(11)
+                .font(BOLD)
+                .color(on_accent())
+                .center(),
+        )
+        .width(34)
+        .height(22)
+        .align_x(Horizontal::Center)
+        .align_y(Vertical::Center)
+        .style(|_| container::Style {
+            background: Some(Background::Color(accent())),
+            border: Border {
+                radius: 3.0.into(),
+                ..Border::default()
+            },
+            ..container::Style::default()
+        });
+        // The A button stays under the name.
+        let tag = container(chip).center_x(Length::Fill);
+        // The close button sits next to the name.
+        let head = row![
+            Self::name_label(&m.label),
             button(text("✕").size(10).color(text_color()).center())
                 .width(22)
                 .height(22)
@@ -4168,11 +4169,12 @@ impl App {
                 .on_press(Message::Edit(Edit::HideOut(o, true)))
                 .style(key(Look::Secondary)),
         ]
+        .spacing(4)
         .align_y(Vertical::Center)
         .width(Length::Fill);
         self.card(
             column![
-                Self::name_label(&m.label),
+                head,
                 if self.slim() {
                     Element::from(space().height(0))
                 } else {
