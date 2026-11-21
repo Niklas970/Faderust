@@ -1,10 +1,10 @@
-## What's new in 0.8.6
+## What's new in 0.8.7
 
-- **New designs:** Midnight (deep blue), Carbon and GitHub dark, plus a tab layout in the Design window (Look, Colours, General)
-- **Make it yours:** colours per element (fader bar, cap, meter, knobs, strip head), button looks (flat, glowing, pill, neon, hardware, tile), meter shapes (bars, segments, dots, blocks, line), spacing and fader glide, design profiles you can save and load
-- **More options:** echo button on every strip, sort strips with arrows, better rotary knobs, the Mute button follows the design
-- **Fixes:** window position is remembered in pixels (monitors with different scaling), log buttons and the test sub-version are visible
-- Stream Deck plugin 0.3.7: nicer key icons and a fixed profile
+- **Settings in their own windows:** Presets, Windows, Devices and Design open as separate windows with their own title bar; the Devices page has tabs (Devices, Connections, Advanced); narrow windows show icons only in the navigation
+- **New designs:** Sunset, Terminal green, Neon console and Paper (ink on paper); design preview with sample strips and a gallery in the README
+- **Programs made simpler:** one "+ Program" menu, the close button sits next to the name, new programs are taken up automatically (can be switched off in the Programs window), shorter device lists, duplicates are removed
+- **Mark the design:** mark areas with notes right in the app (Devices → Advanced) and copy picture and list
+- **Smaller things:** messages as cards at the top right, close buttons drawn as lines (centred in any font), test builds on every change to main
 
 ## Installation
 
@@ -16,10 +16,10 @@ All features and a guide are in the [README](https://github.com/Niklas970/faderu
 
 ---
 
-## Neu in 0.8.6
+## Neu in 0.8.7
 
-- **Neue Designs:** Mitternacht (tiefes Blau), Carbon und GitHub-Dunkel, dazu Reiter im Design-Fenster (Aussehen, Farben, Allgemein)
-- **Mach es zu deinem:** Farben pro Element (Fader-Bahn, Kappe, Pegel, Drehregler, Streifenkopf), Knopf-Looks (flach, leuchtend, Pille, Neon, Hardware, Kachel), Pegel-Formen (Balken, Segmente, Punkte, Blöcke, Linie), Abstände und Fader-Gleiten, Design-Profile zum Speichern und Laden
-- **Mehr Optionen:** Echo-Taste auf jedem Streifen, Streifen per Pfeil sortieren, bessere Drehregler, der Mute-Knopf folgt dem Design
-- **Fixes:** Fensterposition wird in Pixeln gemerkt (Monitore mit anderer Skalierung), Protokoll-Knöpfe und Test-Unterversion sichtbar
-- Stream-Deck-Plugin 0.3.7: schönere Tasten-Icons und korrigiertes Profil
+- **Einstellungen in eigenen Fenstern:** Presets, Windows, Geräte und Design öffnen sich als eigene Fenster mit eigener Titelleiste; die Geräte-Seite hat Reiter (Geräte, Verbindungen, Erweitert); in schmalen Fenstern zeigt die Navigation nur Symbole
+- **Neue Designs:** Sonnenuntergang, Terminal-Grün, Neon-Pult und Papier (Tinte auf Papier); Design-Vorschau mit Beispielstreifen und eine Galerie in der README
+- **Programme einfacher:** ein Menü „+ Programm“, der Schließen-Knopf sitzt neben dem Namen, neue Programme werden automatisch aufgenommen (im Programme-Fenster abschaltbar), kürzere Geräte-Listen, Doppelte werden entfernt
+- **Design markieren:** Bereiche mit Notiz direkt in der App markieren (Geräte → Erweitert) und Bild samt Liste kopieren
+- **Kleinere Dinge:** Meldungen als Karten oben rechts, Schließen-Kreuz als Linien gezeichnet (in jeder Schrift mittig), Test-Builds bei jeder Änderung an main
