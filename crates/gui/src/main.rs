@@ -3759,17 +3759,20 @@ impl App {
 
     /// The switchable building blocks of the faders.
     fn parts(&self) -> fader::Parts {
+        // Paper is drawn like ink on paper: flat square caps, thin tracks and
+        // one meter colour, unless the user has chosen otherwise.
+        let ink = self.prefs.mode == "paper";
         fader::Parts {
             segments: self.prefs.meter_segments,
             peak: !self.prefs.peak_off,
             zero_mark: self.prefs.zero_mark,
-            square_cap: self.prefs.cap_square,
+            square_cap: self.prefs.cap_square || ink,
             scale: !self.prefs.scale_off,
             glow: !self.prefs.glow_off,
-            one_color: self.prefs.one_color,
+            one_color: self.prefs.one_color || ink,
             accent_cap: self.prefs.accent_cap,
             cap_value: !self.prefs.cap_value_off,
-            thin_track: self.prefs.thin_track,
+            thin_track: self.prefs.thin_track || ink,
             grip_cap: self.prefs.grip_cap,
             meter_line: self.prefs.meter_line,
             meter_look: self.prefs.meter_look,
