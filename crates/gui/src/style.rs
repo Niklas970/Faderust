@@ -168,7 +168,7 @@ pub fn set_theme(mode: &str, accent: &str, signal: &str) {
     let own = match mode {
         "sunset" => Some("#ff7a45"),
         "terminal" => Some("#39ff7a"),
-        "paper" => Some("#c2410c"),
+        "paper" => Some("#a8381a"),
         "neon" => Some("#22d3ee"),
         _ => None,
     };
@@ -270,13 +270,13 @@ pub fn set_theme(mode: &str, accent: &str, signal: &str) {
             pal.muted = rgb(156, 142, 198);
         }
         "paper" => {
-            pal.bg = rgb(243, 239, 230);
-            pal.panel = rgb(251, 248, 241);
-            pal.panel_2 = rgb(232, 226, 211);
-            pal.well = rgb(36, 32, 26);
-            pal.border = rgb(96, 88, 72);
-            pal.text = rgb(29, 27, 23);
-            pal.muted = rgb(84, 77, 63);
+            pal.bg = rgb(230, 217, 190);
+            pal.panel = rgb(242, 233, 211);
+            pal.panel_2 = rgb(219, 204, 172);
+            pal.well = rgb(62, 46, 31);
+            pal.border = rgb(74, 55, 38);
+            pal.text = rgb(44, 30, 19);
+            pal.muted = rgb(104, 84, 60);
         }
         _ => {}
     }

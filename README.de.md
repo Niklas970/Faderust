@@ -54,20 +54,27 @@
 - **Kompakt und im Vordergrund.** Zwei Knöpfe in der Titelleiste: schmale Ansicht ohne Beschriftungen und „Immer im Vordergrund“, z. B. neben einem Spiel. Beides bleibt gespeichert.
 - **Mini-Mixer im Tray (optional).** Unter „Design“ lässt sich einstellen, dass ein Klick aufs Tray-Symbol einen kleinen Mixer unten rechts über der Taskbar öffnet. Er schließt sich beim Klick daneben.
 - **Lautstärke-Anzeige (optional).** Ändert das Stream Deck einen Pegel oder schaltet stumm, erscheint kurz unten am Bildschirm Name und neuer Wert. Die Anzeige nimmt keinen Fokus, lässt Klicks durch und ist unter „Design“ abschaltbar.
-- **Eigene Farben:** Akzent- und Signalfarbe frei wählbar, dunkel (OLED-Schwarz) oder hell.
+- **Echo und Soundboard.** Echo als Effekt pro Eingang (Slapback, Raum, Hall) und ein Soundboard, das WAV- und MP3-Dateien auf einem eigenen Streifen abspielt.
+- **Design nach Geschmack.** Viele Designs (Dunkel, Hell, Carbon, Mitternacht, Sonnenuntergang, Terminal-Grün, Papier und mehr), Kappen-Stile, Pegel-Formen, Dichte sowie eigene Akzent- und Signalfarben. Die Vorschau im Design-Fenster zeigt jede Änderung sofort, ein Profil speichert das ganze Design unter einem Namen.
+- **Meldungen als Karten.** Hinweise erscheinen oben rechts als kleine Karten, die von selbst verschwinden.
+- **Design markieren für Rückmeldungen.** Unter „Geräte → Erweitert“ markierst du Bereiche in einem Screenshot des Fensters, schreibst Notizen und kopierst Bild und Liste in die Zwischenablage, um sie mit einem Wunsch zu schicken.
 
 ## Ansichten
 
 <table>
   <tr>
-    <td width="68%"><img src="assets/matrix.png" alt="Matrix: jeder Eingang auf jedem Ausgang einzeln geregelt"></td>
-    <td><img src="assets/design.png" alt="Design-Dialog mit Ansicht, Farben und Darstellung"></td>
+    <td><img src="assets/matrix.png" alt="Matrix: jeder Eingang auf jedem Ausgang einzeln geregelt"><br><b>Matrix:</b> jeder Eingang auf jedem Ausgang einzeln, z. B. das Mikro leiser auf dem Kopfhörer als im Stream.</td>
   </tr>
   <tr>
-    <td><b>Matrix:</b> jeder Eingang auf jedem Ausgang einzeln, z. B. das Mikro leiser auf dem Kopfhörer als im Stream.</td>
-    <td><b>Design:</b> Pult oder Matrix, Seite der Ausgänge, Farben, dunkel oder hell.</td>
+    <td><img src="assets/design.png" alt="Design-Fenster mit Live-Vorschau, Designs und Profilen"><br><b>Design:</b> Live-Vorschau mit Beispielstreifen, Designs, Kappen, Dichte und Farben.</td>
   </tr>
 </table>
+
+## Designs
+
+![Neun Designs: Dunkel, Hell, Carbon, GitHub-Dunkel, Mitternacht, Sonnenuntergang, Terminal-Grün, Neon-Pult und Papier](assets/designs.png)
+
+Dunkel, Hell, Carbon, GitHub-Dunkel, Mitternacht, Sonnenuntergang, Terminal-Grün, Neon-Pult und Papier (Sepia, Tinte auf Papier): ein Klick unter „Design“ und alles ändert sich. Dazu kommen Kappen-Stile (Standard, Flach, Leuchtend, Pille, Neon, Hardware, Kachel), Pegel-Formen, Dichte, eigene Akzent- und Signalfarben und Profile, die das ganze Design speichern.
 
 ## Einstellungsfenster
 
