@@ -2288,7 +2288,7 @@ fn settings(app: &App) -> Element<'_, Message> {
             check(app.prefs.test_channel)
                 .label(tr("Testversionen: Updates auch von Test-Builds"))
                 .on_toggle(|v| edit(Edit::TestChannel(v))),
-            hint("Ein Test-Build ist der Stand von main vor dem Release. Er entsteht nach jedem Merge automatisch in GitHub (Actions, „Test build“)."),
+            hint("Ein Test-Build ist der Stand von main vor dem Release. Er entsteht nach jedem Merge automatisch in GitHub (Actions, „Test build“). Gesucht wird nur mit „Jetzt suchen“."),
             hint(mine),
         ]
         .spacing(8);

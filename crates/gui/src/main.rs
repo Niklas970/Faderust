@@ -907,7 +907,9 @@ impl App {
         }
         self.checking = true;
         self.last_check = Some(Instant::now());
-        let test = self.prefs.test_channel.then(|| "main".to_string());
+        // The automatic check only looks for releases; test builds are
+        // looked for by the button alone.
+        let test = (manual && self.prefs.test_channel).then(|| "main".to_string());
         blocking(
             move || faderust_core::update::check(env!("CARGO_PKG_VERSION"), test.as_deref()),
             move |r| Message::UpdateChecked(r, manual),
@@ -3092,12 +3094,6 @@ impl App {
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::TestChannel(on) => {
                 self.set_look(|p| p.test_channel = on);
-                // Look for a test build right away.
-                self.last_check = None;
-                if on {
-                    let t = self.load_test_builds();
-                    self.jobs.push(t);
-                }
             }
             Edit::Debug(on) => self.set_look(|p| p.debug = on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),
