@@ -74,7 +74,7 @@
 
 ![Neun Designs: Dunkel, Hell, Carbon, GitHub-Dunkel, Mitternacht, Sonnenuntergang, Terminal-Grün, Neon-Pult und Papier](assets/designs.png)
 
-Dunkel, Hell, Carbon, GitHub-Dunkel, Mitternacht, Sonnenuntergang, Terminal-Grün, Neon-Pult und Papier: ein Klick unter „Design“ und alles ändert sich. Dazu kommen Kappen-Stile (Standard, Flach, Leuchtend, Pille, Neon, Hardware, Kachel), Pegel-Formen, Dichte, eigene Akzent- und Signalfarben und Profile, die das ganze Design speichern.
+Dunkel, Hell, Carbon, GitHub-Dunkel, Mitternacht, Sonnenuntergang, Terminal-Grün, Neon-Pult und Papier (Sepia, Tinte auf Papier): ein Klick unter „Design“ und alles ändert sich. Dazu kommen Kappen-Stile (Standard, Flach, Leuchtend, Pille, Neon, Hardware, Kachel), Pegel-Formen, Dichte, eigene Akzent- und Signalfarben und Profile, die das ganze Design speichern.
 
 ## Einstellungsfenster
 

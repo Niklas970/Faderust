@@ -74,7 +74,7 @@
 
 ![Nine looks: Dark, Light, Carbon, GitHub Dark, Midnight, Sunset, Terminal green, Neon desk and Paper](assets/designs.png)
 
-Dark, Light, Carbon, GitHub Dark, Midnight, Sunset, Terminal green, Neon desk and Paper: one click under "Design" and everything changes. On top come fader cap styles (Standard, Flat, Glowing, Pill, Neon, Hardware, Tile), meter shapes, density, your own accent and signal colors, and profiles that save the whole look.
+Dark, Light, Carbon, GitHub Dark, Midnight, Sunset, Terminal green, Neon desk and Paper (sepia, ink on paper): one click under "Design" and everything changes. On top come fader cap styles (Standard, Flat, Glowing, Pill, Neon, Hardware, Tile), meter shapes, density, your own accent and signal colors, and profiles that save the whole look.
 
 ## Settings windows
 
