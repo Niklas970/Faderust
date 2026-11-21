@@ -494,7 +494,6 @@ pub enum Edit {
     OutAdd,
     MicAdd,
     /// Park the program on a quiet cable, then record it: (program, label, pids, cable id).
-    AppInputParked(String, String, Vec<u32>, String),
     MicDefault(bool),
     OutRemove(usize),
     OutMove(usize, isize),
@@ -2566,20 +2565,6 @@ impl App {
                 self.jobs.push(blocking(
                     move || faderust_core::set_app_output(pids, device),
                     |r| Message::Loaded(Loaded::Done(Then::Apps, r)),
-                ));
-            }
-            Edit::AppInputParked(device, label, pids, cable) => {
-                self.jobs.push(blocking(
-                    move || {
-                        faderust_core::set_app_output(pids, Some(cable))?;
-                        // Recording it mid-move can leave it without sound.
-                        std::thread::sleep(Duration::from_millis(800));
-                        Ok(())
-                    },
-                    move |r: Result<(), String>| match r {
-                        Ok(()) => Message::Edit(Edit::AppInput(device.clone(), label.clone())),
-                        Err(e) => Message::Failed(e),
-                    },
                 ));
             }
             Edit::AppInput(device, label) => {

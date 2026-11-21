@@ -328,8 +328,6 @@ const TABLE: &[(&str, &str)] = &[
     ("Wähler", "Picker"),
     ("Farbwähler", "Colour picker"),
     ("Farbwähler schließen", "Close picker"),
-    ("„+ Eingang“ nimmt das Programm auf und stellt es vorher auf", "“+ Input” records the program and first moves it to"),
-    (", damit du es nicht doppelt hörst.", ", so you do not hear it twice."),
     ("Eigene Farbe", "Custom colour"),
     ("Alle zeigen", "Show all"),
     ("Programm ausblenden", "Hide program"),
