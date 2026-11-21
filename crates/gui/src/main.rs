@@ -4395,6 +4395,8 @@ impl App {
                     .iter()
                     .enumerate()
                     .filter(|(_, s)| s.program && s.hidden)
+                    // A long list helps nobody: "Alle zeigen" brings back the rest.
+                    .take(8)
                     .map(|(i, s)| dialogs::Choice {
                         id: i.to_string(),
                         label: s.label.clone(),
@@ -4418,6 +4420,7 @@ impl App {
             ))
             .text_size(12)
             .padding([3, 8])
+            .menu_height(Length::Fixed(260.0))
             .into()
         } else {
             button(text("+ Programm").size(12).font(BOLD).color(accent_light()))
