@@ -482,6 +482,9 @@ pub enum Edit {
     Refresh,
     AppDevice(Vec<u32>, Option<String>),
     AppInput(String, String),
+    /// Park the program on a quiet cable, then record it: (program, label, pids, cable id).
+    AppInputParked(String, String, Vec<u32>, String),
+    AutoPrograms(bool),
     WinDefault(String, bool),
     WinVolume(String, f32),
     WinMute(String, bool),
@@ -1506,12 +1509,55 @@ impl App {
         self.refresh_dialog()
     }
 
+    /// A program Faderust has not seen yet is parked on the quiet cable and
+    /// taken up as an input by itself, one per lookup. What was taken up (or
+    /// removed again by hand) is remembered and not taken up twice.
+    fn auto_adopt(&mut self) {
+        if self.prefs.auto_programs_off || self.dialog == Some(Dialog::Apps) {
+            return;
+        }
+        let Some(cable) = self.quiet_cable() else {
+            return;
+        };
+        let own = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().to_lowercase()));
+        let next = self.apps_data.as_ref().and_then(|data| {
+            data.apps
+                .iter()
+                .find(|a| {
+                    let exe = a.exe.to_lowercase();
+                    !a.pids.is_empty()
+                        && own.as_deref() != Some(exe.as_str())
+                        && !self.input_devices.contains(&format!("app:{exe}"))
+                        && !self.prefs.auto_seen.contains(&exe)
+                })
+                .cloned()
+        });
+        let Some(a) = next else {
+            return;
+        };
+        let exe = a.exe.to_lowercase();
+        let mut p = self.prefs.clone();
+        p.auto_seen.push(exe.clone());
+        shell::save_prefs(&self.dir, &p);
+        self.prefs = p;
+        self.jobs
+            .push(Task::done(Message::Edit(Edit::AppInputParked(
+                format!("app:{exe}"),
+                a.name,
+                a.pids,
+                cable.id,
+            ))));
+    }
+
     fn loaded(&mut self, l: Loaded) {
         match l {
             Loaded::Windows(Ok(w)) => self.win = Some(w),
             Loaded::Apps(Ok(a)) => {
                 self.polling_apps = false;
-                self.apps_data = Some(a)
+                self.apps_data = Some(a);
+                self.auto_adopt();
             }
             Loaded::Devices(Ok(d)) => self.devs = d,
             Loaded::Windows(Err(e)) | Loaded::Apps(Err(e)) | Loaded::Devices(Err(e)) => {
@@ -2572,6 +2618,21 @@ impl App {
                     |r| Message::Loaded(Loaded::Done(Then::Apps, r)),
                 ));
             }
+            Edit::AppInputParked(device, label, pids, cable) => {
+                self.jobs.push(blocking(
+                    move || {
+                        faderust_core::set_app_output(pids, Some(cable))?;
+                        // Recording it mid-move can leave it without sound.
+                        std::thread::sleep(Duration::from_millis(800));
+                        Ok(())
+                    },
+                    move |r: Result<(), String>| match r {
+                        Ok(()) => Message::Edit(Edit::AppInput(device.clone(), label.clone())),
+                        Err(e) => Message::Failed(e),
+                    },
+                ));
+            }
+            Edit::AutoPrograms(on) => self.set_look(|p| p.auto_programs_off = !on),
             Edit::AppInput(device, label) => {
                 let r = self.add_input(device, label);
                 if let Err(e) = r {
@@ -5104,7 +5165,7 @@ impl App {
         } else {
             250
         };
-        let poll = if hide_closed(self.hide_after) {
+        let poll = if hide_closed(self.hide_after) || !self.prefs.auto_programs_off {
             iced::time::every(Duration::from_secs(3)).map(|_| Message::PollApps)
         } else {
             Subscription::none()

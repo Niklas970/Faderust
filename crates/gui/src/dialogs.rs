@@ -879,6 +879,18 @@ fn apps(app: &App) -> Element<'_, Message> {
                             ..container::Style::default()
                         })
                         .into()
+                } else if let Some(q) = &quiet {
+                    // Park it on the quiet cable first, so it is not heard twice.
+                    btn(
+                        "+ Eingang",
+                        edit(Edit::AppInputParked(
+                            program,
+                            a.name.clone(),
+                            a.pids.clone(),
+                            q.id.clone(),
+                        )),
+                        false,
+                    )
                 } else {
                     btn(
                         "+ Eingang",
@@ -934,9 +946,23 @@ fn apps(app: &App) -> Element<'_, Message> {
             }
         }
     }
+    let parked_hint: Element<'_, Message> = match app.quiet_cable() {
+        Some(q) => hint(format!(
+            "{} {} {}",
+            tr("„+ Eingang“ nimmt das Programm auf und stellt es vorher auf"),
+            device_label(&q.name),
+            tr(", damit du es nicht doppelt hörst.")
+        )),
+        None => space().height(0).into(),
+    };
     let body = column![
         error_line(app),
         list,
+        parked_hint,
+        check(!app.prefs.auto_programs_off)
+            .label(tr("Neue Programme automatisch aufnehmen"))
+            .on_toggle(|v| edit(Edit::AutoPrograms(v))),
+        hint("Ein neues Programm wird auf das stille Faderust Kabel gestellt und als Eingang angelegt. Entfernte Programme kommen nicht von selbst zurück."),
         check(app.apps_all)
             .label(tr("Alle Geräte zeigen"))
             .on_toggle(|v| edit(Edit::AppsAll(v))),
