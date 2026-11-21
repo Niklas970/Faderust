@@ -303,6 +303,8 @@ pub struct App {
     popup_id: Option<window::Id>,
     /// The settings dialog in a window of its own.
     dialog_win: Option<window::Id>,
+    /// Its width, so the navigation can shrink to icons when it is narrow.
+    dialog_w: f32,
     /// Picture of the desk with the areas marked on it.
     markup: Option<markup::Markup>,
     popup_at: Option<Instant>,
@@ -1311,6 +1313,7 @@ impl App {
                 };
                 let (id, open) = window::open(settings);
                 self.dialog_win = Some(id);
+                self.dialog_w = size.width;
                 open.map(Message::PopupOpened)
             }
             (None, Some(id)) => {
@@ -1652,6 +1655,7 @@ impl App {
             mini_prev: None,
             popup_id: None,
             dialog_win: None,
+            dialog_w: 1400.0,
             popup_at: None,
             popup_hid_main: false,
             popup_draw: Cell::new(false),
@@ -2223,6 +2227,9 @@ impl App {
                 }
             }
             Message::Resized(id, size) => {
+                if Some(id) == self.dialog_win && size.width >= 200.0 {
+                    self.dialog_w = size.width;
+                }
                 if Some(id) != self.win_id || self.restore.is_some() {
                     return Task::none();
                 }
@@ -3317,9 +3324,21 @@ impl App {
 
     fn titlebar(&self, dialog: bool) -> Element<'_, Message> {
         let compact = false;
-        let nav = |glyph: icons::Glyph, label: &'static str, d: Dialog| {
+        // Not enough room for the labels: the navigation shows icons only.
+        let width = if dialog {
+            self.dialog_w
+        } else {
+            self.size_keep.map_or(1400.0, |s| s.width)
+        };
+        let narrow = width
+            < if self.prefs.soundboard {
+                1280.0
+            } else {
+                1140.0
+            };
+        let nav = |glyph: icons::Glyph, label: &'static str, d: Dialog| -> Element<'_, Message> {
             let on = self.dialog == Some(d);
-            button(
+            let b = button(
                 container(
                     {
                         let color = if on { on_accent() } else { accent_light() };
@@ -3331,7 +3350,7 @@ impl App {
                         .width(24)
                         .height(24)
                         .into();
-                        if compact {
+                        if compact || narrow {
                             row![icon]
                         } else {
                             row![
@@ -3350,7 +3369,7 @@ impl App {
                 .center_y(Length::Fill),
             )
             .height(if compact { 28 } else { 36 })
-            .padding([0, if compact { 12 } else { 22 }])
+            .padding([0, if compact || narrow { 12 } else { 22 }])
             .on_press(Message::Open(Some(d)))
             .style(move |t, st| {
                 let mut v = key(if on { Look::Primary } else { Look::Secondary })(t, st);
@@ -3372,7 +3391,12 @@ impl App {
                 v.border.width = 1.5;
                 v.border.radius = 6.0.into();
                 v
-            })
+            });
+            if narrow {
+                dialogs::tip(b, i18n::tr(label))
+            } else {
+                b.into()
+            }
         };
         let win = |glyph: icons::Glyph, close: bool, msg: Message| {
             button(
