@@ -3706,16 +3706,14 @@ impl App {
         col.into()
     }
 
-    /// The ✕ of a close button, raised a little: the glyph sits low in its
-    /// box otherwise and looks off-centre.
+    /// The ✕ of a close button, drawn so it is centred in any font.
     fn close_glyph() -> Element<'static, Message> {
-        container(text("✕").size(10).color(text_color()).center())
-            .center(Length::Fill)
-            .padding(iced::Padding {
-                bottom: 3.0,
-                ..iced::Padding::ZERO
-            })
-            .into()
+        Canvas::new(widgets::Cross {
+            color: text_color(),
+        })
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 
     fn name_label(text_: &str) -> Element<'static, Message> {
