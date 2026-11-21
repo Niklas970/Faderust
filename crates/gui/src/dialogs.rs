@@ -2308,7 +2308,7 @@ fn settings(app: &App) -> Element<'_, Message> {
             if app.update.is_some() && !app.updating {
                 line = line.push(btn("Installieren", Message::InstallUpdate, true));
             }
-            c = c.push(line.push(btn("Jetzt suchen", Message::CheckUpdate, false)));
+            c = c.push(line.push(btn("Jetzt suchen", Message::CheckTest, false)));
         }
         card("Testversionen", c)
     };
