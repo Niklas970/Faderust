@@ -1454,6 +1454,16 @@ impl App {
     /// on every output.
     fn add_input(&mut self, device: String, label: String) -> Result<(), String> {
         let mut next = self.config();
+        // A program is one input, however often it is asked for.
+        if device.starts_with("app:")
+            && next
+                .inputs
+                .iter()
+                .any(|i| i.device.eq_ignore_ascii_case(&device))
+        {
+            self.input_devices = next.inputs.into_iter().map(|i| i.device).collect();
+            return Ok(());
+        }
         next.inputs.push(InputEntry {
             label,
             device,
@@ -1522,9 +1532,17 @@ impl App {
         let Some(cable) = self.quiet_cable() else {
             return;
         };
+        // Programs already in the configuration; the cached list of the
+        // programs dialog is only filled while that dialog is open.
+        let known: Vec<String> = self
+            .config()
+            .inputs
+            .into_iter()
+            .map(|i| i.device.to_lowercase())
+            .collect();
         let own = std::env::current_exe()
             .ok()
-            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().to_lowercase()));
+            .and_then(|p| p.file_name().map(|s| s.to_string_lossy().to_lowercase()));
         let next = self.apps_data.as_ref().and_then(|data| {
             data.apps
                 .iter()
@@ -1532,7 +1550,7 @@ impl App {
                     let exe = a.exe.to_lowercase();
                     !a.pids.is_empty()
                         && own.as_deref() != Some(exe.as_str())
-                        && !self.input_devices.contains(&format!("app:{exe}"))
+                        && !known.contains(&format!("app:{exe}"))
                         && !self.prefs.auto_seen.contains(&exe)
                 })
                 .cloned()
