@@ -642,6 +642,8 @@ pub enum Message {
     DialogResize(window::Direction),
     Quit,
     CheckUpdate,
+    /// The button of the test builds: a release or a newer test build.
+    CheckTest,
     UpdateChecked(Result<Option<Update>, String>, bool),
     TestBuildsLoaded(Result<Vec<faderust_core::update::TestBuild>, String>),
     /// A press on an output's device line: release it, or open it again.
@@ -901,13 +903,15 @@ impl App {
         blocking(faderust_core::update::list_tests, Message::TestBuildsLoaded)
     }
 
-    fn check_update(&mut self, manual: bool) -> Task<Message> {
+    /// `test`: also look for a test build (only the test builds' own button).
+    fn check_update(&mut self, manual: bool, test: bool) -> Task<Message> {
         if self.checking || self.updating {
             return Task::none();
         }
         self.checking = true;
         self.last_check = Some(Instant::now());
-        let test = self.prefs.test_channel.then(|| "main".to_string());
+        // Releases only, unless the test builds' own button asked.
+        let test = (test && self.prefs.test_channel).then(|| "main".to_string());
         blocking(
             move || faderust_core::update::check(env!("CARGO_PKG_VERSION"), test.as_deref()),
             move |r| Message::UpdateChecked(r, manual),
@@ -2354,11 +2358,11 @@ impl App {
                 }
             }
             Message::CheckUpdate => {
-                let check = self.check_update(true);
-                if self.prefs.test_channel {
-                    return Task::batch([check, self.load_test_builds()]);
-                }
-                return check;
+                return self.check_update(true, false);
+            }
+            Message::CheckTest => {
+                let check = self.check_update(true, true);
+                return Task::batch([check, self.load_test_builds()]);
             }
             Message::TestBuildsLoaded(r) => match r {
                 Ok(list) => self.test_builds = list,
@@ -2477,7 +2481,7 @@ impl App {
                     Some(t) => t.elapsed() > Duration::from_secs(6 * 3600),
                 };
                 if due && !self.checking && self.shot.is_none() {
-                    let t = self.check_update(false);
+                    let t = self.check_update(false, false);
                     self.jobs.push(t);
                 }
                 if show {
@@ -3092,12 +3096,6 @@ impl App {
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::TestChannel(on) => {
                 self.set_look(|p| p.test_channel = on);
-                // Look for a test build right away.
-                self.last_check = None;
-                if on {
-                    let t = self.load_test_builds();
-                    self.jobs.push(t);
-                }
             }
             Edit::Debug(on) => self.set_look(|p| p.debug = on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),
