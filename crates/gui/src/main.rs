@@ -356,6 +356,8 @@ pub struct App {
     pub devices_tab: u8,
     /// Name typed for a new design profile.
     pub profile_name: String,
+    /// The programs window lists every playback device, not only the cables.
+    pub apps_all: bool,
     /// Sample strips of the design preview: output, device, program.
     sample: (Out, Strip, Strip),
     logo: image::Handle,
@@ -462,6 +464,7 @@ pub enum Edit {
     Gate(usize, bool),
     GateDb(usize, f32),
     Echo(usize, bool),
+    AppsAll(bool),
     EchoMs(usize, f32),
     /// Time, repeats and amount of the echo in one go.
     EchoStyle(usize, f32, f32, f32),
@@ -1639,6 +1642,7 @@ impl App {
             design_tab: 0,
             devices_tab: 0,
             profile_name: String::new(),
+            apps_all: false,
             sample: (
                 Out::sample("Lautsprecher", "Kopfhörer (EarFun)", -6.0, -20.0),
                 Strip::sample(
@@ -2543,6 +2547,7 @@ impl App {
             Edit::Gate(i, on) => self.set_fx(i, |f| f.gate = on),
             Edit::GateDb(i, v) => self.set_fx(i, |f| f.gate_db = v),
             Edit::Echo(i, on) => self.set_fx(i, |f| f.echo = on),
+            Edit::AppsAll(v) => self.apps_all = v,
             Edit::EchoMs(i, v) => self.set_fx(i, |f| f.echo_ms = v),
             Edit::EchoStyle(i, ms, fb, mix) => self.set_fx(i, |f| {
                 f.echo = true;

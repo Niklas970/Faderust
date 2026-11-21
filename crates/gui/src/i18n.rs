@@ -330,6 +330,7 @@ const TABLE: &[(&str, &str)] = &[
     ("Farbwähler schließen", "Close picker"),
     ("Eigene Farbe", "Custom colour"),
     ("Alle zeigen", "Show all"),
+    ("Alle Geräte zeigen", "Show all devices"),
     ("Programm ausblenden", "Hide program"),
     ("Kompaktmodus", "Compact mode"),
     ("Kompaktmodus beenden", "Leave compact mode"),

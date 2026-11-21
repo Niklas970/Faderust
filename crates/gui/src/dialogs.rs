@@ -826,7 +826,11 @@ fn apps(app: &App) -> Element<'_, Message> {
                         .cmp(&x.cable)
                         .then_with(|| x.name.to_lowercase().cmp(&y.name.to_lowercase()))
                 });
+                // Only the cables and the device the program uses now, unless asked for all.
                 for d in devices {
+                    if !d.cable && !app.apps_all && a.device.as_deref() != Some(d.id.as_str()) {
+                        continue;
+                    }
                     let label = if d.cable {
                         device_label(&d.name)
                     } else {
@@ -933,6 +937,9 @@ fn apps(app: &App) -> Element<'_, Message> {
     let body = column![
         error_line(app),
         list,
+        check(app.apps_all)
+            .label(tr("Alle Geräte zeigen"))
+            .on_toggle(|v| edit(Edit::AppsAll(v))),
         text("Windows merkt sich die Zuordnung pro Programm. Manche Programme übernehmen sie erst nach einem Neustart.")
             .size(12)
             .color(muted_color()),
