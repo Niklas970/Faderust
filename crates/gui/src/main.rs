@@ -122,8 +122,6 @@ pub struct Strip {
     pub program: bool,
     /// A silent program the desk hides until it is shown.
     pub hidden: bool,
-    /// Kept on the desk even when silent (the eye button).
-    pub keep: bool,
     /// Shown on request ("N still, zeigen") until the window closes.
     revealed: bool,
     /// Hidden by hand (the × button); comes back when sound starts again.
@@ -190,7 +188,6 @@ impl Strip {
             routes,
             program,
             hidden: false,
-            keep: false,
             revealed: false,
             dismissed: false,
             heard: Instant::now(),
@@ -592,7 +589,6 @@ pub enum Edit {
     SoundStop,
     SoundAdd,
     SoundRemove(usize),
-    Keep(usize),
     HideOut(usize, bool),
     ShowSilent,
     /// Hide a program by hand.
@@ -678,8 +674,7 @@ impl Message {
                 | Message::ToggleRelease(SAMPLE)
                 | Message::Open(Some(Dialog::Fx(SAMPLE)))
                 | Message::Edit(
-                    Edit::Keep(SAMPLE)
-                        | Edit::Dismiss(SAMPLE)
+                    Edit::Dismiss(SAMPLE)
                         | Edit::MoveStrip(SAMPLE, _)
                         | Edit::Echo(SAMPLE, _)
                         | Edit::HideOut(SAMPLE, _)
@@ -1126,12 +1121,6 @@ impl App {
             } else {
                 hide_secs(self.hide_after)
             }),
-            keep: self
-                .strips
-                .iter()
-                .filter(|s| s.keep)
-                .map(|s| s.device.clone())
-                .collect(),
             hidden_outputs: self
                 .outs
                 .iter()
@@ -1834,7 +1823,6 @@ impl App {
                 routes: vec![],
                 program: false,
                 hidden: false,
-                keep: false,
                 revealed: false,
                 dismissed: false,
                 // Not heard yet counts as heard a moment ago only, so silent
@@ -1877,7 +1865,6 @@ impl App {
             s.program = d.device.starts_with("app:");
             if s.device != d.device {
                 s.device.clone_from(&d.device);
-                s.keep = self.prefs.keep.contains(&d.device);
             }
             s.target = level_of(d.level_db);
             if s.connected && s.target > -60.0 {
@@ -1894,9 +1881,8 @@ impl App {
                 });
             s.hidden = s.program
                 && (s.dismissed
-                    || (closed && !s.keep && !s.revealed)
+                    || (closed && !s.revealed)
                     || (secs > 0
-                        && !s.keep
                         && !s.revealed
                         && now.duration_since(s.heard) >= Duration::from_secs(secs)));
             if self.dialog != Some(Dialog::Fx(i)) {
@@ -3242,12 +3228,6 @@ impl App {
                 }
                 self.refresh_sounds();
             }
-            Edit::Keep(i) => {
-                if let Some(s) = self.strips.get_mut(i) {
-                    s.keep = !s.keep;
-                }
-                self.save_prefs();
-            }
             Edit::HideOut(o, h) => {
                 if let Some(m) = self.outs.get_mut(o) {
                     m.hidden = h;
@@ -3267,7 +3247,6 @@ impl App {
             Edit::Dismiss(i) => {
                 if let Some(s) = self.strips.get_mut(i) {
                     s.dismissed = true;
-                    s.keep = false;
                     s.revealed = false;
                     s.hidden = true;
                 }
@@ -3626,7 +3605,7 @@ impl App {
 
     /// The name of a strip; with the head options on, with its symbol above
     /// and the level of the last seconds below.
-    fn strip_name<'a>(&self, s: &'a Strip) -> Element<'a, Message> {
+    fn strip_name<'a>(&self, s: &'a Strip, i: usize) -> Element<'a, Message> {
         let mut col = column![].spacing(4).width(Length::Fill);
         let full = !self.is_mini();
         if self.prefs.strip_head && full {
@@ -3641,7 +3620,27 @@ impl App {
                 .height(22),
             );
         }
-        col = col.push(Self::name_label(&s.label));
+        col = col.push(if s.program {
+            // A program's close button sits next to the name.
+            Element::from(
+                row![
+                    Self::name_label(&s.label),
+                    dialogs::tip(
+                        button(text("✕").size(10).color(text_color()).center())
+                            .width(22)
+                            .height(22)
+                            .padding(0)
+                            .on_press(Message::Edit(Edit::Dismiss(i)))
+                            .style(key(Look::Secondary)),
+                        "Programm ausblenden",
+                    ),
+                ]
+                .spacing(4)
+                .align_y(Vertical::Center),
+            )
+        } else {
+            Self::name_label(&s.label)
+        });
         if self.prefs.strip_history && full {
             col = col.push(
                 Canvas::new(widgets::Sparkline {
@@ -3985,38 +3984,10 @@ impl App {
                 .on_press(msg)
                 .style(key(Look::Secondary))
         };
-        let foot: Element<'_, Message> = if narrow && s.program {
-            let keep = s.keep;
-            let look = if keep { Look::Primary } else { Look::Secondary };
-            row![
-                small("FX", Message::Open(Some(Dialog::Fx(i))), 34.0),
-                dialogs::tip(
-                    button(
-                        text(if keep { "◉" } else { "○" })
-                            .size(13)
-                            .color(look_text(look))
-                            .center()
-                    )
-                    .width(34)
-                    .height(24)
-                    .padding(0)
-                    .on_press(Message::Edit(Edit::Keep(i)))
-                    .style(key(look)),
-                    if keep {
-                        "Bleibt auf dem Pult, auch wenn still"
-                    } else {
-                        "Immer anzeigen, auch wenn still"
-                    },
-                ),
-            ]
-            .spacing(4)
-            .into()
+        let foot: Element<'_, Message> = if self.is_mini() {
+            space().height(0).into()
         } else {
-            if self.is_mini() {
-                space().height(0).into()
-            } else {
-                small("Effekte", Message::Open(Some(Dialog::Fx(i))), 72.0).into()
-            }
+            small("Effekte", Message::Open(Some(Dialog::Fx(i))), 72.0).into()
         };
         // An echo switch of its own under the effects button.
         let foot: Element<'_, Message> = if self.prefs.echo_button && !self.is_mini() {
@@ -4099,22 +4070,6 @@ impl App {
                     },
                 ));
             }
-            if s.program {
-                r = r.push(cell(
-                    if s.keep { "◉" } else { "○" },
-                    Message::Edit(Edit::Keep(i)),
-                    if s.keep {
-                        Look::Primary
-                    } else {
-                        Look::Secondary
-                    },
-                    if s.keep {
-                        "Bleibt auf dem Pult, auch wenn still"
-                    } else {
-                        "Immer anzeigen, auch wenn still"
-                    },
-                ));
-            }
             r.into()
         } else {
             column![Self::mute_button(s.muted, Message::Mute(i), "MUTE"), foot]
@@ -4122,25 +4077,7 @@ impl App {
                 .align_x(Horizontal::Center)
                 .into()
         };
-        let top: Element<'_, Message> = if s.program {
-            row![
-                Self::chips(&s.routes, Some(i), narrow),
-                dialogs::tip(
-                    button(text("✕").size(10).color(text_color()).center())
-                        .width(20)
-                        .height(22)
-                        .padding(0)
-                        .on_press(Message::Edit(Edit::Dismiss(i)))
-                        .style(key(Look::Secondary)),
-                    "Programm ausblenden",
-                ),
-            ]
-            .spacing(3)
-            .align_y(Vertical::Center)
-            .into()
-        } else {
-            Self::chips(&s.routes, Some(i), narrow)
-        };
+        let top: Element<'_, Message> = Self::chips(&s.routes, Some(i), narrow);
         let edge_off = if s.program {
             self.prefs.program_edge_off
         } else {
@@ -4162,7 +4099,7 @@ impl App {
         self.card_tint(
             column![
                 sorter,
-                self.strip_name(s),
+                self.strip_name(s, i),
                 top,
                 fader,
                 if self.is_mini() || self.prefs.hide_readout {
@@ -4447,18 +4384,19 @@ impl App {
             self.prefs.gap(),
             self.prefs.slim_scroll,
         );
-        let add: Element<'_, Message> =
-            button(text("+ Programm").size(12).font(BOLD).color(accent_light()))
-                .padding([4, 12])
-                .on_press(Message::Open(Some(Dialog::Apps)))
-                .style(key(Look::Secondary))
-                .into();
         let silent = self.strips.iter().filter(|s| s.program && s.hidden).count();
         let extra: Element<'_, Message> = if silent > 0 {
-            let mut choices = vec![dialogs::Choice {
-                id: String::new(),
-                label: i18n::tr("Alle zeigen"),
-            }];
+            // One menu for everything about programs: add one, show the silent ones.
+            let mut choices = vec![
+                dialogs::Choice {
+                    id: "add".into(),
+                    label: i18n::tr("Programm hinzufügen …"),
+                },
+                dialogs::Choice {
+                    id: String::new(),
+                    label: i18n::tr("Alle zeigen"),
+                },
+            ];
             choices.extend(
                 self.strips
                     .iter()
@@ -4469,20 +4407,31 @@ impl App {
                         label: s.label.clone(),
                     }),
             );
-            let menu = style::pick(
+            style::pick(
                 choices,
                 None::<dialogs::Choice>,
-                |c: dialogs::Choice| match c.id.parse() {
-                    Ok(i) => Message::Edit(Edit::ShowOne(i)),
-                    Err(_) => Message::Edit(Edit::ShowSilent),
+                |c: dialogs::Choice| match c.id.as_str() {
+                    "add" => Message::Open(Some(Dialog::Apps)),
+                    "" => Message::Edit(Edit::ShowSilent),
+                    id => id.parse().map_or(Message::Edit(Edit::ShowSilent), |i| {
+                        Message::Edit(Edit::ShowOne(i))
+                    }),
                 },
             )
-            .placeholder(format!("{silent} {}", i18n::tr("still, zeigen")))
+            .placeholder(format!(
+                "{} · {silent} {}",
+                i18n::tr("+ Programm"),
+                i18n::tr("still")
+            ))
             .text_size(12)
-            .padding([3, 8]);
-            row![add, menu].spacing(8).align_y(Vertical::Center).into()
+            .padding([3, 8])
+            .into()
         } else {
-            add
+            button(text("+ Programm").size(12).font(BOLD).color(accent_light()))
+                .padding([4, 12])
+                .on_press(Message::Open(Some(Dialog::Apps)))
+                .style(key(Look::Secondary))
+                .into()
         };
         let programs = Self::section(
             Self::heading("PROGRAMME", Some(extra), self.tight()),

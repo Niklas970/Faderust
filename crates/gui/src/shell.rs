@@ -261,8 +261,6 @@ pub struct Prefs {
     pub view: String,
     /// Seconds of silence after which a program leaves the desk; `None` is the default.
     pub hide_after: Option<u64>,
-    /// Programs kept on the desk even when silent (input device ids).
-    pub keep: Vec<String>,
     /// Outputs hidden from the desk (labels).
     pub hidden_outputs: Vec<String>,
     /// "dark", "light" or "system"; empty is dark.
