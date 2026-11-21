@@ -356,6 +356,8 @@ pub struct App {
     pub devices_tab: u8,
     /// Name typed for a new design profile.
     pub profile_name: String,
+    /// The programs window lists every playback device, not only the cables.
+    pub apps_all: bool,
     /// Sample strips of the design preview: output, device, program.
     sample: (Out, Strip, Strip),
     logo: image::Handle,
@@ -462,6 +464,7 @@ pub enum Edit {
     Gate(usize, bool),
     GateDb(usize, f32),
     Echo(usize, bool),
+    AppsAll(bool),
     EchoMs(usize, f32),
     /// Time, repeats and amount of the echo in one go.
     EchoStyle(usize, f32, f32, f32),
@@ -479,6 +482,9 @@ pub enum Edit {
     Refresh,
     AppDevice(Vec<u32>, Option<String>),
     AppInput(String, String),
+    /// Park the program on a quiet cable, then record it: (program, label, pids, cable id).
+    AppInputParked(String, String, Vec<u32>, String),
+    AutoPrograms(bool),
     WinDefault(String, bool),
     WinVolume(String, f32),
     WinMute(String, bool),
@@ -494,7 +500,6 @@ pub enum Edit {
     OutAdd,
     MicAdd,
     /// Park the program on a quiet cable, then record it: (program, label, pids, cable id).
-    AppInputParked(String, String, Vec<u32>, String),
     MicDefault(bool),
     OutRemove(usize),
     OutMove(usize, isize),
@@ -1504,12 +1509,55 @@ impl App {
         self.refresh_dialog()
     }
 
+    /// A program Faderust has not seen yet is parked on the quiet cable and
+    /// taken up as an input by itself, one per lookup. What was taken up (or
+    /// removed again by hand) is remembered and not taken up twice.
+    fn auto_adopt(&mut self) {
+        if self.prefs.auto_programs_off || self.dialog == Some(Dialog::Apps) {
+            return;
+        }
+        let Some(cable) = self.quiet_cable() else {
+            return;
+        };
+        let own = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.file_stem().map(|s| s.to_string_lossy().to_lowercase()));
+        let next = self.apps_data.as_ref().and_then(|data| {
+            data.apps
+                .iter()
+                .find(|a| {
+                    let exe = a.exe.to_lowercase();
+                    !a.pids.is_empty()
+                        && own.as_deref() != Some(exe.as_str())
+                        && !self.input_devices.contains(&format!("app:{exe}"))
+                        && !self.prefs.auto_seen.contains(&exe)
+                })
+                .cloned()
+        });
+        let Some(a) = next else {
+            return;
+        };
+        let exe = a.exe.to_lowercase();
+        let mut p = self.prefs.clone();
+        p.auto_seen.push(exe.clone());
+        shell::save_prefs(&self.dir, &p);
+        self.prefs = p;
+        self.jobs
+            .push(Task::done(Message::Edit(Edit::AppInputParked(
+                format!("app:{exe}"),
+                a.name,
+                a.pids,
+                cable.id,
+            ))));
+    }
+
     fn loaded(&mut self, l: Loaded) {
         match l {
             Loaded::Windows(Ok(w)) => self.win = Some(w),
             Loaded::Apps(Ok(a)) => {
                 self.polling_apps = false;
-                self.apps_data = Some(a)
+                self.apps_data = Some(a);
+                self.auto_adopt();
             }
             Loaded::Devices(Ok(d)) => self.devs = d,
             Loaded::Windows(Err(e)) | Loaded::Apps(Err(e)) | Loaded::Devices(Err(e)) => {
@@ -1640,6 +1688,7 @@ impl App {
             design_tab: 0,
             devices_tab: 0,
             profile_name: String::new(),
+            apps_all: false,
             sample: (
                 Out::sample("Lautsprecher", "Kopfhörer (EarFun)", -6.0, -20.0),
                 Strip::sample(
@@ -2544,6 +2593,7 @@ impl App {
             Edit::Gate(i, on) => self.set_fx(i, |f| f.gate = on),
             Edit::GateDb(i, v) => self.set_fx(i, |f| f.gate_db = v),
             Edit::Echo(i, on) => self.set_fx(i, |f| f.echo = on),
+            Edit::AppsAll(v) => self.apps_all = v,
             Edit::EchoMs(i, v) => self.set_fx(i, |f| f.echo_ms = v),
             Edit::EchoStyle(i, ms, fb, mix) => self.set_fx(i, |f| {
                 f.echo = true;
@@ -2582,6 +2632,7 @@ impl App {
                     },
                 ));
             }
+            Edit::AutoPrograms(on) => self.set_look(|p| p.auto_programs_off = !on),
             Edit::AppInput(device, label) => {
                 let r = self.add_input(device, label);
                 if let Err(e) = r {
@@ -4405,6 +4456,8 @@ impl App {
                     .iter()
                     .enumerate()
                     .filter(|(_, s)| s.program && s.hidden)
+                    // A long list helps nobody: "Alle zeigen" brings back the rest.
+                    .take(8)
                     .map(|(i, s)| dialogs::Choice {
                         id: i.to_string(),
                         label: s.label.clone(),
@@ -4428,6 +4481,7 @@ impl App {
             ))
             .text_size(12)
             .padding([3, 8])
+            .menu_height(Length::Fixed(260.0))
             .into()
         } else {
             button(text("+ Programm").size(12).font(BOLD).color(accent_light()))
@@ -5111,7 +5165,7 @@ impl App {
         } else {
             250
         };
-        let poll = if hide_closed(self.hide_after) {
+        let poll = if hide_closed(self.hide_after) || !self.prefs.auto_programs_off {
             iced::time::every(Duration::from_secs(3)).map(|_| Message::PollApps)
         } else {
             Subscription::none()
