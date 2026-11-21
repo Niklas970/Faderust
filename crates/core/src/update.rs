@@ -11,6 +11,7 @@ use crate::proc::hidden;
 use crate::remote::is_newer;
 
 /// Where the latest release lists its setup and signature.
+const RELEASE_API: &str = "https://api.github.com/repos/Niklas970/faderust/releases/latest";
 const ENDPOINT: &str = "https://github.com/Niklas970/faderust/releases/latest/download/latest.json";
 
 /// Every run of the "Test build" workflow pushes the build to this package
@@ -242,6 +243,10 @@ fn fetch(args: &[&str]) -> Result<Vec<u8>, String> {
             "--location",
             "--max-time",
             "600",
+            // On stderr, so a failure names the status and the host that
+            // answered (a 403 from GitHub, a proxy or a filter).
+            "--write-out",
+            "%{stderr}[%{http_code} %{url_effective}]",
         ])
         .args(args)
         .output()
@@ -249,15 +254,67 @@ fn fetch(args: &[&str]) -> Result<Vec<u8>, String> {
     if out.status.success() {
         Ok(out.stdout)
     } else {
-        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        let text = String::from_utf8_lossy(&out.stderr);
+        // The URL may carry a signed query: keep scheme and host only.
+        Err(shorten_urls(text.trim()))
     }
+}
+
+/// `https://host/path?query` becomes `https://host/…` in a message.
+fn shorten_urls(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(i) = rest.find("https://") {
+        out.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        let end = tail
+            .find(|c: char| c.is_whitespace() || c == ']')
+            .unwrap_or(tail.len());
+        let url = &tail[..end];
+        let host_end = url[8..].find('/').map_or(url.len(), |k| k + 8);
+        out.push_str(&url[..host_end]);
+        if host_end < url.len() {
+            out.push_str("/…");
+        }
+        rest = &tail[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// The release manifest: the direct link first, then through the release
+/// list of the API when that is refused.
+fn release_manifest() -> Result<Vec<u8>, String> {
+    let direct = fetch(&["--max-time", "20", ENDPOINT]);
+    let first = match direct {
+        Ok(b) => return Ok(b),
+        Err(e) => e,
+    };
+    let api = || -> Result<Vec<u8>, String> {
+        let list = fetch(&[
+            "--max-time",
+            "20",
+            "-H",
+            "Accept: application/vnd.github+json",
+            RELEASE_API,
+        ])?;
+        let v: serde_json::Value = serde_json::from_slice(&list).map_err(|e| e.to_string())?;
+        let url = v["assets"]
+            .as_array()
+            .and_then(|a| a.iter().find(|a| a["name"] == "latest.json"))
+            .and_then(|a| a["browser_download_url"].as_str())
+            .ok_or_else(|| "no latest.json in the release".to_string())?
+            .to_string();
+        fetch(&["--max-time", "20", &url])
+    };
+    api().map_err(|second| format!("{first}; {second}"))
 }
 
 /// Asks GitHub for the latest release; `Ok(None)` when this one is current.
 /// With a test build's tag, a newer release still wins, otherwise that test
 /// build is offered when it is another build than this one.
 pub fn check(current: &str, test: Option<&str>) -> Result<Option<Update>, String> {
-    let body = fetch(&["--max-time", "20", ENDPOINT])?;
+    let body = release_manifest()?;
     let release = parse_manifest(&String::from_utf8_lossy(&body), current)?;
     let Some(tag) = test.filter(|t| release.is_none() && !t.is_empty()) else {
         return Ok(release);
@@ -340,6 +397,15 @@ mod tests {
     use super::*;
 
     const MANIFEST: &str = r#"{"version":"0.7.0","pub_date":"x","notes":"","platforms":{"windows-x86_64":{"signature":"c2ln","url":"https://example.invalid/setup.exe"}}}"#;
+
+    #[test]
+    fn an_error_names_the_host_but_not_the_query() {
+        let m = shorten_urls(
+            "curl: (22) The requested URL returned error: 403 [403 https://objects.example.com/a/b?X-Sig=secret]",
+        );
+        assert!(m.contains("[403 https://objects.example.com/…]"));
+        assert!(!m.contains("secret"));
+    }
 
     #[test]
     fn a_newer_manifest_is_an_update() {
