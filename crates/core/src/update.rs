@@ -243,6 +243,18 @@ fn fetch(args: &[&str]) -> Result<Vec<u8>, String> {
             "--location",
             "--max-time",
             "600",
+            // A connection that does not come up, or a download that stalls,
+            // fails (and is tried again) instead of hanging for minutes.
+            "--connect-timeout",
+            "15",
+            "--speed-limit",
+            "5000",
+            "--speed-time",
+            "30",
+            "--retry",
+            "2",
+            "--retry-delay",
+            "2",
             // On stderr, so a failure names the status and the host that
             // answered (a 403 from GitHub, a proxy or a filter).
             "--write-out",
@@ -375,16 +387,72 @@ fn setup_path(update: &Update) -> PathBuf {
         .join(format!("Faderust_{}{build}_x64-setup.exe", update.version))
 }
 
-/// Downloads the setup and checks its signature.
-fn download(update: &Update) -> Result<Vec<u8>, String> {
-    let data = if update.registry {
-        let auth = format!("Authorization: Bearer {}", registry_token()?);
-        fetch(&["-H", &auth, &update.url])?
-    } else {
-        fetch(&[&update.url])?
-    };
-    verify(&data, &update.signature)?;
-    Ok(data)
+/// Downloads the setup into `part` and checks its signature. A download
+/// that breaks off (a slow or flaky connection) goes on where it stopped; it
+/// only fails when several rounds in a row bring no data.
+fn download(update: &Update, part: &std::path::Path) -> Result<(), String> {
+    let size = |p: &std::path::Path| std::fs::metadata(p).map_or(0, |m| m.len());
+    let file = part.to_string_lossy().to_string();
+    let mut stalled = 0;
+    let mut result = Err("no download".to_string());
+    // A file that is complete already needs no network.
+    if std::fs::read(part).is_ok_and(|d| verify(&d, &update.signature).is_ok()) {
+        return Ok(());
+    }
+    for _ in 0..100 {
+        let before = size(part);
+        // A new token each round: one is only valid for a few minutes.
+        let auth = if update.registry {
+            match registry_token() {
+                Ok(t) => Some(format!("Authorization: Bearer {t}")),
+                Err(e) => {
+                    result = Err(e);
+                    stalled += 1;
+                    if stalled >= 3 {
+                        break;
+                    }
+                    continue;
+                }
+            }
+        } else {
+            None
+        };
+        // Slow is fine as long as data keeps coming.
+        let mut args = vec![
+            "--max-time",
+            "180",
+            "--speed-limit",
+            "200",
+            "-C",
+            "-",
+            "-o",
+            &file,
+        ];
+        if let Some(h) = &auth {
+            args.extend(["-H", h]);
+        }
+        args.push(&update.url);
+        result = fetch(&args).map(|_| ());
+        if result.is_ok() {
+            break;
+        }
+        if size(part) > before {
+            stalled = 0;
+        } else {
+            stalled += 1;
+            if stalled >= 3 {
+                break;
+            }
+        }
+    }
+    result?;
+    let data = std::fs::read(part).map_err(|e| e.to_string())?;
+    if let Err(e) = verify(&data, &update.signature) {
+        // Not this build's file (or damaged): start from zero next time.
+        let _ = std::fs::remove_file(part);
+        return Err(e);
+    }
+    Ok(())
 }
 
 /// The setup of `update` if it was downloaded before and is still intact.
@@ -401,16 +469,17 @@ pub fn prefetch(update: &Update) -> Result<(), String> {
     if cached(update).is_some() {
         return Ok(());
     }
-    let data = download(update)?;
     let path = setup_path(update);
+    let part = path.with_extension("part");
     let dir = path.parent().unwrap_or(&path);
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    // Older downloads are of no use any more.
+    // Older downloads are of no use any more; this build's part stays to go on from.
     for old in std::fs::read_dir(dir).into_iter().flatten().flatten() {
-        let _ = std::fs::remove_file(old.path());
+        if old.path() != part {
+            let _ = std::fs::remove_file(old.path());
+        }
     }
-    let part = path.with_extension("part");
-    std::fs::write(&part, &data).map_err(|e| e.to_string())?;
+    download(update, &part)?;
     std::fs::rename(&part, &path).map_err(|e| e.to_string())
 }
 
