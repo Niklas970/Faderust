@@ -3323,6 +3323,19 @@ impl App {
                 s.dismissed = false;
             }),
             Edit::Dismiss(i) => {
+                // The close button of a program switches it off: no input,
+                // no recording, back on the Windows default.
+                let device = self.strips.get(i).map(|s| s.device.clone());
+                if let Some(device) = device.filter(|d| d.starts_with("app:")) {
+                    let exe = device.strip_prefix("app:").unwrap_or_default();
+                    let pids = self
+                        .apps_data
+                        .as_ref()
+                        .and_then(|d| d.apps.iter().find(|a| a.exe.eq_ignore_ascii_case(exe)))
+                        .map(|a| a.pids.clone())
+                        .unwrap_or_default();
+                    return self.edit(Edit::ProgramOff(device, pids));
+                }
                 if let Some(s) = self.strips.get_mut(i) {
                     s.dismissed = true;
                     s.revealed = false;
@@ -3727,7 +3740,7 @@ impl App {
                             .padding(0)
                             .on_press(Message::Edit(Edit::Dismiss(i)))
                             .style(key(Look::Secondary)),
-                        "Programm ausblenden",
+                        "Programm entfernen",
                     ),
                 ]
                 .spacing(4)

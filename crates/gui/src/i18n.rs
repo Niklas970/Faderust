@@ -336,7 +336,7 @@ const TABLE: &[(&str, &str)] = &[
     ("Eigene Farbe", "Custom colour"),
     ("Alle zeigen", "Show all"),
     (", damit du es nicht doppelt hörst.", ", so you do not hear it twice."),
-    ("Programm ausblenden", "Hide program"),
+    ("Programm entfernen", "Remove program"),
     ("Kompaktmodus", "Compact mode"),
     ("Kompaktmodus beenden", "Leave compact mode"),
     ("Immer im Vordergrund", "Always on top"),
