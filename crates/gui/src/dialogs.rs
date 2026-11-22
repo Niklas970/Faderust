@@ -959,10 +959,10 @@ fn apps(app: &App) -> Element<'_, Message> {
         error_line(app),
         list,
         parked_hint,
-        check(!app.prefs.auto_programs_off)
+        check(app.prefs.auto_programs)
             .label(tr("Neue Programme automatisch aufnehmen"))
             .on_toggle(|v| edit(Edit::AutoPrograms(v))),
-        hint("Ein neues Programm wird auf das stille Faderust Kabel gestellt und als Eingang angelegt. Entfernte Programme kommen nicht von selbst zurück."),
+        hint("Ein neues Programm wird auf das stille Faderust Kabel gestellt und als Eingang angelegt. Entfernte Programme kommen nicht von selbst zurück. Jedes aufgenommene Programm kostet etwas CPU."),
         check(app.apps_all)
             .label(tr("Alle Geräte zeigen"))
             .on_toggle(|v| edit(Edit::AppsAll(v))),

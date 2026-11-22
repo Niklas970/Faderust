@@ -333,7 +333,7 @@ const TABLE: &[(&str, &str)] = &[
     ("Alle zeigen", "Show all"),
     ("Alle Geräte zeigen", "Show all devices"),
     ("Neue Programme automatisch aufnehmen", "Take up new programs automatically"),
-    ("Ein neues Programm wird auf das stille Faderust Kabel gestellt und als Eingang angelegt. Entfernte Programme kommen nicht von selbst zurück.", "A new program is moved to the quiet Faderust Cable and added as an input. Programs you removed do not come back by themselves."),
+    ("Ein neues Programm wird auf das stille Faderust Kabel gestellt und als Eingang angelegt. Entfernte Programme kommen nicht von selbst zurück. Jedes aufgenommene Programm kostet etwas CPU.", "A new program is moved to the quiet Faderust Cable and added as an input. Programs you removed do not come back by themselves. Every recorded program costs some CPU."),
     ("„+ Eingang“ nimmt das Programm auf und stellt es vorher auf", "“+ Input” records the program and first moves it to"),
     (", damit du es nicht doppelt hörst.", ", so you do not hear it twice."),
     ("Programm ausblenden", "Hide program"),

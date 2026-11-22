@@ -1575,7 +1575,7 @@ impl App {
     /// removed again by hand) is remembered and not taken up twice.
     fn auto_adopt(&mut self) {
         self.drop_duplicate_programs();
-        if self.prefs.auto_programs_off || self.dialog == Some(Dialog::Apps) {
+        if !self.prefs.auto_programs || self.dialog == Some(Dialog::Apps) {
             return;
         }
         let Some(cable) = self.quiet_cable() else {
@@ -2706,7 +2706,7 @@ impl App {
                     },
                 ));
             }
-            Edit::AutoPrograms(on) => self.set_look(|p| p.auto_programs_off = !on),
+            Edit::AutoPrograms(on) => self.set_look(|p| p.auto_programs = on),
             Edit::AppInput(device, label) => {
                 let r = self.add_input(device, label);
                 if let Err(e) = r {
@@ -5260,7 +5260,7 @@ impl App {
         } else {
             250
         };
-        let poll = if hide_closed(self.hide_after) || !self.prefs.auto_programs_off {
+        let poll = if hide_closed(self.hide_after) || self.prefs.auto_programs {
             iced::time::every(Duration::from_secs(3)).map(|_| Message::PollApps)
         } else {
             Subscription::none()
