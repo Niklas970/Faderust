@@ -1593,6 +1593,12 @@ fn design(app: &App) -> Element<'_, Message> {
                 |v| edit(Edit::Osd(v)),
             ),
             opt(
+                "Mit Windows starten",
+                "Faderust startet beim Anmelden im Tray, ohne Fenster.",
+                app.autostart,
+                |v| edit(Edit::Autostart(v)),
+            ),
+            opt(
                 "Kleiner Mixer neben der Taskbar",
                 "Ein Klick auf das Tray-Symbol öffnet einen kleinen Mixer.",
                 app.prefs.tray_popup,
@@ -2335,18 +2341,7 @@ fn settings(app: &App) -> Element<'_, Message> {
                     card("Stream Deck", deck_section(app)),
                 ]
             ),
-            cards(
-                1,
-                vec![
-                    card("Programm-Mikro", mic_section(app)),
-                    card(
-                        "Start",
-                        check(app.autostart)
-                            .label(tr("Mit Windows starten (im Tray, ohne Fenster)"))
-                            .on_toggle(|v| edit(Edit::Autostart(v))),
-                    ),
-                ]
-            ),
+            cards(1, vec![card("Programm-Mikro", mic_section(app)),]),
         ]
         .spacing(12)
         .align_y(Vertical::Top)
