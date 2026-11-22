@@ -366,6 +366,10 @@ pub struct App {
     tray: Option<shell::tray::Tray>,
     update: Option<Update>,
     updating: bool,
+    /// A test build is being downloaded ahead of time.
+    prefetching: bool,
+    /// The test build already downloaded ("<version>/<build>"), so it is not fetched twice.
+    prefetched: String,
     checking: bool,
     /// Test builds the repository offers (loaded on demand).
     pub test_builds: Vec<faderust_core::update::TestBuild>,
@@ -648,6 +652,8 @@ pub enum Message {
     ToggleRelease(usize),
     InstallUpdate,
     UpdateInstalled(Result<(), String>),
+    /// The test build was downloaded ahead of time (its key, the outcome).
+    Prefetched(String, Result<(), String>),
     Open(Option<Dialog>),
     Edit(Edit),
     Route(usize, usize),
@@ -914,6 +920,26 @@ impl App {
             move || faderust_core::update::check(env!("CARGO_PKG_VERSION"), test.as_deref()),
             move |r| Message::UpdateChecked(r, manual),
         )
+    }
+
+    /// With test versions on, a test build that was found is downloaded in
+    /// the background: installing it later needs no network.
+    fn prefetch_update(&mut self) -> Option<Task<Message>> {
+        let u = self.update.clone()?;
+        let key = format!("{}/{}", u.version, u.build);
+        if !self.prefs.test_channel
+            || u.build.is_empty()
+            || self.prefetching
+            || self.updating
+            || self.prefetched == key
+        {
+            return None;
+        }
+        self.prefetching = true;
+        Some(blocking(
+            move || faderust_core::update::prefetch(&u),
+            move |r| Message::Prefetched(key.clone(), r),
+        ))
     }
 
     /// A cable's playback end that is no output yet and whose recording end
@@ -1725,6 +1751,8 @@ impl App {
             tray: tray_icon(),
             update: None,
             updating: false,
+            prefetching: false,
+            prefetched: String::new(),
             checking: false,
             test_builds: Vec::new(),
             last_check: None,
@@ -2317,11 +2345,21 @@ impl App {
                             self.say("info", "Faderust ist aktuell".into());
                         }
                         self.update = u.or(self.update.take());
+                        if let Some(t) = self.prefetch_update() {
+                            return t;
+                        }
                     }
                     Err(e) if manual => {
                         self.say("warn", format!("Update-Suche fehlgeschlagen: {e}"))
                     }
                     Err(_) => {}
+                }
+            }
+            Message::Prefetched(key, r) => {
+                self.prefetching = false;
+                // A failure is not reported: installing downloads it again.
+                if r.is_ok() {
+                    self.prefetched = key;
                 }
             }
             Message::InstallUpdate => {
@@ -2417,12 +2455,16 @@ impl App {
                         }
                     }
                 }
+                // With test versions on, test builds are looked for (and
+                // downloaded) in the background too, more often.
+                let test = self.prefs.test_channel;
+                let every = Duration::from_secs(if test { 1800 } else { 6 * 3600 });
                 let due = match self.last_check {
                     None => now.duration_since(self.started) > Duration::from_secs(3),
-                    Some(t) => t.elapsed() > Duration::from_secs(6 * 3600),
+                    Some(t) => t.elapsed() > every,
                 };
                 if due && !self.checking && self.shot.is_none() {
-                    let t = self.check_update(false, false);
+                    let t = self.check_update(false, test);
                     self.jobs.push(t);
                 }
                 if show {
@@ -3055,6 +3097,10 @@ impl App {
             Edit::Osd(on) => self.set_look(|p| p.osd_off = !on),
             Edit::TestChannel(on) => {
                 self.set_look(|p| p.test_channel = on);
+                if on {
+                    // Look for a test build right away.
+                    self.last_check = None;
+                }
             }
             Edit::Debug(on) => self.set_look(|p| p.debug = on),
             Edit::TrayPopup(on) => self.set_look(|p| p.tray_popup = on),

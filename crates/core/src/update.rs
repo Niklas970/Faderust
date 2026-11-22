@@ -362,19 +362,21 @@ pub fn verify(data: &[u8], signature: &str) -> Result<(), String> {
     verify_with(&key, data, signature)
 }
 
-fn setup_path(version: &str) -> PathBuf {
+/// Where the setup of `update` is kept. A test build has the version of its
+/// release, so its build is part of the name.
+fn setup_path(update: &Update) -> PathBuf {
+    let build = if update.build.is_empty() {
+        String::new()
+    } else {
+        format!("_{}", update.build)
+    };
     std::env::temp_dir()
         .join("faderust-update")
-        .join(format!("Faderust_{version}_x64-setup.exe"))
+        .join(format!("Faderust_{}{build}_x64-setup.exe", update.version))
 }
 
-/// Downloads the setup, checks its signature and starts it silently; it
-/// replaces the files and starts Faderust again. The caller quits right after
-/// (the setup stops a still running Faderust anyway).
-pub fn install(update: &Update) -> Result<(), String> {
-    if !cfg!(windows) {
-        return Err("Updates gibt es nur unter Windows / Updates are Windows only".into());
-    }
+/// Downloads the setup and checks its signature.
+fn download(update: &Update) -> Result<Vec<u8>, String> {
     let data = if update.registry {
         let auth = format!("Authorization: Bearer {}", registry_token()?);
         fetch(&["-H", &auth, &update.url])?
@@ -382,10 +384,45 @@ pub fn install(update: &Update) -> Result<(), String> {
         fetch(&[&update.url])?
     };
     verify(&data, &update.signature)?;
-    let path = setup_path(&update.version);
-    std::fs::create_dir_all(path.parent().unwrap_or(&path)).map_err(|e| e.to_string())?;
-    std::fs::write(&path, &data).map_err(|e| e.to_string())?;
-    hidden(&path)
+    Ok(data)
+}
+
+/// The setup of `update` if it was downloaded before and is still intact.
+fn cached(update: &Update) -> Option<PathBuf> {
+    let path = setup_path(update);
+    let data = std::fs::read(&path).ok()?;
+    verify(&data, &update.signature).ok()?;
+    Some(path)
+}
+
+/// Downloads the setup of `update` ahead of time, so that installing it
+/// needs no network. Nothing happens when it is there already.
+pub fn prefetch(update: &Update) -> Result<(), String> {
+    if cached(update).is_some() {
+        return Ok(());
+    }
+    let data = download(update)?;
+    let path = setup_path(update);
+    let dir = path.parent().unwrap_or(&path);
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    // Older downloads are of no use any more.
+    for old in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let _ = std::fs::remove_file(old.path());
+    }
+    let part = path.with_extension("part");
+    std::fs::write(&part, &data).map_err(|e| e.to_string())?;
+    std::fs::rename(&part, &path).map_err(|e| e.to_string())
+}
+
+/// Starts the setup silently (downloading it first unless [`prefetch`]
+/// did); it replaces the files and starts Faderust again. The caller quits
+/// right after (the setup stops a still running Faderust anyway).
+pub fn install(update: &Update) -> Result<(), String> {
+    if !cfg!(windows) {
+        return Err("Updates gibt es nur unter Windows / Updates are Windows only".into());
+    }
+    prefetch(update)?;
+    hidden(setup_path(update))
         .args(["/S", "/UPDATE"])
         .spawn()
         .map(|_| ())
