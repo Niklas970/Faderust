@@ -97,6 +97,33 @@ fn cards<'a>(portion: u16, items: Vec<Element<'a, Message>>) -> Element<'a, Mess
         .into()
 }
 
+/// A round-cornered on/off switch in the accent colour.
+fn switch<'a>(on: bool, msg: impl Fn(bool) -> Message + 'a) -> Element<'a, Message> {
+    iced::widget::toggler(on)
+        .on_toggle(msg)
+        .size(22)
+        .style(|_, status| {
+            use iced::widget::toggler::Status;
+            let (on, hot) = match status {
+                Status::Active { is_toggled } => (is_toggled, false),
+                Status::Hovered { is_toggled } => (is_toggled, true),
+                Status::Disabled { is_toggled } => (is_toggled, false),
+            };
+            iced::widget::toggler::Style {
+                background: Background::Color(if on { accent() } else { well_light() }),
+                background_border_width: 1.0,
+                background_border_color: if on || hot { accent() } else { border() },
+                foreground: Background::Color(if on { on_accent() } else { muted_color() }),
+                foreground_border_width: 0.0,
+                foreground_border_color: Color::TRANSPARENT,
+                text_color: Some(text_color()),
+                border_radius: None,
+                padding_ratio: 0.2,
+            }
+        })
+        .into()
+}
+
 /// One option as a switch with a title and a short explanation: easier to
 /// read than a bare check box.
 fn opt<'a>(
@@ -112,28 +139,7 @@ fn opt<'a>(
         ]
         .spacing(2)
         .width(Length::Fill),
-        iced::widget::toggler(on)
-            .on_toggle(msg)
-            .size(22)
-            .style(|_, status| {
-                use iced::widget::toggler::Status;
-                let (on, hot) = match status {
-                    Status::Active { is_toggled } => (is_toggled, false),
-                    Status::Hovered { is_toggled } => (is_toggled, true),
-                    Status::Disabled { is_toggled } => (is_toggled, false),
-                };
-                iced::widget::toggler::Style {
-                    background: Background::Color(if on { accent() } else { well_light() }),
-                    background_border_width: 1.0,
-                    background_border_color: if on || hot { accent() } else { border() },
-                    foreground: Background::Color(if on { on_accent() } else { muted_color() }),
-                    foreground_border_width: 0.0,
-                    foreground_border_color: Color::TRANSPARENT,
-                    text_color: Some(text_color()),
-                    border_radius: None,
-                    padding_ratio: 0.2,
-                }
-            }),
+        switch(on, msg),
     ]
     .spacing(14)
     .align_y(Vertical::Center)
@@ -827,20 +833,29 @@ fn apps(app: &App) -> Element<'_, Message> {
                     rows.push((device, i.label.clone(), vec![]));
                 }
             }
-            if rows.is_empty() {
-                list = list.push(hint(
-                    "Gerade spielt kein Programm Ton ab. Starte die Wiedergabe und tippe auf „Aktualisieren“.",
-                ));
-            }
-            for (device, name, pids) in rows {
-                let on = cfg
-                    .inputs
+            // Switched on first, then by name.
+            let on_of = |device: &str| {
+                cfg.inputs
                     .iter()
-                    .any(|i| i.device.eq_ignore_ascii_case(&device));
-                let switch = {
+                    .any(|i| i.device.eq_ignore_ascii_case(device))
+            };
+            rows.sort_by_key(|r| (!on_of(&r.0), r.1.to_lowercase()));
+            let total = rows.len();
+            let on_count = rows.iter().filter(|r| on_of(&r.0)).count();
+            let needle = app.apps_filter.trim().to_lowercase();
+            let mut lines: Vec<Element<'_, Message>> = vec![];
+            for (device, name, pids) in rows {
+                let on = on_of(&device);
+                if (app.apps_only_on && !on)
+                    || (!needle.is_empty() && !name.to_lowercase().contains(&needle))
+                {
+                    continue;
+                }
+                let closed = pids.is_empty();
+                let toggle = {
                     let (device, name, pids) = (device.clone(), name.clone(), pids.clone());
                     let cable = quiet.as_ref().map(|q| q.id.clone());
-                    check(on).label(tr("Über Faderust")).on_toggle(move |v| {
+                    switch(on, move |v| {
                         edit(if v {
                             Edit::ProgramOn(
                                 device.clone(),
@@ -853,19 +868,36 @@ fn apps(app: &App) -> Element<'_, Message> {
                         })
                     })
                 };
-                let state = if pids.is_empty() {
-                    tr("beendet")
+                let status = if closed {
+                    text(tr("beendet")).size(12).color(muted_color())
                 } else {
-                    String::new()
+                    text(tr("läuft")).size(12).color(signal())
                 };
-                list = list.push(
-                    row![
-                        container(text(name).size(14).color(text_color())).width(Length::Fill),
-                        text(state).size(12).color(muted_color()),
-                        switch,
-                    ]
-                    .spacing(12)
-                    .align_y(Vertical::Center),
+                lines.push(
+                    container(
+                        row![
+                            toggle,
+                            text(name)
+                                .size(14)
+                                .font(if on { BOLD } else { iced::Font::DEFAULT })
+                                .color(text_color())
+                                .width(Length::Fill),
+                            status,
+                        ]
+                        .spacing(14)
+                        .align_y(Vertical::Center),
+                    )
+                    .padding([8, 4])
+                    .width(Length::Fill)
+                    .style(|_| container::Style {
+                        border: Border {
+                            color: border(),
+                            width: 0.0,
+                            radius: 0.0.into(),
+                        },
+                        ..container::Style::default()
+                    })
+                    .into(),
                 );
             }
             if quiet.is_none() && !data.apps.is_empty() {
@@ -881,20 +913,41 @@ fn apps(app: &App) -> Element<'_, Message> {
                     .align_y(Vertical::Center),
                 );
             }
+            list = list.push(
+                row![
+                    text_input("Programm suchen …", &app.apps_filter)
+                        .on_input(|t| edit(Edit::AppsFilter(t))),
+                    segmented(vec![
+                        (tr("Alle"), !app.apps_only_on, edit(Edit::AppsOnlyOn(false))),
+                        (
+                            format!("{} ({on_count})", tr("Eingeschaltet")),
+                            app.apps_only_on,
+                            edit(Edit::AppsOnlyOn(true)),
+                        ),
+                    ]),
+                ]
+                .spacing(10)
+                .align_y(Vertical::Center),
+            );
+            if lines.is_empty() {
+                lines.push(hint(if total == 0 {
+                    "Gerade spielt kein Programm Ton ab. Starte die Wiedergabe und tippe auf „Aktualisieren“."
+                } else {
+                    "Kein Programm gefunden."
+                }));
+            }
+            list = list.push(card("Programme", column(lines).spacing(2)));
         }
     }
     let body = column![
         error_line(app),
         list,
-        hint("Ein Programm mit „Über Faderust“ wird auf das stille Faderust Kabel gestellt und als Eingang aufgenommen; beim Ausschalten geht es zurück auf Windows-Standard."),
-        text("Windows merkt sich die Zuordnung pro Programm. Manche Programme übernehmen sie erst nach einem Neustart.")
-            .size(12)
-            .color(muted_color()),
+        hint("Eingeschaltet wird ein Programm auf das stille Faderust Kabel gestellt und als Eingang aufgenommen; ausgeschaltet geht es zurück auf Windows-Standard. Manche Programme übernehmen das erst nach einem Neustart."),
     ]
     .spacing(16);
     frame(
         "Programme".into(),
-        640.0,
+        560.0,
         false,
         body.into(),
         row![btn("Aktualisieren", edit(Edit::Refresh), false),]

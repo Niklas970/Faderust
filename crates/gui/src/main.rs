@@ -389,6 +389,9 @@ pub struct App {
     pub sounds: Vec<faderust_core::config::Sound>,
     sound_cache: std::collections::HashMap<String, Arc<faderust_core::soundboard::Sample>>,
     pub new_preset: String,
+    /// Search text and "only switched on" of the programs window.
+    pub apps_filter: String,
+    pub apps_only_on: bool,
     /// Windows sound dialog.
     pub win: Option<WindowsAudio>,
     /// Programs dialog.
@@ -484,6 +487,8 @@ pub enum Edit {
     DuckAttack(usize, f32),
     DuckRelease(usize, f32),
     Refresh,
+    AppsFilter(String),
+    AppsOnlyOn(bool),
     ProgramOn(String, String, Vec<u32>, Option<String>),
     ProgramOff(String, Vec<u32>),
     AppInput(String, String),
@@ -1770,6 +1775,8 @@ impl App {
             sounds: vec![],
             sound_cache: Default::default(),
             new_preset: String::new(),
+            apps_filter: String::new(),
+            apps_only_on: false,
             win: None,
             apps_data: None,
             polling_apps: false,
@@ -3210,6 +3217,8 @@ impl App {
                 }
             }
             Edit::NewPreset(t) => self.new_preset = t,
+            Edit::AppsFilter(t) => self.apps_filter = t,
+            Edit::AppsOnlyOn(v) => self.apps_only_on = v,
             Edit::SavePreset => {
                 let name = std::mem::take(&mut self.new_preset);
                 match faderust_core::save_preset(name, &self.core) {
@@ -4552,56 +4561,31 @@ impl App {
             self.prefs.slim_scroll,
         );
         let silent = self.strips.iter().filter(|s| s.program && s.hidden).count();
-        let extra: Element<'_, Message> = if silent > 0 {
-            // One menu for everything about programs: add one, show the silent ones.
-            let mut choices = vec![
-                dialogs::Choice {
-                    id: "add".into(),
-                    label: i18n::tr("Programm hinzufügen …"),
-                },
-                dialogs::Choice {
-                    id: String::new(),
-                    label: i18n::tr("Alle zeigen"),
-                },
-            ];
-            choices.extend(
-                self.strips
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, s)| s.program && s.hidden)
-                    // A long list helps nobody: "Alle zeigen" brings back the rest.
-                    .take(8)
-                    .map(|(i, s)| dialogs::Choice {
-                        id: i.to_string(),
-                        label: s.label.clone(),
-                    }),
-            );
-            style::pick(
-                choices,
-                None::<dialogs::Choice>,
-                |c: dialogs::Choice| match c.id.as_str() {
-                    "add" => Message::Open(Some(Dialog::Apps)),
-                    "" => Message::Edit(Edit::ShowSilent),
-                    id => id.parse().map_or(Message::Edit(Edit::ShowSilent), |i| {
-                        Message::Edit(Edit::ShowOne(i))
-                    }),
-                },
-            )
-            .placeholder(format!(
-                "{} · {silent} {}",
-                i18n::tr("+ Programm"),
-                i18n::tr("still")
-            ))
-            .text_size(12)
-            .padding([3, 8])
-            .menu_height(Length::Fixed(260.0))
-            .into()
-        } else {
+        // "+ Programm" opens the programs window; silent programs that left
+        // the desk come back with their own small button.
+        let add: Element<'_, Message> =
             button(text("+ Programm").size(12).font(BOLD).color(accent_light()))
                 .padding([4, 12])
                 .on_press(Message::Open(Some(Dialog::Apps)))
                 .style(key(Look::Secondary))
-                .into()
+                .into();
+        let extra: Element<'_, Message> = if silent > 0 {
+            row![
+                button(
+                    text(format!("{silent} {}", i18n::tr("still")))
+                        .size(12)
+                        .color(muted_color())
+                )
+                .padding([4, 10])
+                .on_press(Message::Edit(Edit::ShowSilent))
+                .style(key(Look::Secondary)),
+                add,
+            ]
+            .spacing(6)
+            .align_y(Vertical::Center)
+            .into()
+        } else {
+            add
         };
         let programs = Self::section(
             Self::heading("PROGRAMME", Some(extra), self.tight()),
