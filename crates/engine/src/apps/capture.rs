@@ -59,7 +59,13 @@ const RETRY_AFTER: Duration = Duration::from_secs(30);
 const PROGRAMS_CACHE: Duration = Duration::from_secs(2);
 /// How often a running recording looks for processes of its program that
 /// started after it (a second window, a restarted audio process).
-const REFRESH_EVERY: Duration = Duration::from_secs(2);
+const REFRESH_EVERY: Duration = Duration::from_secs(5);
+/// How long the process list is reused. Every recording asks for it, so
+/// with many programs one snapshot serves them all.
+const PROCESSES_CACHE: Duration = Duration::from_secs(2);
+/// How long a recording thread sleeps at most between two rounds. Audio
+/// wakes it earlier; this only bounds how fast it notices a stop request.
+const WAKE_EVERY_MS: u32 = 200;
 /// A pause this long between two rounds of the recording thread means the
 /// computer slept. Windows leaves such recordings silent without an error,
 /// so they are started again.
@@ -138,8 +144,25 @@ pub fn programs() -> Result<Vec<AppAudio>, CaptureError> {
     Ok(apps)
 }
 
-/// Running processes as `(pid, parent, exe)`.
+/// Running processes as `(pid, parent, exe)`, reused for a moment.
 fn processes() -> Result<Vec<(u32, u32, String)>, CaptureError> {
+    type Snapshot = (Instant, Vec<(u32, u32, String)>);
+    static CACHE: Mutex<Option<Snapshot>> = Mutex::new(None);
+    if let Ok(cache) = CACHE.lock() {
+        if let Some((at, list)) = cache.as_ref() {
+            if at.elapsed() < PROCESSES_CACHE {
+                return Ok(list.clone());
+            }
+        }
+    }
+    let list = snapshot_processes()?;
+    if let Ok(mut cache) = CACHE.lock() {
+        *cache = Some((Instant::now(), list.clone()));
+    }
+    Ok(list)
+}
+
+fn snapshot_processes() -> Result<Vec<(u32, u32, String)>, CaptureError> {
     let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }.map_err(err)?;
     let mut list = Vec::new();
     let mut entry = PROCESSENTRY32W {
@@ -376,7 +399,7 @@ impl Recorder {
                 refreshed = Instant::now();
             }
             let events: Vec<HANDLE> = self.sources.iter().map(|s| s.event).collect();
-            let woke = unsafe { WaitForMultipleObjects(&events, false, 100) };
+            let woke = unsafe { WaitForMultipleObjects(&events, false, WAKE_EVERY_MS) };
             if woke == WAIT_TIMEOUT {
                 continue;
             }
