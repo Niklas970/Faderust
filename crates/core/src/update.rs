@@ -243,6 +243,18 @@ fn fetch(args: &[&str]) -> Result<Vec<u8>, String> {
             "--location",
             "--max-time",
             "600",
+            // A connection that does not come up, or a download that stalls,
+            // fails (and is tried again) instead of hanging for minutes.
+            "--connect-timeout",
+            "15",
+            "--speed-limit",
+            "5000",
+            "--speed-time",
+            "30",
+            "--retry",
+            "2",
+            "--retry-delay",
+            "2",
             // On stderr, so a failure names the status and the host that
             // answered (a 403 from GitHub, a proxy or a filter).
             "--write-out",
