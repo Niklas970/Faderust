@@ -4552,56 +4552,31 @@ impl App {
             self.prefs.slim_scroll,
         );
         let silent = self.strips.iter().filter(|s| s.program && s.hidden).count();
-        let extra: Element<'_, Message> = if silent > 0 {
-            // One menu for everything about programs: add one, show the silent ones.
-            let mut choices = vec![
-                dialogs::Choice {
-                    id: "add".into(),
-                    label: i18n::tr("Programm hinzufügen …"),
-                },
-                dialogs::Choice {
-                    id: String::new(),
-                    label: i18n::tr("Alle zeigen"),
-                },
-            ];
-            choices.extend(
-                self.strips
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, s)| s.program && s.hidden)
-                    // A long list helps nobody: "Alle zeigen" brings back the rest.
-                    .take(8)
-                    .map(|(i, s)| dialogs::Choice {
-                        id: i.to_string(),
-                        label: s.label.clone(),
-                    }),
-            );
-            style::pick(
-                choices,
-                None::<dialogs::Choice>,
-                |c: dialogs::Choice| match c.id.as_str() {
-                    "add" => Message::Open(Some(Dialog::Apps)),
-                    "" => Message::Edit(Edit::ShowSilent),
-                    id => id.parse().map_or(Message::Edit(Edit::ShowSilent), |i| {
-                        Message::Edit(Edit::ShowOne(i))
-                    }),
-                },
-            )
-            .placeholder(format!(
-                "{} · {silent} {}",
-                i18n::tr("+ Programm"),
-                i18n::tr("still")
-            ))
-            .text_size(12)
-            .padding([3, 8])
-            .menu_height(Length::Fixed(260.0))
-            .into()
-        } else {
+        // "+ Programm" opens the programs window; silent programs that left
+        // the desk come back with their own small button.
+        let add: Element<'_, Message> =
             button(text("+ Programm").size(12).font(BOLD).color(accent_light()))
                 .padding([4, 12])
                 .on_press(Message::Open(Some(Dialog::Apps)))
                 .style(key(Look::Secondary))
-                .into()
+                .into();
+        let extra: Element<'_, Message> = if silent > 0 {
+            row![
+                button(
+                    text(format!("{silent} {}", i18n::tr("still")))
+                        .size(12)
+                        .color(muted_color())
+                )
+                .padding([4, 10])
+                .on_press(Message::Edit(Edit::ShowSilent))
+                .style(key(Look::Secondary)),
+                add,
+            ]
+            .spacing(6)
+            .align_y(Vertical::Center)
+            .into()
+        } else {
+            add
         };
         let programs = Self::section(
             Self::heading("PROGRAMME", Some(extra), self.tight()),
