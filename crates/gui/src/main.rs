@@ -3526,9 +3526,9 @@ impl App {
             )
         };
         let logo = image(self.logo.clone())
-            .width(22)
-            .height(22)
-            .border_radius(3);
+            .width(32)
+            .height(32)
+            .border_radius(5);
         let brand = if compact {
             row![logo]
         } else {
