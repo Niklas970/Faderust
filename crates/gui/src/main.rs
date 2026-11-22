@@ -359,7 +359,6 @@ pub struct App {
     /// Name typed for a new design profile.
     pub profile_name: String,
     /// The programs window lists every playback device, not only the cables.
-    pub apps_all: bool,
     /// Sample strips of the design preview: output, device, program.
     sample: (Out, Strip, Strip),
     logo: image::Handle,
@@ -466,7 +465,6 @@ pub enum Edit {
     Gate(usize, bool),
     GateDb(usize, f32),
     Echo(usize, bool),
-    AppsAll(bool),
     EchoMs(usize, f32),
     /// Time, repeats and amount of the echo in one go.
     EchoStyle(usize, f32, f32, f32),
@@ -482,11 +480,11 @@ pub enum Edit {
     DuckAttack(usize, f32),
     DuckRelease(usize, f32),
     Refresh,
-    AppDevice(Vec<u32>, Option<String>),
+    ProgramOn(String, String, Vec<u32>, Option<String>),
+    ProgramOff(String, Vec<u32>),
     AppInput(String, String),
     /// Park the program on a quiet cable, then record it: (program, label, pids, cable id).
     AppInputParked(String, String, Vec<u32>, String),
-    AutoPrograms(bool),
     WinDefault(String, bool),
     WinVolume(String, f32),
     WinMute(String, bool),
@@ -1013,42 +1011,6 @@ impl App {
             .collect()
     }
 
-    /// The program is recorded as an input, reaches an output and still plays
-    /// on a device you hear: a cable somebody listens to, a device Faderust
-    /// plays on too, or the Windows default.
-    pub fn doubled(&self, a: &faderust_core::App) -> bool {
-        let Some(data) = &self.apps_data else {
-            return false;
-        };
-        let cfg = self.config();
-        let program = format!("app:{}", a.exe.to_lowercase());
-        let Some(row) = cfg.inputs.iter().position(|i| i.device == program) else {
-            return false;
-        };
-        let routed = !cfg.inputs[row].muted
-            && cfg
-                .gains
-                .get(row)
-                .is_some_and(|g| g.iter().any(|g| !g.muted && g.db > -59.0));
-        if !routed {
-            return false;
-        }
-        let default_id = self
-            .win
-            .as_ref()
-            .and_then(|w| w.playback.iter().find(|e| e.is_default))
-            .map(|e| e.id.clone());
-        let wanted = a.device.clone().or(default_id);
-        let Some(d) = data.devices.iter().find(|x| Some(&x.id) == wanted.as_ref()) else {
-            return false;
-        };
-        if d.cable {
-            !self.is_quiet(d, &cfg, &self.cable_inputs())
-        } else {
-            a.device.is_none() || cfg.outputs.iter().any(|o| contains(&d.name, &o.device))
-        }
-    }
-
     pub fn has_cable(&self) -> bool {
         self.devs
             .outputs
@@ -1526,6 +1488,37 @@ impl App {
         self.refresh_dialog()
     }
 
+    /// Removes the input of a program, with its faders in every preset.
+    fn remove_program(&mut self, device: &str) {
+        if self.draft.is_some() {
+            return;
+        }
+        let mut next = self.config();
+        let Some(i) = next
+            .inputs
+            .iter()
+            .position(|i| i.device.eq_ignore_ascii_case(device))
+        else {
+            return;
+        };
+        next.inputs.remove(i);
+        next.duck_after_remove(i);
+        if i < next.gains.len() {
+            next.gains.remove(i);
+        }
+        for p in &mut next.presets {
+            if i < p.gains.len() {
+                p.gains.remove(i);
+            }
+        }
+        match faderust_core::save_config(next, &self.core) {
+            Ok(()) => {
+                self.input_devices = self.config().inputs.into_iter().map(|i| i.device).collect();
+            }
+            Err(e) => self.dialog_error = e,
+        }
+    }
+
     /// Earlier versions could record a program twice. The first input keeps
     /// its settings; later ones for the same program are removed.
     fn drop_duplicate_programs(&mut self) {
@@ -1570,64 +1563,13 @@ impl App {
         }
     }
 
-    /// A program Faderust has not seen yet is parked on the quiet cable and
-    /// taken up as an input by itself, one per lookup. What was taken up (or
-    /// removed again by hand) is remembered and not taken up twice.
-    fn auto_adopt(&mut self) {
-        self.drop_duplicate_programs();
-        if self.prefs.auto_programs_off || self.dialog == Some(Dialog::Apps) {
-            return;
-        }
-        let Some(cable) = self.quiet_cable() else {
-            return;
-        };
-        // Programs already in the configuration; the cached list of the
-        // programs dialog is only filled while that dialog is open.
-        let known: Vec<String> = self
-            .config()
-            .inputs
-            .into_iter()
-            .map(|i| i.device.to_lowercase())
-            .collect();
-        let own = std::env::current_exe()
-            .ok()
-            .and_then(|p| p.file_name().map(|s| s.to_string_lossy().to_lowercase()));
-        let next = self.apps_data.as_ref().and_then(|data| {
-            data.apps
-                .iter()
-                .find(|a| {
-                    let exe = a.exe.to_lowercase();
-                    !a.pids.is_empty()
-                        && own.as_deref() != Some(exe.as_str())
-                        && !known.contains(&format!("app:{exe}"))
-                        && !self.prefs.auto_seen.contains(&exe)
-                })
-                .cloned()
-        });
-        let Some(a) = next else {
-            return;
-        };
-        let exe = a.exe.to_lowercase();
-        let mut p = self.prefs.clone();
-        p.auto_seen.push(exe.clone());
-        shell::save_prefs(&self.dir, &p);
-        self.prefs = p;
-        self.jobs
-            .push(Task::done(Message::Edit(Edit::AppInputParked(
-                format!("app:{exe}"),
-                a.name,
-                a.pids,
-                cable.id,
-            ))));
-    }
-
     fn loaded(&mut self, l: Loaded) {
         match l {
             Loaded::Windows(Ok(w)) => self.win = Some(w),
             Loaded::Apps(Ok(a)) => {
                 self.polling_apps = false;
                 self.apps_data = Some(a);
-                self.auto_adopt();
+                self.drop_duplicate_programs();
             }
             Loaded::Devices(Ok(d)) => self.devs = d,
             Loaded::Windows(Err(e)) | Loaded::Apps(Err(e)) | Loaded::Devices(Err(e)) => {
@@ -1759,7 +1701,6 @@ impl App {
             design_tab: 0,
             devices_tab: 0,
             profile_name: String::new(),
-            apps_all: false,
             sample: (
                 Out::sample("Lautsprecher", "Kopfhörer (EarFun)", -6.0, -20.0),
                 Strip::sample(
@@ -2667,7 +2608,6 @@ impl App {
             Edit::Gate(i, on) => self.set_fx(i, |f| f.gate = on),
             Edit::GateDb(i, v) => self.set_fx(i, |f| f.gate_db = v),
             Edit::Echo(i, on) => self.set_fx(i, |f| f.echo = on),
-            Edit::AppsAll(v) => self.apps_all = v,
             Edit::EchoMs(i, v) => self.set_fx(i, |f| f.echo_ms = v),
             Edit::EchoStyle(i, ms, fb, mix) => self.set_fx(i, |f| {
                 f.echo = true;
@@ -2686,11 +2626,31 @@ impl App {
                 let t = self.refresh_dialog();
                 self.jobs.push(t);
             }
-            Edit::AppDevice(pids, device) => {
-                self.jobs.push(blocking(
-                    move || faderust_core::set_app_output(pids, device),
-                    |r| Message::Loaded(Loaded::Done(Then::Apps, r)),
-                ));
+            Edit::ProgramOn(device, label, pids, cable) => {
+                // Park it on the quiet cable first, so it is not heard twice.
+                match cable {
+                    Some(cable) if !pids.is_empty() => {
+                        self.jobs
+                            .push(Task::done(Message::Edit(Edit::AppInputParked(
+                                device, label, pids, cable,
+                            ))));
+                    }
+                    _ => self
+                        .jobs
+                        .push(Task::done(Message::Edit(Edit::AppInput(device, label)))),
+                }
+            }
+            Edit::ProgramOff(device, pids) => {
+                self.remove_program(&device);
+                if !pids.is_empty() {
+                    // Back to the Windows default.
+                    self.jobs.push(blocking(
+                        move || faderust_core::set_app_output(pids, None),
+                        |r| Message::Loaded(Loaded::Done(Then::Apps, r)),
+                    ));
+                } else {
+                    self.jobs.push(self.load_apps());
+                }
             }
             Edit::AppInputParked(device, label, pids, cable) => {
                 self.jobs.push(blocking(
@@ -2706,7 +2666,6 @@ impl App {
                     },
                 ));
             }
-            Edit::AutoPrograms(on) => self.set_look(|p| p.auto_programs_off = !on),
             Edit::AppInput(device, label) => {
                 let r = self.add_input(device, label);
                 if let Err(e) = r {
@@ -3364,6 +3323,19 @@ impl App {
                 s.dismissed = false;
             }),
             Edit::Dismiss(i) => {
+                // The close button of a program switches it off: no input,
+                // no recording, back on the Windows default.
+                let device = self.strips.get(i).map(|s| s.device.clone());
+                if let Some(device) = device.filter(|d| d.starts_with("app:")) {
+                    let exe = device.strip_prefix("app:").unwrap_or_default();
+                    let pids = self
+                        .apps_data
+                        .as_ref()
+                        .and_then(|d| d.apps.iter().find(|a| a.exe.eq_ignore_ascii_case(exe)))
+                        .map(|a| a.pids.clone())
+                        .unwrap_or_default();
+                    return self.edit(Edit::ProgramOff(device, pids));
+                }
                 if let Some(s) = self.strips.get_mut(i) {
                     s.dismissed = true;
                     s.revealed = false;
@@ -3768,7 +3740,7 @@ impl App {
                             .padding(0)
                             .on_press(Message::Edit(Edit::Dismiss(i)))
                             .style(key(Look::Secondary)),
-                        "Programm ausblenden",
+                        "Programm entfernen",
                     ),
                 ]
                 .spacing(4)
@@ -5260,7 +5232,7 @@ impl App {
         } else {
             250
         };
-        let poll = if hide_closed(self.hide_after) || !self.prefs.auto_programs_off {
+        let poll = if hide_closed(self.hide_after) {
             iced::time::every(Duration::from_secs(3)).map(|_| Message::PollApps)
         } else {
             Subscription::none()

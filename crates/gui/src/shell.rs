@@ -261,10 +261,6 @@ pub struct Prefs {
     pub view: String,
     /// Seconds of silence after which a program leaves the desk; `None` is the default.
     pub hide_after: Option<u64>,
-    /// New programs are not taken up by themselves (the switch in the programs window).
-    pub auto_programs_off: bool,
-    /// Programs Faderust took up by itself already (lower-case names).
-    pub auto_seen: Vec<String>,
     /// Outputs hidden from the desk (labels).
     pub hidden_outputs: Vec<String>,
     /// "dark", "light" or "system"; empty is dark.
