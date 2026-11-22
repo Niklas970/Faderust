@@ -808,164 +808,85 @@ fn apps(app: &App) -> Element<'_, Message> {
                 );
             }
             let quiet = app.quiet_cable();
-            if data.apps.is_empty() {
+            let cfg = app.config();
+            // Programs playing now, then programs that are inputs but silent.
+            let mut rows: Vec<(String, String, Vec<u32>)> = data
+                .apps
+                .iter()
+                .map(|a| {
+                    (
+                        format!("app:{}", a.exe.to_lowercase()),
+                        a.name.clone(),
+                        a.pids.clone(),
+                    )
+                })
+                .collect();
+            for i in &cfg.inputs {
+                let device = i.device.to_lowercase();
+                if device.starts_with("app:") && !rows.iter().any(|r| r.0 == device) {
+                    rows.push((device, i.label.clone(), vec![]));
+                }
+            }
+            if rows.is_empty() {
                 list = list.push(hint(
                     "Gerade spielt kein Programm Ton ab. Starte die Wiedergabe und tippe auf „Aktualisieren“.",
                 ));
             }
-            let default_choice = Choice {
-                id: String::new(),
-                label: "Windows-Standard".into(),
-            };
-            for a in &data.apps {
-                // Windows default first, then the Faderust cables, then the rest by name.
-                let mut choices = vec![default_choice.clone()];
-                let mut devices: Vec<&_> = data.devices.iter().collect();
-                devices.sort_by(|x, y| {
-                    y.cable
-                        .cmp(&x.cable)
-                        .then_with(|| x.name.to_lowercase().cmp(&y.name.to_lowercase()))
-                });
-                // Only the cables and the device the program uses now, unless asked for all.
-                for d in devices {
-                    if !d.cable && !app.apps_all && a.device.as_deref() != Some(d.id.as_str()) {
-                        continue;
-                    }
-                    let label = if d.cable {
-                        device_label(&d.name)
-                    } else {
-                        d.name.clone()
-                    };
-                    if !choices.iter().any(|c| c.label == label) {
-                        choices.push(Choice {
-                            id: d.id.clone(),
-                            label,
-                        });
-                    }
-                }
-                let current = match &a.device {
-                    None => default_choice.clone(),
-                    Some(id) => choices
-                        .iter()
-                        .find(|c| &c.id == id)
-                        .cloned()
-                        .unwrap_or(Choice {
-                            id: id.clone(),
-                            label: "Gerät nicht verbunden".into(),
-                        }),
-                };
-                if !choices.contains(&current) {
-                    choices.push(current.clone());
-                }
-                let pids = a.pids.clone();
-                let device = pick_list(choices, Some(current), move |c| {
-                    edit(Edit::AppDevice(
-                        pids.clone(),
-                        (!c.id.is_empty()).then_some(c.id),
-                    ))
-                })
-                .width(Length::Fill)
-                .menu_height(Length::Fixed(220.0));
-                let program = format!("app:{}", a.exe.to_lowercase());
-                let action: Element<'_, Message> = if app.input_devices.contains(&program) {
-                    container(text("Eingang").size(12).font(BOLD).color(signal()))
-                        .padding([5, 10])
-                        .style(|_| container::Style {
-                            border: Border {
-                                color: signal(),
-                                width: 1.0,
-                                radius: 3.0.into(),
-                            },
-                            ..container::Style::default()
+            for (device, name, pids) in rows {
+                let on = cfg
+                    .inputs
+                    .iter()
+                    .any(|i| i.device.eq_ignore_ascii_case(&device));
+                let switch = {
+                    let (device, name, pids) = (device.clone(), name.clone(), pids.clone());
+                    let cable = quiet.as_ref().map(|q| q.id.clone());
+                    check(on).label(tr("Über Faderust")).on_toggle(move |v| {
+                        edit(if v {
+                            Edit::ProgramOn(
+                                device.clone(),
+                                name.clone(),
+                                pids.clone(),
+                                cable.clone(),
+                            )
+                        } else {
+                            Edit::ProgramOff(device.clone(), pids.clone())
                         })
-                        .into()
-                } else if let Some(q) = &quiet {
-                    // Park it on the quiet cable first, so it is not heard twice.
-                    btn(
-                        "+ Eingang",
-                        edit(Edit::AppInputParked(
-                            program,
-                            a.name.clone(),
-                            a.pids.clone(),
-                            q.id.clone(),
-                        )),
-                        false,
-                    )
+                    })
+                };
+                let state = if pids.is_empty() {
+                    tr("beendet")
                 } else {
-                    btn(
-                        "+ Eingang",
-                        edit(Edit::AppInput(program, a.name.clone())),
-                        false,
-                    )
+                    String::new()
                 };
                 list = list.push(
                     row![
-                        container(text(a.name.clone()).size(14).color(text_color())).width(170),
-                        device,
-                        action
+                        container(text(name).size(14).color(text_color())).width(Length::Fill),
+                        text(state).size(12).color(muted_color()),
+                        switch,
+                    ]
+                    .spacing(12)
+                    .align_y(Vertical::Center),
+                );
+            }
+            if quiet.is_none() && !data.apps.is_empty() {
+                list = list.push(
+                    row![
+                        hint(
+                            "Ohne ein Faderust Kabel hörst du ein aufgenommenes Programm doppelt."
+                        ),
+                        space().width(Length::Fill),
+                        btn("Faderust Kabel einrichten", edit(Edit::UsbSetup), true),
                     ]
                     .spacing(8)
                     .align_y(Vertical::Center),
                 );
-                if app.doubled(a) {
-                    let fix: Element<'_, Message> = match &quiet {
-                        Some(q) => btn(
-                            format!("{} {}", tr("Auf"), device_label(&q.name)) + &tr(" stellen"),
-                            edit(Edit::AppDevice(a.pids.clone(), Some(q.id.clone()))),
-                            true,
-                        ),
-                        None => btn("Faderust Kabel einrichten", edit(Edit::UsbSetup), true),
-                    };
-                    list = list.push(
-                        container(
-                            row![
-                                text(format!(
-                                    "{} {}",
-                                    tr("Du hörst"),
-                                    a.name
-                                ) + &tr(" doppelt: einmal über den Fader, einmal über sein eigenes Gerät."))
-                                .size(12)
-                                .color(amber()),
-                                space().width(Length::Fill),
-                                fix,
-                            ]
-                            .spacing(8)
-                            .align_y(Vertical::Center),
-                        )
-                        .padding([6, 10])
-                        .style(|_| container::Style {
-                            border: Border {
-                                color: amber(),
-                                width: 1.0,
-                                radius: 3.0.into(),
-                            },
-                            ..container::Style::default()
-                        }),
-                    );
-                }
             }
         }
     }
-    let parked_hint: Element<'_, Message> = match app.quiet_cable() {
-        Some(q) => hint(format!(
-            "{} {} {}",
-            tr("„+ Eingang“ nimmt das Programm auf und stellt es vorher auf"),
-            device_label(&q.name),
-            tr(", damit du es nicht doppelt hörst.")
-        )),
-        None => space().height(0).into(),
-    };
     let body = column![
         error_line(app),
         list,
-        parked_hint,
-        check(!app.prefs.auto_programs_off)
-            .label(tr("Neue Programme automatisch aufnehmen"))
-            .on_toggle(|v| edit(Edit::AutoPrograms(v))),
-        hint("Ein neues Programm wird auf das stille Faderust Kabel gestellt und als Eingang angelegt. Entfernte Programme kommen nicht von selbst zurück."),
-        check(app.apps_all)
-            .label(tr("Alle Geräte zeigen"))
-            .on_toggle(|v| edit(Edit::AppsAll(v))),
+        hint("Ein Programm mit „Über Faderust“ wird auf das stille Faderust Kabel gestellt und als Eingang aufgenommen; beim Ausschalten geht es zurück auf Windows-Standard."),
         text("Windows merkt sich die Zuordnung pro Programm. Manche Programme übernehmen sie erst nach einem Neustart.")
             .size(12)
             .color(muted_color()),
