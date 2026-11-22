@@ -407,8 +407,8 @@ const TABLE: &[(&str, &str)] = &[
         "No test builds loaded yet: \"Search now\" loads the list.",
     ),
     (
-        "Ein Test-Build ist der Stand von main vor dem Release. Er entsteht nach jedem Merge automatisch in GitHub (Actions, „Test build“). Gesucht wird nur mit „Jetzt suchen“.",
-        "A test build is the state of main before the release. It is built automatically after every merge in GitHub (Actions, \"Test build\"). It is only looked for with \"Search now\".",
+        "Ein Test-Build ist der Stand von main vor dem Release. Er entsteht nach jedem Merge automatisch in GitHub (Actions, „Test build“). Faderust sucht alle 30 min im Hintergrund und lädt den neuesten schon herunter, mit „Jetzt suchen“ sofort.",
+        "A test build is the state of main before the release. It is built automatically after every merge in GitHub (Actions, \"Test build\"). Faderust looks every 30 min in the background and already downloads the newest one; \"Search now\" does it at once.",
     ),
     ("Dieses Faderust ist ein Release:", "This Faderust is a release:"),
     ("Dieses Faderust ist ein Test-Build:", "This Faderust is a test build:"),
