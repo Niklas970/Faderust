@@ -389,6 +389,9 @@ pub struct App {
     pub sounds: Vec<faderust_core::config::Sound>,
     sound_cache: std::collections::HashMap<String, Arc<faderust_core::soundboard::Sample>>,
     pub new_preset: String,
+    /// Search text and "only switched on" of the programs window.
+    pub apps_filter: String,
+    pub apps_only_on: bool,
     /// Windows sound dialog.
     pub win: Option<WindowsAudio>,
     /// Programs dialog.
@@ -484,6 +487,8 @@ pub enum Edit {
     DuckAttack(usize, f32),
     DuckRelease(usize, f32),
     Refresh,
+    AppsFilter(String),
+    AppsOnlyOn(bool),
     ProgramOn(String, String, Vec<u32>, Option<String>),
     ProgramOff(String, Vec<u32>),
     AppInput(String, String),
@@ -1770,6 +1775,8 @@ impl App {
             sounds: vec![],
             sound_cache: Default::default(),
             new_preset: String::new(),
+            apps_filter: String::new(),
+            apps_only_on: false,
             win: None,
             apps_data: None,
             polling_apps: false,
@@ -3210,6 +3217,8 @@ impl App {
                 }
             }
             Edit::NewPreset(t) => self.new_preset = t,
+            Edit::AppsFilter(t) => self.apps_filter = t,
+            Edit::AppsOnlyOn(v) => self.apps_only_on = v,
             Edit::SavePreset => {
                 let name = std::mem::take(&mut self.new_preset);
                 match faderust_core::save_preset(name, &self.core) {

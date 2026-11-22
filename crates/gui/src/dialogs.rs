@@ -833,15 +833,24 @@ fn apps(app: &App) -> Element<'_, Message> {
                     rows.push((device, i.label.clone(), vec![]));
                 }
             }
-            rows.sort_by_key(|r| r.1.to_lowercase());
-            let total = rows.len();
-            let mut on_rows: Vec<Element<'_, Message>> = vec![];
-            let mut off_rows: Vec<Element<'_, Message>> = vec![];
-            for (device, name, pids) in rows {
-                let on = cfg
-                    .inputs
+            // Switched on first, then by name.
+            let on_of = |device: &str| {
+                cfg.inputs
                     .iter()
-                    .any(|i| i.device.eq_ignore_ascii_case(&device));
+                    .any(|i| i.device.eq_ignore_ascii_case(device))
+            };
+            rows.sort_by_key(|r| (!on_of(&r.0), r.1.to_lowercase()));
+            let total = rows.len();
+            let on_count = rows.iter().filter(|r| on_of(&r.0)).count();
+            let needle = app.apps_filter.trim().to_lowercase();
+            let mut lines: Vec<Element<'_, Message>> = vec![];
+            for (device, name, pids) in rows {
+                let on = on_of(&device);
+                if (app.apps_only_on && !on)
+                    || (!needle.is_empty() && !name.to_lowercase().contains(&needle))
+                {
+                    continue;
+                }
                 let closed = pids.is_empty();
                 let toggle = {
                     let (device, name, pids) = (device.clone(), name.clone(), pids.clone());
@@ -864,20 +873,32 @@ fn apps(app: &App) -> Element<'_, Message> {
                 } else {
                     text(tr("läuft")).size(12).color(signal())
                 };
-                let line = row![
-                    column![text(name).size(14).font(BOLD).color(text_color()), status]
-                        .spacing(2)
-                        .width(Length::Fill),
-                    toggle,
-                ]
-                .spacing(14)
-                .align_y(Vertical::Center)
-                .into();
-                if on {
-                    on_rows.push(line);
-                } else {
-                    off_rows.push(line);
-                }
+                lines.push(
+                    container(
+                        row![
+                            toggle,
+                            text(name)
+                                .size(14)
+                                .font(if on { BOLD } else { iced::Font::DEFAULT })
+                                .color(text_color())
+                                .width(Length::Fill),
+                            status,
+                        ]
+                        .spacing(14)
+                        .align_y(Vertical::Center),
+                    )
+                    .padding([8, 4])
+                    .width(Length::Fill)
+                    .style(|_| container::Style {
+                        border: Border {
+                            color: border(),
+                            width: 0.0,
+                            radius: 0.0.into(),
+                        },
+                        ..container::Style::default()
+                    })
+                    .into(),
+                );
             }
             if quiet.is_none() && !data.apps.is_empty() {
                 list = list.push(
@@ -893,29 +914,29 @@ fn apps(app: &App) -> Element<'_, Message> {
                 );
             }
             list = list.push(
-                text(format!(
-                    "{} {} {} {}",
-                    on_rows.len(),
-                    tr("von"),
-                    total,
-                    tr("Programmen über Faderust")
-                ))
-                .size(13)
-                .color(text_color()),
+                row![
+                    text_input("Programm suchen …", &app.apps_filter)
+                        .on_input(|t| edit(Edit::AppsFilter(t))),
+                    segmented(vec![
+                        (tr("Alle"), !app.apps_only_on, edit(Edit::AppsOnlyOn(false))),
+                        (
+                            format!("{} ({on_count})", tr("Eingeschaltet")),
+                            app.apps_only_on,
+                            edit(Edit::AppsOnlyOn(true)),
+                        ),
+                    ]),
+                ]
+                .spacing(10)
+                .align_y(Vertical::Center),
             );
-            if on_rows.is_empty() {
-                on_rows.push(hint(
-                    "Noch keins eingeschaltet. Schalte unten ein Programm ein.",
-                ));
+            if lines.is_empty() {
+                lines.push(hint(if total == 0 {
+                    "Gerade spielt kein Programm Ton ab. Starte die Wiedergabe und tippe auf „Aktualisieren“."
+                } else {
+                    "Kein Programm gefunden."
+                }));
             }
-            if off_rows.is_empty() {
-                off_rows.push(hint(
-                    "Gerade spielt kein weiteres Programm Ton ab. Starte die Wiedergabe und tippe auf „Aktualisieren“.",
-                ));
-            }
-            list = list
-                .push(card("Über Faderust", column(on_rows).spacing(14)))
-                .push(card("Weitere Programme", column(off_rows).spacing(14)));
+            list = list.push(card("Programme", column(lines).spacing(2)));
         }
     }
     let body = column![
