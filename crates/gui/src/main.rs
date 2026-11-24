@@ -391,6 +391,8 @@ pub struct App {
     pub new_preset: String,
     /// Search text and "only switched on" of the programs window.
     pub apps_filter: String,
+    /// The strip being dragged to another place.
+    drag: Option<usize>,
     pub apps_only_on: bool,
     /// Windows sound dialog.
     pub win: Option<WindowsAudio>,
@@ -648,6 +650,10 @@ pub enum Message {
     DialogMax,
     DialogResize(window::Direction),
     Quit,
+    /// Drag and drop of a strip: pressed on its head, moved over another, released.
+    DragStart(usize),
+    DragOver(usize),
+    DragEnd,
     CheckUpdate,
     /// The button of the test builds: a release or a newer test build.
     CheckTest,
@@ -1776,6 +1782,7 @@ impl App {
             sound_cache: Default::default(),
             new_preset: String::new(),
             apps_filter: String::new(),
+            drag: None,
             apps_only_on: false,
             win: None,
             apps_data: None,
@@ -2331,6 +2338,17 @@ impl App {
             Message::DialogResize(direction) => {
                 if let Some(id) = self.dialog_win {
                     return window::drag_resize(id, direction);
+                }
+            }
+            Message::DragStart(i) => self.drag = Some(i),
+            Message::DragOver(j) => {
+                if let Some(i) = self.drag {
+                    self.move_strip_to(i, j);
+                }
+            }
+            Message::DragEnd => {
+                if self.drag.take().is_some() {
+                    self.save_prefs();
                 }
             }
             Message::CheckUpdate => {
@@ -3789,7 +3807,7 @@ impl App {
                 row![
                     Self::name_label(&s.label),
                     dialogs::tip(
-                        button(Self::close_glyph())
+                        button(Self::close_glyph(2.0))
                             .width(22)
                             .height(22)
                             .padding(0)
@@ -3815,13 +3833,22 @@ impl App {
                 .height(30),
             );
         }
-        col.into()
+        if i == SAMPLE || self.is_mini() {
+            return col.into();
+        }
+        // Dragging the head moves the strip.
+        iced::widget::mouse_area(col)
+            .on_press(Message::DragStart(i))
+            .interaction(iced::mouse::Interaction::Grab)
+            .into()
     }
 
-    /// The ✕ of a close button, drawn so it is centred in any font.
-    fn close_glyph() -> Element<'static, Message> {
+    /// The ✕ of a close button, drawn so it is centred in any font; `lift`
+    /// moves it up by that many pixels.
+    fn close_glyph(lift: f32) -> Element<'static, Message> {
         Canvas::new(widgets::Cross {
             color: text_color(),
+            lift,
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -4272,7 +4299,7 @@ impl App {
         } else {
             space().height(0).into()
         };
-        self.card_tint(
+        let card = self.card_tint(
             column![
                 sorter,
                 self.strip_name(s, i),
@@ -4297,7 +4324,14 @@ impl App {
             },
             !edge_off && !s.muted && s.shown > -60.0,
             self.head_tint(&s.device),
-        )
+        );
+        // While another strip is dragged, entering this one takes its place.
+        if i == SAMPLE || self.is_mini() {
+            return card;
+        }
+        iced::widget::mouse_area(card)
+            .on_enter(Message::DragOver(i))
+            .into()
     }
 
     /// A sample strip with the current look, for
@@ -4366,7 +4400,7 @@ impl App {
         // The close button sits next to the name.
         let head = row![
             Self::name_label(&m.label),
-            button(Self::close_glyph())
+            button(Self::close_glyph(0.0))
                 .width(22)
                 .height(22)
                 .padding(0)
@@ -4601,6 +4635,36 @@ impl App {
             .spacing(2)
             .height(Length::Fill)
             .into()
+    }
+
+    /// Puts strip `from` where strip `to` is (both in the same group); the
+    /// order is saved when the drag ends.
+    fn move_strip_to(&mut self, from: usize, to: usize) {
+        let (Some(a), Some(b)) = (self.strips.get(from), self.strips.get(to)) else {
+            return;
+        };
+        if from == to || a.program != b.program {
+            return;
+        }
+        let mut group = self.ordered(a.program);
+        let (Some(at), Some(target)) = (
+            group.iter().position(|&x| x == from),
+            group.iter().position(|&x| x == to),
+        ) else {
+            return;
+        };
+        let moved = group.remove(at);
+        group.insert(target, moved);
+        let mut order: Vec<String> = group
+            .iter()
+            .map(|&k| self.strips[k].device.clone())
+            .collect();
+        for d in &self.prefs.strip_order {
+            if !order.contains(d) {
+                order.push(d.clone());
+            }
+        }
+        self.prefs.strip_order = order;
     }
 
     /// The strips of a group on the desk (devices or shown programs) in the
@@ -5278,6 +5342,10 @@ impl App {
                 iced::Event::Window(window::Event::Moved(p)) => Some(Message::Moved(id, p)),
                 iced::Event::Window(window::Event::Rescaled(_)) => Some(Message::Rescaled(id)),
                 iced::Event::Window(window::Event::Unfocused) => Some(Message::Unfocused(id)),
+                iced::Event::Mouse(iced::mouse::Event::ButtonReleased(
+                    iced::mouse::Button::Left,
+                ))
+                | iced::Event::Mouse(iced::mouse::Event::CursorLeft) => Some(Message::DragEnd),
                 _ => None,
             }),
         ])
