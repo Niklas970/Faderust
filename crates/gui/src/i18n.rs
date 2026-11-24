@@ -10,7 +10,7 @@ const TABLE: &[(&str, &str)] = &[
     ("Die ersten Schritte noch einmal anzeigen.", "Show the first steps again."),
     ("Faderust mischt den Ton von Geräten und Programmen auf deine Ausgänge. So kommst du in einer Minute zum ersten Ton.", "Faderust mixes the sound of devices and programs onto your outputs. Here is how to hear something in a minute."),
     ("Ausgang wählen", "Pick an output"),
-    ("Unten rechts auf „+ Ausgang“ und deine Kopfhörer oder Lautsprecher aussuchen.", "Click “+ Output” and pick your headphones or speakers."),
+    ("Mit „+ Ausgang“ deine Kopfhörer oder Lautsprecher aussuchen.", "Use “+ Output” to pick your headphones or speakers."),
     ("Eingang hinzufügen", "Add an input"),
     ("„+ Eingang“ nimmt ein Mikrofon oder ein anderes Gerät auf den Streifen.", "“+ Input” puts a microphone or another device on a strip."),
     ("Programme einschalten", "Switch programs on"),

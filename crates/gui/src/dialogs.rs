@@ -1050,7 +1050,7 @@ fn help() -> Element<'static, Message> {
         card(
             "Erste Schritte",
             column![
-                step(1, "Ausgang wählen", "Unten rechts auf „+ Ausgang“ und deine Kopfhörer oder Lautsprecher aussuchen."),
+                step(1, "Ausgang wählen", "Mit „+ Ausgang“ deine Kopfhörer oder Lautsprecher aussuchen."),
                 step(2, "Eingang hinzufügen", "„+ Eingang“ nimmt ein Mikrofon oder ein anderes Gerät auf den Streifen."),
                 step(3, "Programme einschalten", "„+ Programm“ öffnet die Liste. Der Schalter „Über Faderust“ leitet den Ton eines Programms über Faderust. Dafür braucht es das Faderust Kabel (Geräte → Verbindungen)."),
                 step(4, "Mischen", "Fader ziehen oder das Mausrad benutzen. M schaltet stumm, A1 bis A3 wählen den Ausgang. Streifen lassen sich am Kopf verschieben."),
