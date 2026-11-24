@@ -132,6 +132,16 @@ The Faderust Kabel is a virtual USB sound device (stereo, 48 kHz, 24 bit) that F
 
 Note: the cable is still an experiment and has been tested on little hardware.
 
+## Privacy
+
+Faderust works offline. It sends nothing about you and has no account, no telemetry and no ads. The only network traffic is what you start or allow:
+
+- Checking for updates asks GitHub (`api.github.com`, `github.com`) for the latest release, and downloads the setup only when you click install. Test builds are only checked if you switch them on.
+- Setting up the Faderust Kabel downloads usbip-win2 from GitHub once and verifies its checksum.
+- The Stream Deck connection is local (`127.0.0.1`) and does not leave your computer.
+
+Settings, presets and the log stay in `%APPDATA%\Faderust`. If you report a problem, you decide what you copy into the issue.
+
 ## Limits
 
 - Programs remember faders, outputs and effects as long as their strip stays in the desk: if Discord restarts, it comes back with its old settings. If you remove the strip under "Devices", they are gone.

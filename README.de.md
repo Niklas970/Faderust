@@ -132,6 +132,16 @@ Das Faderust Kabel ist ein virtuelles USB-Soundgerät (Stereo, 48 kHz, 24 Bit), 
 
 Hinweis: Das Kabel ist noch ein Test und auf wenig Hardware erprobt.
 
+## Datenschutz
+
+Faderust arbeitet offline. Es sendet nichts über dich und hat kein Konto, keine Telemetrie und keine Werbung. Netzwerkverkehr gibt es nur, wenn du ihn startest oder erlaubst:
+
+- Die Update-Suche fragt GitHub (`api.github.com`, `github.com`) nach der neuesten Version und lädt das Setup erst, wenn du auf Installieren klickst. Test-Builds werden nur geprüft, wenn du sie einschaltest.
+- Die Einrichtung des Faderust Kabels lädt einmal usbip-win2 von GitHub und prüft die Prüfsumme.
+- Die Stream-Deck-Verbindung ist lokal (`127.0.0.1`) und verlässt deinen Rechner nicht.
+
+Einstellungen, Presets und das Protokoll bleiben in `%APPDATA%\Faderust`. Wenn du ein Problem meldest, entscheidest du, was du ins Issue kopierst.
+
 ## Grenzen
 
 - Programme merken sich Fader, Ausgänge und Effekte, solange ihr Streifen im Pult bleibt: Startet Discord neu, kommt es mit seinen alten Einstellungen zurück. Entfernst du den Streifen unter „Geräte“, sind sie weg.
