@@ -308,6 +308,7 @@ pub fn view(app: &App, d: Dialog) -> Element<'_, Message> {
         Dialog::Log => log(app),
         Dialog::Selftest => selftest(app),
         Dialog::Soundboard => soundboard(app),
+        Dialog::Help => help(),
         Dialog::Markup => markup(app),
     }
 }
@@ -1027,6 +1028,58 @@ fn soundboard(app: &App) -> Element<'_, Message> {
     ]
     .spacing(10);
     frame("Soundboard".into(), 520.0, false, body.into(), no_footer())
+}
+
+/// The first steps: what a new user does to hear something.
+fn help() -> Element<'static, Message> {
+    let step = |n: u8, title: &'static str, body: &'static str| -> Element<'static, Message> {
+        row![
+            text(format!("{n}")).size(22).color(signal()).width(28),
+            column![
+                text(title).size(15).font(BOLD).color(text_color()),
+                hint(body),
+            ]
+            .spacing(3)
+            .width(Length::Fill),
+        ]
+        .spacing(10)
+        .into()
+    };
+    let body = column![
+        hint("Faderust mischt den Ton von Geräten und Programmen auf deine Ausgänge. So kommst du in einer Minute zum ersten Ton."),
+        card(
+            "Erste Schritte",
+            column![
+                step(1, "Ausgang wählen", "Unten rechts auf „+ Ausgang“ und deine Kopfhörer oder Lautsprecher aussuchen."),
+                step(2, "Eingang hinzufügen", "„+ Eingang“ nimmt ein Mikrofon oder ein anderes Gerät auf den Streifen."),
+                step(3, "Programme einschalten", "„+ Programm“ öffnet die Liste. Der Schalter „Über Faderust“ leitet den Ton eines Programms über Faderust. Dafür braucht es das Faderust Kabel (Geräte → Verbindungen)."),
+                step(4, "Mischen", "Fader ziehen oder das Mausrad benutzen. M schaltet stumm, A1 bis A3 wählen den Ausgang. Streifen lassen sich am Kopf verschieben."),
+                step(5, "Merken", "Presets speichern deine Einstellung. Unter Design änderst du Farben und Aussehen."),
+            ]
+            .spacing(14),
+        ),
+        card(
+            "Wenn etwas nicht klappt",
+            column![
+                hint("Kein Ton von einem Programm: Schalter „Über Faderust“ prüfen und das Programm einmal neu abspielen."),
+                hint("Bluetooth-Kopfhörer: im Freisprechmodus belegt Windows das Gerät. Dann Ausgang freigeben oder Anrufe auf ein anderes Gerät legen."),
+                hint("Probleme melden: Geräte → Erweitert → Debug-Modus einschalten, dann liegt ein Protokoll und ein Selbsttest bereit, den du in ein Issue auf GitHub kopierst."),
+            ]
+            .spacing(8),
+        ),
+    ]
+    .spacing(12);
+    frame(
+        "Erste Schritte".into(),
+        640.0,
+        false,
+        body.into(),
+        row![
+            space().width(Length::Fill),
+            btn("Los geht’s", close(), true)
+        ]
+        .into(),
+    )
 }
 
 fn windows(app: &App) -> Element<'_, Message> {
@@ -2292,6 +2345,14 @@ fn settings(app: &App) -> Element<'_, Message> {
         }
         card("Testversionen", c)
     };
+    let help_card = card(
+        "Hilfe",
+        column![
+            hint("Die ersten Schritte noch einmal anzeigen."),
+            btn("Erste Schritte", Message::Open(Some(Dialog::Help)), false),
+        ]
+        .spacing(8),
+    );
     let export_card = card(
         "Design markieren",
         column![
@@ -2321,7 +2382,7 @@ fn settings(app: &App) -> Element<'_, Message> {
         .align_y(Vertical::Top)
         .into(),
         2 => row![
-            cards(1, vec![debug_card, export_card]),
+            cards(1, vec![help_card, debug_card, export_card]),
             cards(1, vec![test_card]),
         ]
         .spacing(12)

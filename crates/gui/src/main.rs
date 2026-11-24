@@ -288,6 +288,7 @@ pub enum Dialog {
     Log,
     Selftest,
     Soundboard,
+    Help,
     Fx(usize),
     Markup,
 }
@@ -1345,6 +1346,7 @@ impl App {
             Dialog::Log => "Protokoll",
             Dialog::Selftest => "Selbsttest",
             Dialog::Soundboard => "Soundboard",
+            Dialog::Help => "Erste Schritte",
             Dialog::Fx(_) => "Effekte",
             Dialog::Markup => "Markieren",
         }
@@ -1673,6 +1675,8 @@ impl App {
             }),
             &dir,
         );
+        // No settings file yet: the first start, so show the first steps.
+        let first_start = !shell::prefs_path(&dir).exists();
         let prefs = shell::load_prefs(&dir);
         apply_look(&prefs);
         let dialog = std::env::var("FADERUST_DIALOG")
@@ -1687,8 +1691,10 @@ impl App {
                 "log" => Some(Dialog::Log),
                 "selftest" => Some(Dialog::Selftest),
                 "soundboard" => Some(Dialog::Soundboard),
+                "help" => Some(Dialog::Help),
                 _ => None,
-            });
+            })
+            .or(first_start.then_some(Dialog::Help));
         let mut app = App {
             view: if std::env::var("FADERUST_VIEW").as_deref() == Ok("matrix")
                 || prefs.view == "matrix"
