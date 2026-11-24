@@ -31,4 +31,26 @@ out["mute-off"]=tile(f'<rect x="2" y="2" width="68" height="68" rx="10" fill="#5
 hp=lambda c:f'<path d="M18 40v-6a18 18 0 0 1 36 0v6" fill="none" stroke="{c}" stroke-width="4" stroke-linecap="round"/><rect x="13" y="36" width="11" height="18" rx="4" fill="{c}"/><rect x="48" y="36" width="11" height="18" rx="4" fill="{c}"/>'
 out["device-key"]=tile(hp("#8a959f"))
 out["device-active"]=tile(hp(G)+f'<rect x="22" y="58" width="28" height="3" rx="1.5" fill="{G}"/>',G,G)
+
+# --- selection, step, page keys (glyphs stay above the title line) ---
+GREY="#8a959f"
+def pick(master,on):
+    c=G if on else GREY
+    frame=f'<rect x="14" y="7" width="44" height="40" rx="7" fill="none" stroke="{"#3a434c" if not on else G}" stroke-width="2"/>' if master else ""
+    b=frame+fader(36,12,44,(24,c if on else "#3a434c"),"url(#cap)" if on else "#7a858f",cw=20 if master else 18,ch=10,w=4)
+    if not master: b+=f'<circle cx="56" cy="14" r="4" fill="{G if on else "none"}" stroke="{c}" stroke-width="2"/>'
+    if on: b+=f'<rect x="22" y="58" width="28" height="3" rx="1.5" fill="{G}"/>'
+    return tile(b,G if on else None,G if on else None)
+out["select-key"]=pick(False,False); out["select-on"]=pick(False,True)
+out["select-master"]=pick(True,False); out["select-master-on"]=pick(True,True)
+out["select-clear"]=tile(f'<g fill="none" stroke="{GREY}" stroke-width="4" stroke-linecap="round"><circle cx="36" cy="26" r="16" stroke-dasharray="4 5" stroke-width="3"/><line x1="29" y1="19" x2="43" y2="33"/><line x1="43" y1="19" x2="29" y2="33"/></g>')
+def step(sign,c):
+    bars=''.join(f'<line x1="{x}" y1="10" x2="{x}" y2="46" stroke="#232a30" stroke-width="3.4" stroke-linecap="round"/>' for x in (14,58))
+    h=f'<line x1="26" y1="28" x2="46" y2="28" stroke="{c}" stroke-width="6" stroke-linecap="round"/>'
+    if sign>0: h+=f'<line x1="36" y1="18" x2="36" y2="38" stroke="{c}" stroke-width="6" stroke-linecap="round"/>'
+    return tile(bars+h)
+out["group-up"]=step(1,G); out["group-down"]=step(-1,OR)
+out["level-key"]=tile(f'<path d="M16 42a22 22 0 1 1 40 0" fill="none" stroke="#2c333a" stroke-width="5" stroke-linecap="round"/><path d="M16 42a22 22 0 0 1 24-24" fill="none" stroke="{G}" stroke-width="5" stroke-linecap="round"/><line x1="36" y1="36" x2="44" y2="22" stroke="url(#cap)" stroke-width="4.5" stroke-linecap="round"/><circle cx="36" cy="36" r="4" fill="#ffc49f"/>')
+out["page-key"]=tile(''.join(f'<rect x="{x}" y="{y}" width="12" height="11" rx="3" fill="{G}" opacity="{o}"/>' for (x,y,o) in [(15,8,1),(30,8,1),(45,8,0.45),(15,22,1),(30,22,0.45),(45,22,1),(15,36,0.45),(30,36,1),(45,36,1)]))
+out["back-key"]=tile(f'<path d="M44 14L24 28l20 14" fill="none" stroke="{GREY}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>')
 for k,v in out.items(): pathlib.Path(f"icons/{k}.svg").write_text(v+"\n")

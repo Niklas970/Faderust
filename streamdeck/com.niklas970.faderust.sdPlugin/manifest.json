@@ -199,7 +199,7 @@
       ],
       "States": [
         {
-          "Image": "imgs/actions/volume/key",
+          "Image": "imgs/actions/level/key",
           "TitleAlignment": "bottom",
           "FontSize": 11
         }
@@ -216,7 +216,7 @@
       ],
       "States": [
         {
-          "Image": "imgs/actions/volume/key",
+          "Image": "imgs/actions/group/up",
           "TitleAlignment": "bottom",
           "FontSize": 11
         }
@@ -234,12 +234,12 @@
       "DisableAutomaticStates": true,
       "States": [
         {
-          "Image": "imgs/actions/strip/key",
+          "Image": "imgs/actions/select/key",
           "TitleAlignment": "bottom",
           "FontSize": 11
         },
         {
-          "Image": "imgs/actions/preset/active",
+          "Image": "imgs/actions/select/on",
           "TitleAlignment": "bottom",
           "FontSize": 11
         }
@@ -255,7 +255,7 @@
       ],
       "States": [
         {
-          "Image": "imgs/actions/preset/key",
+          "Image": "imgs/actions/page/key",
           "TitleAlignment": "bottom"
         }
       ]
@@ -270,7 +270,7 @@
       ],
       "States": [
         {
-          "Image": "imgs/actions/preset/key",
+          "Image": "imgs/actions/back/key",
           "TitleAlignment": "bottom"
         }
       ]

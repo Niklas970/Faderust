@@ -23,6 +23,12 @@ export class Select extends FaderustAction<Settings> {
     const on = t !== "clear" && selection.has(t);
     const view = { name, on };
     await this.show(action, view, async () => {
+      // The manifest image is the strip's; masters and "clear" get their own.
+      if (t === "clear") await action.setImage("imgs/actions/select/clear");
+      else if (t[0] === "m") {
+        await action.setImage("imgs/actions/select/master", { state: 0 });
+        await action.setImage("imgs/actions/select/master-on", { state: 1 });
+      }
       await action.setTitle(name);
       await action.setState(on ? 1 : 0);
     });
