@@ -117,6 +117,52 @@ mod windows_impl {
         THREAD_QUERY_LIMITED_INFORMATION,
     };
 
+    /// The module and offset where thread `id` started, e.g.
+    /// `ntdll.dll+0x1234`; `?` when Windows does not tell.
+    fn start_place(id: u32) -> String {
+        use windows::Wdk::System::Threading::{NtQueryInformationThread, THREADINFOCLASS};
+        use windows::Win32::System::LibraryLoader::{
+            GetModuleFileNameW, GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        };
+        use windows::Win32::System::Threading::THREAD_QUERY_INFORMATION;
+        // SAFETY: plain Win32 calls; the handle opened here is closed here.
+        unsafe {
+            let Ok(thread) = OpenThread(THREAD_QUERY_INFORMATION, false, id) else {
+                return "?".into();
+            };
+            // ThreadQuerySetWin32StartAddress
+            let mut address: usize = 0;
+            let status = NtQueryInformationThread(
+                thread,
+                THREADINFOCLASS(9),
+                (&mut address as *mut usize).cast(),
+                std::mem::size_of::<usize>() as u32,
+                std::ptr::null_mut(),
+            );
+            let _ = CloseHandle(thread);
+            if status.is_err() || address == 0 {
+                return "?".into();
+            }
+            let mut module = Default::default();
+            if GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+                    | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                windows::core::PCWSTR(address as *const u16),
+                &mut module,
+            )
+            .is_err()
+            {
+                return format!("{address:#x}");
+            }
+            let mut path = [0u16; 260];
+            let len = GetModuleFileNameW(Some(module), &mut path) as usize;
+            let path = String::from_utf16_lossy(&path[..len.min(path.len())]);
+            let file = path.rsplit('\\').next().unwrap_or(&path);
+            format!("{file}+{:#x}", address.wrapping_sub(module.0 as usize))
+        }
+    }
+
     fn ticks(t: FILETIME) -> u64 {
         (u64::from(t.dwHighDateTime) << 32) | u64::from(t.dwLowDateTime)
     }
@@ -158,7 +204,14 @@ mod windows_impl {
                                 Err(_) => String::new(),
                             };
                             let name = if name.is_empty() {
-                                format!("thread {}", entry.th32ThreadID)
+                                // Says where the thread started, so that an
+                                // unnamed busy thread can be traced to its
+                                // owner (a Faderust thread, Windows, a driver).
+                                format!(
+                                    "thread {} ({})",
+                                    entry.th32ThreadID,
+                                    start_place(entry.th32ThreadID)
+                                )
                             } else {
                                 name
                             };
