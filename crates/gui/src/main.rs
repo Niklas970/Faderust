@@ -3789,35 +3789,35 @@ impl App {
     fn strip_name<'a>(&self, s: &'a Strip, i: usize) -> Element<'a, Message> {
         let mut col = column![].spacing(4).width(Length::Fill);
         let full = !self.is_mini();
+        let cross_up = self.prefs.strip_head && full && s.program;
         if self.prefs.strip_head && full {
             let color = self.head_tint(&s.device).unwrap_or_else(accent_light);
-            col = col.push(
-                Canvas::new(icons::Icon {
-                    glyph: icons::glyph_for(&s.label, s.program),
-                    color,
-                    on: false,
-                })
-                .width(Length::Fill)
-                .height(22),
-            );
+            let icon = Canvas::new(icons::Icon {
+                glyph: icons::glyph_for(&s.label, s.program),
+                color,
+                on: false,
+            })
+            .width(Length::Fill)
+            .height(22);
+            col = col.push(if cross_up {
+                // A program's close button sits in the top right corner,
+                // next to the symbol.
+                Element::from(iced::widget::stack![
+                    icon,
+                    container(Self::close_button(i))
+                        .width(Length::Fill)
+                        .align_x(Horizontal::Right)
+                ])
+            } else {
+                Element::from(icon)
+            });
         }
-        col = col.push(if s.program {
-            // A program's close button sits next to the name.
+        col = col.push(if s.program && !cross_up {
+            // Without the symbol it sits next to the name.
             Element::from(
-                row![
-                    Self::name_label(&s.label),
-                    dialogs::tip(
-                        button(Self::close_glyph(2.0))
-                            .width(22)
-                            .height(22)
-                            .padding(0)
-                            .on_press(Message::Edit(Edit::Dismiss(i)))
-                            .style(key(Look::Secondary)),
-                        "Programm entfernen",
-                    ),
-                ]
-                .spacing(4)
-                .align_y(Vertical::Center),
+                row![Self::name_label(&s.label), Self::close_button(i)]
+                    .spacing(4)
+                    .align_y(Vertical::Center),
             )
         } else {
             Self::name_label(&s.label)
@@ -3839,8 +3839,19 @@ impl App {
         // Dragging the head moves the strip.
         iced::widget::mouse_area(col)
             .on_press(Message::DragStart(i))
-            .interaction(iced::mouse::Interaction::Grab)
             .into()
+    }
+
+    fn close_button(i: usize) -> Element<'static, Message> {
+        dialogs::tip(
+            button(Self::close_glyph(2.0))
+                .width(22)
+                .height(22)
+                .padding(0)
+                .on_press(Message::Edit(Edit::Dismiss(i)))
+                .style(key(Look::Secondary)),
+            "Programm entfernen",
+        )
     }
 
     /// The ✕ of a close button, drawn so it is centred in any font; `lift`
