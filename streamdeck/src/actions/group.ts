@@ -32,7 +32,10 @@ export class Group extends FaderustAction<Settings> {
     const step = s.step ?? STEP;
     const count = s.selection ? selection.size : (s.strips?.length ?? 0) + (s.masters?.length ?? 0);
     const title = `${step < 0 ? "Leiser" : "Lauter"}\n${s.selection ? `Auswahl: ${count}` : count ? `${count} Fader` : "wählen"}`;
-    await this.show(action, title, () => action.setTitle(title));
+    await this.show(action, title, async () => {
+      await action.setImage(`imgs/actions/group/${step < 0 ? "down" : "up"}`);
+      await action.setTitle(title);
+    });
   }
 
   override async onKeyDown(ev: KeyDownEvent<Settings>): Promise<void> {
