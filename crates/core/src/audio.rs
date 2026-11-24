@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering::Relaxed};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -766,11 +766,24 @@ impl Watch {
 /// holds up only that thread.
 fn retire(engine: Option<Engine<CpalBackend>>) {
     let Some(engine) = engine else { return };
+    let done = Arc::new(AtomicBool::new(false));
+    let finished = Arc::clone(&done);
+    // Says when closing takes long: the streams that hang then are the busy
+    // leftovers the CPU log names.
+    let _ = thread::Builder::new()
+        .name("faderust-retire-watch".into())
+        .spawn(move || {
+            thread::sleep(Duration::from_secs(10));
+            if !done.load(Relaxed) {
+                log::write("old engine still not closed after 10 s");
+            }
+        });
     let _ = thread::Builder::new()
         .name("faderust-retire".into())
         .spawn(move || {
             let started = Instant::now();
             drop(engine);
+            finished.store(true, Relaxed);
             // Says whether the old streams ever closed: a thread of theirs
             // that keeps running after this line is a leftover.
             log::write(&format!(
