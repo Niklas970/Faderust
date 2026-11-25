@@ -4,7 +4,7 @@
 - **Move strips:** drag a strip by its head to reorder; a program's ✕ sits in the top right corner
 - **First steps:** a short guide opens on the very first start and stays under Devices → Advanced → Help
 - **More robust updates:** hanging downloads are aborted and resumed, test builds are fetched in the background, errors name the host
-- **Stream Deck:** own icons for select, master, volume and level
+- **Stream Deck:** own icons for select, master, volume and level (plugin 0.3.8; update it under Devices → "Update plugin")
 - **Diagnostics:** the CPU log names unnamed busy threads and logs a hanging engine shutdown
 - **Docs:** privacy section in the README and a bug report template
 
@@ -24,6 +24,6 @@ All features and a guide are in the [README](https://github.com/Niklas970/faderu
 - **Streifen verschieben:** am Kopf ziehen sortiert um; das ✕ eines Programms sitzt oben rechts in der Ecke
 - **Erste Schritte:** eine kurze Anleitung öffnet sich beim allerersten Start und bleibt unter Geräte → Erweitert → Hilfe
 - **Robustere Updates:** hängende Downloads werden abgebrochen und fortgesetzt, Test-Builds werden im Hintergrund geladen, Fehler nennen den Host
-- **Stream Deck:** eigene Symbole für Auswahl, Master, Lautstärke und Pegel
+- **Stream Deck:** eigene Symbole für Auswahl, Master, Lautstärke und Pegel (Plugin 0.3.8; unter Geräte → „Plugin aktualisieren“)
 - **Diagnose:** das CPU-Protokoll benennt unbenannte Threads und meldet ein hängendes Beenden der Engine
 - **Doku:** Datenschutz-Abschnitt in der README und eine Fehlerbericht-Vorlage
