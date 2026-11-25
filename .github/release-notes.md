@@ -1,10 +1,12 @@
-## What's new in 0.8.7
+## What's new in 0.8.8
 
-- **Settings in their own windows:** Presets, Windows, Devices and Design open as separate windows with their own title bar; the Devices page has tabs (Devices, Connections, Advanced); narrow windows show icons only in the navigation
-- **New designs:** Sunset, Terminal green, Neon console and Paper (ink on paper); design preview with sample strips and a gallery in the README
-- **Programs made simpler:** one "+ Program" menu, the close button sits next to the name, new programs are taken up automatically (can be switched off in the Programs window), shorter device lists, duplicates are removed
-- **Mark the design:** mark areas with notes right in the app (Devices → Advanced) and copy picture and list
-- **Smaller things:** messages as cards at the top right, close buttons drawn as lines (centred in any font), test builds on every change to main
+- **Programs rebuilt:** one switch "Through Faderust" per program; no more automatic pickup; the strip's ✕ turns a program off completely; the program window is a list with search; capture uses less CPU
+- **Move strips:** drag a strip by its head to reorder; a program's ✕ sits in the top right corner
+- **First steps:** a short guide opens on the very first start and stays under Devices → Advanced → Help
+- **More robust updates:** hanging downloads are aborted and resumed, test builds are fetched in the background, errors name the host
+- **Stream Deck:** own icons for select, master, volume and level
+- **Diagnostics:** the CPU log names unnamed busy threads and logs a hanging engine shutdown
+- **Docs:** privacy section in the README and a bug report template
 
 ## Installation
 
@@ -16,10 +18,12 @@ All features and a guide are in the [README](https://github.com/Niklas970/faderu
 
 ---
 
-## Neu in 0.8.7
+## Neu in 0.8.8
 
-- **Einstellungen in eigenen Fenstern:** Presets, Windows, Geräte und Design öffnen sich als eigene Fenster mit eigener Titelleiste; die Geräte-Seite hat Reiter (Geräte, Verbindungen, Erweitert); in schmalen Fenstern zeigt die Navigation nur Symbole
-- **Neue Designs:** Sonnenuntergang, Terminal-Grün, Neon-Pult und Papier (Tinte auf Papier); Design-Vorschau mit Beispielstreifen und eine Galerie in der README
-- **Programme einfacher:** ein Menü „+ Programm“, der Schließen-Knopf sitzt neben dem Namen, neue Programme werden automatisch aufgenommen (im Programme-Fenster abschaltbar), kürzere Geräte-Listen, Doppelte werden entfernt
-- **Design markieren:** Bereiche mit Notiz direkt in der App markieren (Geräte → Erweitert) und Bild samt Liste kopieren
-- **Kleinere Dinge:** Meldungen als Karten oben rechts, Schließen-Kreuz als Linien gezeichnet (in jeder Schrift mittig), Test-Builds bei jeder Änderung an main
+- **Programme neu gebaut:** ein Schalter „Über Faderust“ pro Programm; keine automatische Aufnahme mehr; das ✕ am Streifen schaltet ein Programm ganz ab; das Programme-Fenster ist eine Liste mit Suche; die Aufnahme braucht weniger CPU
+- **Streifen verschieben:** am Kopf ziehen sortiert um; das ✕ eines Programms sitzt oben rechts in der Ecke
+- **Erste Schritte:** eine kurze Anleitung öffnet sich beim allerersten Start und bleibt unter Geräte → Erweitert → Hilfe
+- **Robustere Updates:** hängende Downloads werden abgebrochen und fortgesetzt, Test-Builds werden im Hintergrund geladen, Fehler nennen den Host
+- **Stream Deck:** eigene Symbole für Auswahl, Master, Lautstärke und Pegel
+- **Diagnose:** das CPU-Protokoll benennt unbenannte Threads und meldet ein hängendes Beenden der Engine
+- **Doku:** Datenschutz-Abschnitt in der README und eine Fehlerbericht-Vorlage
