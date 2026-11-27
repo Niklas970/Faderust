@@ -39,6 +39,8 @@ export type Gain = { db: number; muted: boolean };
 export type State = {
   protocol: number;
   inputs: string[];
+  /** The program (e.g. `spotify.exe`) behind each input, `null` for devices (protocol 4). */
+  inputApps?: (string | null)[];
   outputs: string[];
   /** `gains[input][output]`. */
   gains: Gain[][];
@@ -80,12 +82,15 @@ export type Request =
 
 type Push =
   | ({ type: "state" } & State)
+  | { type: "icons"; icons: Record<string, string> }
   | ({ type: "devices" } & Devices)
   | { type: "error"; message: string };
 
 export class Faderust extends EventEmitter<{ change: []; error: [string] }> {
   state: State | null = null;
   devices: Devices | null = null;
+  /** Program icons as base64 PNG by executable name (protocol 4). */
+  icons: Record<string, string> = {};
   #ws: WebSocket | null = null;
   #timer: NodeJS.Timeout | null = null;
   readonly url: string;
@@ -99,6 +104,12 @@ export class Faderust extends EventEmitter<{ change: []; error: [string] }> {
 
   get connected(): boolean {
     return this.#ws?.readyState === WebSocket.OPEN && this.state !== null;
+  }
+
+  /** The icon (base64 PNG) of the program a strip plays, if it is one and Faderust sent it. */
+  iconOf(input: number): string | undefined {
+    const exe = this.state?.inputApps?.[input];
+    return exe ? this.icons[exe] : undefined;
   }
 
   connect(): void {
@@ -115,6 +126,7 @@ export class Faderust extends EventEmitter<{ change: []; error: [string] }> {
       const had = this.state !== null;
       this.state = null;
       this.devices = null;
+      this.icons = {};
       if (had) this.emit("change");
       this.#timer = setTimeout(() => this.connect(), RETRY_MS);
     });
@@ -150,6 +162,10 @@ export class Faderust extends EventEmitter<{ change: []; error: [string] }> {
         this.emit("change");
         break;
       }
+      case "icons":
+        this.icons = msg.icons;
+        this.emit("change");
+        break;
       case "devices": {
         const { type: _, ...devices } = msg;
         this.devices = devices;

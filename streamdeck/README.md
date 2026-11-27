@@ -47,7 +47,8 @@ Faderust lauscht auf `ws://127.0.0.1:47811` (nur lokal) und spricht JSON. Verbin
 
 Faderust schickt bei jeder Änderung:
 
-- `{"type":"state","protocol":3,"inputs":[…],"outputs":[…],"gains":[[{"db":0,"muted":false}]],"inputMuted":[false],"masters":[{"db":0,"muted":false}],"presets":[…],"activePreset":null}`
+- `{"type":"state","protocol":4,"inputs":[…],"inputApps":[null,"spotify.exe"],"outputs":[…],"gains":[[{"db":0,"muted":false}]],"inputMuted":[false],"masters":[{"db":0,"muted":false}],"presets":[…],"activePreset":null}`
+- `{"type":"icons","icons":{"spotify.exe":"<PNG, base64>"}}` (ab Protokoll 4): die Icons der Programme, die ein Streifen abspielt; sie erscheinen, sobald das Programm läuft. Das Plugin zeichnet sie auf die Tasten „Streifen“, „Fader“ und „Auswählen“.
 - `{"type":"devices","supported":true,"playback":[…],"recording":[…]}` (Windows-Geräte mit `id`, `name`, `isDefault`, `isDefaultCommunications`)
 - `{"type":"error","message":"…"}` bei einer ungültigen Anfrage
 

@@ -10,6 +10,9 @@
 #[cfg(windows)]
 pub mod capture;
 #[cfg(windows)]
+pub mod icon;
+pub mod png;
+#[cfg(windows)]
 pub mod wasapi;
 
 use std::fmt;

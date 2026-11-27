@@ -9,6 +9,7 @@ import {
 
 import { faderust } from "../connection";
 import { faderPercent, formatDb, stripGain } from "../faderust";
+import { keyWithIcon } from "../keyimg";
 import { FaderustAction } from "./base";
 
 type Settings = {
@@ -42,7 +43,12 @@ export class Strip extends FaderustAction<Settings> {
       );
     } else if (action.isKey()) {
       const title = state?.inputs[i] ? `${name}\n${value}` : value.replace(" ", "\n");
-      await this.show(action, title, () => action.setTitle(title));
+      const icon = faderust.iconOf(i);
+      await this.show(action, { title, icon: icon?.length ?? 0 }, async () => {
+        // A program's own icon replaces the Faderust logo in the corner.
+        await action.setImage(icon ? keyWithIcon("actions/strip/plain", icon) : undefined);
+        await action.setTitle(title);
+      });
     }
   }
 

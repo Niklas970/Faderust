@@ -26,13 +26,15 @@ use crate::AppState;
 
 /// Fixed so the plugin finds Faderust without setup.
 pub const PORT: u16 = 47811;
-const PROTOCOL: u32 = 3;
+const PROTOCOL: u32 = 4;
 /// Where the plugin's token file is read from, inside the config folder.
 pub const TOKEN_FILE: &str = "remote.token";
 /// A client must say hello within this long, or it is turned away.
 const HELLO_WITHIN: Duration = Duration::from_secs(5);
 const POLL: Duration = Duration::from_millis(50);
 const DEVICES_EVERY: Duration = Duration::from_secs(2);
+/// How often to look for icons of programs that have none yet.
+const ICONS_EVERY: Duration = Duration::from_secs(5);
 
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -198,6 +200,9 @@ pub fn is_newer(bundled: &str, installed: &str) -> bool {
 struct State {
     protocol: u32,
     inputs: Vec<String>,
+    /// The program (executable name, e.g. `spotify.exe`) of each input that
+    /// takes one, `null` for devices.
+    input_apps: Vec<Option<String>>,
     outputs: Vec<String>,
     /// `gains[input][output]`.
     gains: Vec<Vec<Gain>>,
@@ -217,6 +222,11 @@ impl State {
         self.inputs
             .iter()
             .eq(config.inputs.iter().map(|i| &i.label))
+            && self
+                .input_apps
+                .iter()
+                .map(Option::as_deref)
+                .eq(config.inputs.iter().map(|i| program_of(&i.device)))
             && self
                 .outputs
                 .iter()
@@ -246,6 +256,11 @@ impl State {
         Self {
             protocol: PROTOCOL,
             inputs: config.inputs.iter().map(|i| i.label.clone()).collect(),
+            input_apps: config
+                .inputs
+                .iter()
+                .map(|i| program_of(&i.device).map(str::to_string))
+                .collect(),
             outputs: config.outputs.iter().map(|o| o.label.clone()).collect(),
             gains: config.gains.clone(),
             input_muted: config.inputs.iter().map(|i| i.muted).collect(),
@@ -260,10 +275,53 @@ impl State {
     }
 }
 
+/// The executable name behind a program input (`app:spotify.exe`).
+fn program_of(device: &str) -> Option<&str> {
+    device.strip_prefix("app:").filter(|exe| !exe.is_empty())
+}
+
+/// Icons of the programs the inputs take, as base64 PNGs by executable name.
+/// Only found while the program runs; a found icon is kept.
+type Icons = std::collections::BTreeMap<String, String>;
+
+#[cfg(windows)]
+fn find_icons(exes: &[String], icons: &mut Icons) {
+    use base64::Engine as _;
+    let Some(router) = crate::router() else {
+        return;
+    };
+    let Ok(apps) = router.apps() else {
+        return;
+    };
+    for exe in exes {
+        if icons.contains_key(exe) {
+            continue;
+        }
+        let png = apps
+            .iter()
+            .find(|a| a.exe.eq_ignore_ascii_case(exe))
+            .and_then(|a| {
+                a.pids
+                    .iter()
+                    .find_map(|&pid| faderust_engine::apps::icon::process_icon_png(pid))
+            });
+        if let Some(png) = png {
+            icons.insert(
+                exe.clone(),
+                base64::engine::general_purpose::STANDARD.encode(png),
+            );
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn find_icons(_exes: &[String], _icons: &mut Icons) {}
+
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 enum Push<'a> {
     State(&'a State),
+    Icons { icons: &'a Icons },
     Devices(&'a crate::WindowsAudio),
     Error { message: String },
 }
@@ -319,6 +377,9 @@ fn serve(state: &AppState, stream: TcpStream) -> Result<(), Box<dyn std::error::
     let mut sent_state: Option<State> = None;
     let mut sent_devices = None;
     let mut devices_at: Option<Instant> = None;
+    let mut icons = Icons::new();
+    let mut sent_icons = Icons::new();
+    let mut icons_at: Option<Instant> = None;
     loop {
         match ws.read() {
             Ok(Message::Text(text)) => {
@@ -371,6 +432,21 @@ fn serve(state: &AppState, stream: TcpStream) -> Result<(), Box<dyn std::error::
         if let Some(now) = changed {
             send(&mut ws, &Push::State(&now))?;
             sent_state = Some(now);
+        }
+
+        if icons_at.is_none_or(|t| t.elapsed() >= ICONS_EVERY) {
+            icons_at = Some(Instant::now());
+            let wanted: Vec<String> = sent_state
+                .as_ref()
+                .map(|s| s.input_apps.iter().flatten().cloned().collect())
+                .unwrap_or_default();
+            if wanted.iter().any(|exe| !icons.contains_key(exe)) {
+                find_icons(&wanted, &mut icons);
+            }
+            if icons != sent_icons {
+                send(&mut ws, &Push::Icons { icons: &icons })?;
+                sent_icons = icons.clone();
+            }
         }
 
         if devices_at.is_none_or(|t| t.elapsed() >= DEVICES_EVERY) {
@@ -642,6 +718,13 @@ mod tests {
     }
 
     #[test]
+    fn program_inputs_name_their_executable() {
+        assert_eq!(program_of("app:spotify.exe"), Some("spotify.exe"));
+        assert_eq!(program_of("USB Mikro"), None);
+        assert_eq!(program_of("app:"), None);
+    }
+
+    #[test]
     fn state_lists_labels_and_presets() {
         let config = Config {
             inputs: vec![crate::config::InputEntry {
@@ -668,6 +751,7 @@ mod tests {
         let json = serde_json::to_value(Push::State(&State::of(&config))).unwrap();
         assert_eq!(json["type"], "state");
         assert_eq!(json["inputs"][0], "Mikro");
+        assert_eq!(json["inputApps"][0], serde_json::Value::Null);
         assert_eq!(json["gains"][0][0]["db"], 0.0);
         assert_eq!(json["inputMuted"][0], false);
         assert_eq!(json["masters"][0]["db"], 0.0);

@@ -9,6 +9,7 @@ import {
 
 import { faderust } from "../connection";
 import { faderPercent, formatDb } from "../faderust";
+import { keyWithIcon } from "../keyimg";
 import { FaderustAction } from "./base";
 
 type Settings = {
@@ -43,7 +44,11 @@ export class Volume extends FaderustAction<Settings> {
       );
     } else if (action.isKey()) {
       const title = gain ? `${input}\n${value}` : value.replace(" ", "\n");
-      await this.show(action, title, () => action.setTitle(title));
+      const icon = faderust.iconOf(s.input ?? 0);
+      await this.show(action, { title, icon: icon?.length ?? 0 }, async () => {
+        await action.setImage(icon ? keyWithIcon("actions/volume/plain", icon) : undefined);
+        await action.setTitle(title);
+      });
     }
   }
 
