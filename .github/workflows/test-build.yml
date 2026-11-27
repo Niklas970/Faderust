@@ -112,7 +112,7 @@ jobs:
         with:
           name: test-files
           path: release
-      - uses: oras-project/setup-oras@v1
+      - uses: oras-project/setup-oras@v2
       - name: Push the build to the test package
         env:
           GH_TOKEN: ${{ github.token }}
