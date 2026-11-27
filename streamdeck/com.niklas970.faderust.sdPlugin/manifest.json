@@ -1,7 +1,7 @@
 {
   "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
   "Name": "Faderust",
-  "Version": "0.3.9.0",
+  "Version": "0.3.10.0",
   "Author": "Niklas970",
   "Description": "Steuert den Faderust-Mixer: Fader, Stummschalten, Presets und Windows-Standardgeräte.",
   "URL": "https://github.com/Niklas970/faderust",
@@ -300,7 +300,7 @@
   ],
   "Profiles": [
     {
-      "Name": "Faderust",
+      "Name": "Faderust Seite",
       "DeviceType": 0,
       "Readonly": false,
       "DontAutoSwitchWhenInstalled": true,

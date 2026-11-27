@@ -330,7 +330,7 @@ test("page key opens the Faderust profile, back returns", async () => {
   event("keyDown", "page", "pg", {});
   const open = await sd.next((m) => m.event === "switchToProfile");
   assert.equal(open.device, "dev");
-  assert.deepEqual(open.payload, { page: 0, profile: "Faderust" });
+  assert.deepEqual(open.payload, { page: 0, profile: "Faderust Seite" });
   appear("back", "bk", {});
   event("keyDown", "back", "bk", {});
   const back = await sd.next((m) => m.event === "switchToProfile");

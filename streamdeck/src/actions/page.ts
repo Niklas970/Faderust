@@ -1,7 +1,7 @@
 import streamDeck, { action, type KeyDownEvent, SingletonAction } from "@elgato/streamdeck";
 
 /** Name of the profile in the manifest; the Stream Deck app only switches to profiles by this name. */
-export const PROFILE = "Faderust";
+export const PROFILE = "Faderust Seite";
 
 /** Opens the Faderust page: a profile shipped with the plugin that holds the important keys. */
 @action({ UUID: "com.niklas970.faderust.page" })
