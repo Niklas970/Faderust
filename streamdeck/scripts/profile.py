@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds com.niklas970.faderust.sdPlugin/Faderust.streamDeckProfile (page for a 15-key Stream Deck).
+"""Builds com.niklas970.faderust.sdPlugin/Faderust Seite.streamDeckProfile (page for a 15-key Stream Deck).
 
 Layout (5 x 3):  Zurück | Leiser | Lauter | Auswahl stumm | Alles stumm   (Leiser/Lauter/Stumm wirken auf die Auswahl)
                  Streifen 1 … 5 (auswählen)
@@ -16,7 +16,7 @@ import uuid
 import zipfile
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
-OUT = os.path.join(ROOT, "com.niklas970.faderust.sdPlugin", "Faderust.streamDeckProfile")
+OUT = os.path.join(ROOT, "com.niklas970.faderust.sdPlugin", "Faderust Seite.streamDeckProfile")
 PLUGIN = {"Name": "Faderust", "UUID": "com.niklas970.faderust", "Version": "0.3.6.0"}
 MODEL = "20GBL9901"  # model code of the exported profile this layout was copied from
 NS = uuid.UUID("6f1d3c52-7a0e-4b57-9d2a-0f4d1e9c3a11")  # fixed, so the file is reproducible
@@ -52,7 +52,7 @@ default_page = str(uuid.uuid5(NS, "default-page"))
 folder = f"Profiles/{str(uuid.uuid5(NS, 'profile')).upper()}.sdProfile"
 root = {
     "Device": {"Model": MODEL, "UUID": ""},
-    "Name": "Faderust",
+    "Name": "Faderust Seite",
     "Pages": {"Current": "00000000-0000-0000-0000-000000000000", "Default": default_page, "Pages": [page]},
     "Version": "3.0",
 }
