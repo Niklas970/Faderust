@@ -782,7 +782,7 @@ fn retire(engine: Option<Engine<CpalBackend>>) {
         .name("faderust-retire".into())
         .spawn(move || {
             let started = Instant::now();
-            drop(engine);
+            engine.shutdown(&|line| log::write(line));
             finished.store(true, Relaxed);
             // Says whether the old streams ever closed: a thread of theirs
             // that keeps running after this line is a leftover.
