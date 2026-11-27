@@ -31,6 +31,8 @@ const icons = {
   "level-key": ["actions/level/key", 72],
   "page-key": ["actions/page/key", 72],
   "back-key": ["actions/back/key", 72],
+  "selmute-on": ["actions/selmute/on", 72],
+  "selmute-off": ["actions/selmute/off", 72],
   "preset-key": ["actions/preset/key", 72],
   "preset-active": ["actions/preset/active", 72],
   "device-icon": ["actions/device/icon", 20],
@@ -51,7 +53,7 @@ const icons = {
       );
       const file = path.join(imgs, `${target}${suffix}.png`);
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      await page.locator("svg").screenshot({ path: file, omitBackground: true });
+      await page.locator("svg").first().screenshot({ path: file, omitBackground: true });
     }
   }
   await browser.close();
