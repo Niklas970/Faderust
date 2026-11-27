@@ -194,6 +194,41 @@ impl<S, C> Live<S, C> {
     }
 }
 
+impl<B: AudioBackend> Engine<B> {
+    /// Closes the streams one by one and tells `note` which one it is on, so
+    /// a stream that never closes can be named. Dropping the engine does the
+    /// same without the commentary.
+    pub fn shutdown(mut self, note: &dyn Fn(&str)) {
+        let slow = std::time::Duration::from_millis(200);
+        for (i, slot) in self.live_in.iter_mut().enumerate() {
+            if let Some(live) = slot.take() {
+                note(&format!("closing in{i}"));
+                let started = Instant::now();
+                live.close();
+                if started.elapsed() >= slow {
+                    note(&format!(
+                        "in{i} closed after {} ms",
+                        started.elapsed().as_millis()
+                    ));
+                }
+            }
+        }
+        for (i, slot) in self.live_out.iter_mut().enumerate() {
+            if let Some(live) = slot.take() {
+                note(&format!("closing out{i}"));
+                let started = Instant::now();
+                live.close();
+                if started.elapsed() >= slow {
+                    note(&format!(
+                        "out{i} closed after {} ms",
+                        started.elapsed().as_millis()
+                    ));
+                }
+            }
+        }
+    }
+}
+
 /// The audio engine. Dropping it stops all streams.
 ///
 /// Not `Send`: keep it on the thread that calls [`Engine::maintain`].
