@@ -246,6 +246,28 @@
       ]
     },
     {
+      "Name": "Auswahl stumm",
+      "UUID": "com.niklas970.faderust.selmute",
+      "Icon": "imgs/actions/mute/icon",
+      "Tooltip": "Schaltet die mit „Auswählen“ gewählten Streifen und Master stumm oder wieder ein. Leuchtet, solange alle gewählten stumm sind.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "DisableAutomaticStates": true,
+      "States": [
+        {
+          "Image": "imgs/actions/selmute/on",
+          "TitleAlignment": "bottom",
+          "FontSize": 11
+        },
+        {
+          "Image": "imgs/actions/selmute/off",
+          "TitleAlignment": "bottom",
+          "FontSize": 11
+        }
+      ]
+    },
+    {
       "Name": "Faderust-Seite",
       "UUID": "com.niklas970.faderust.page",
       "Icon": "imgs/actions/preset/icon",

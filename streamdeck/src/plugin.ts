@@ -9,6 +9,7 @@ import { Back, Page } from "./actions/page";
 import { Panic } from "./actions/panic";
 import { Preset } from "./actions/preset";
 import { Select } from "./actions/select";
+import { SelectionMute } from "./actions/selmute";
 import { Strip } from "./actions/strip";
 import { Volume } from "./actions/volume";
 import { faderust } from "./connection";
@@ -25,6 +26,7 @@ streamDeck.actions.registerAction(new Panic());
 streamDeck.actions.registerAction(new Level());
 streamDeck.actions.registerAction(new Group());
 streamDeck.actions.registerAction(new Select());
+streamDeck.actions.registerAction(new SelectionMute());
 streamDeck.actions.registerAction(new Page());
 streamDeck.actions.registerAction(new Back());
 

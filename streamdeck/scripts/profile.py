@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Builds com.niklas970.faderust.sdPlugin/Faderust.streamDeckProfile (page for a 15-key Stream Deck).
 
-Layout (5 x 3):  Zurück | Preset | Preset | Preset | Alles stumm
+Layout (5 x 3):  Zurück | Leiser | Lauter | Auswahl stumm | Alles stumm   (Leiser/Lauter/Stumm wirken auf die Auswahl)
                  Streifen 1 … 5 (auswählen)
-                 Master 1, 2 (auswählen) | Auswahl leeren | Leiser | Lauter (wirken auf die Auswahl)
+                 Master 1, 2 (auswählen) | Auswahl leeren
 Run: python3 scripts/profile.py
 
 The layout copies what Stream Deck 7.6 itself exports (Profiles > Export): everything lives under
@@ -37,16 +37,15 @@ def key(name, action, settings=None, states=1):
 
 
 actions = {"0,0": key("Zurück", "back"), "4,0": key("Alles stumm", "panic", states=2)}
-for i in range(3):
-    actions[f"{i + 1},0"] = key(f"Preset {i + 1}", "preset", {}, 2)
 for i in range(5):
     actions[f"{i},1"] = key(f"Streifen {i + 1}", "select", {"target": f"s{i}"}, 2)
 for i in range(2):
     actions[f"{i},2"] = key(f"Master {i + 1}", "select", {"target": f"m{i}"}, 2)
 actions["2,2"] = key("Auswahl leeren", "select", {"target": "clear"}, 2)
 
-actions["3,2"] = key("Leiser", "group", {"selection": True, "step": -3})
-actions["4,2"] = key("Lauter", "group", {"selection": True, "step": 3})
+actions["1,0"] = key("Leiser", "group", {"selection": True, "step": -3})
+actions["2,0"] = key("Lauter", "group", {"selection": True, "step": 3})
+actions["3,0"] = key("Auswahl stumm", "selmute", states=2)
 
 page = str(uuid.uuid5(NS, "page"))
 default_page = str(uuid.uuid5(NS, "default-page"))
