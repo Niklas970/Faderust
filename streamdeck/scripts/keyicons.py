@@ -7,12 +7,13 @@ for _i in ("bg","cap","signal"): _inner=_inner.replace(f'id="{_i}"',f'id="lg-{_i
 LOGO=f'<svg x="5" y="5" width="15" height="15" viewBox="0 0 64 64">{_inner}</svg>'
 G="#5ccf6a"; OR="#e0703a"
 defs='''<defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e2226"/><stop offset="1" stop-color="#050607"/></linearGradient><linearGradient id="cap" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffc49f"/><stop offset="1" stop-color="#c65f27"/></linearGradient><radialGradient id="glow" cx="0.5" cy="0.4" r="0.7"><stop offset="0" stop-color="COLOR" stop-opacity="0.28"/><stop offset="1" stop-color="COLOR" stop-opacity="0"/></radialGradient></defs>'''
+LOGO_ON=True
 def tile(body, glow=None, border=None):
     d=defs.replace("COLOR", glow or G)
     s=f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 72" width="144" height="144">{d}<rect width="72" height="72" fill="#000"/><rect x="2" y="2" width="68" height="68" rx="10" fill="url(#bg)"/>'
     if glow: s+='<rect x="2" y="2" width="68" height="68" rx="10" fill="url(#glow)"/>'
     s+='<rect x="2.5" y="2.5" width="67" height="67" rx="9.5" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>'
-    s+=body+LOGO
+    s+=body+(LOGO if LOGO_ON else '')
     if border: s+=f'<rect x="2" y="2" width="68" height="68" rx="10" fill="none" stroke="{border}" stroke-width="2.5"/>'
     return s+'</svg>'
 def fader(x,top,bot,lit,capc="url(#cap)",w=3.6,cw=15,ch=9,track="#2c333a"):
@@ -68,4 +69,15 @@ def selmute(on):
     bg=f'<rect x="2" y="2" width="68" height="68" rx="10" fill="#5a1f12" opacity="0.5"/>' if on else ''
     return tile(bg+sp+x+mark,c if on else None,OR if on else None)
 out["selmute-on"]=selmute(True); out["selmute-off"]=selmute(False)
+
+# Plain variants without the logo: the plugin draws a program's own icon there.
+def plain(make):
+    global LOGO_ON
+    LOGO_ON=False
+    try: return make()
+    finally: LOGO_ON=True
+out["strip-plain"]=plain(lambda: tile(fader(28,10,56,(26,G),cw=20,ch=11,w=4.4)+f'<g fill="{G}"><circle cx="54" cy="16" r="3"/><circle cx="54" cy="30" r="3"/><circle cx="54" cy="44" r="3" opacity="0.3"/></g>'))
+out["volume-plain"]=plain(lambda: three((34,22,40),G,"url(#cap)"))
+out["select-plain"]=plain(lambda: pick(False,False))
+out["select-on-plain"]=plain(lambda: pick(False,True))
 for k,v in out.items(): pathlib.Path(f"icons/{k}.svg").write_text(v+"\n")

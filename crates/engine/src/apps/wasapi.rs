@@ -338,8 +338,8 @@ fn for_each_session(
     Ok(())
 }
 
-/// File name of the process's executable, e.g. `spotify.exe`.
-fn exe_name(pid: u32) -> Option<String> {
+/// Full path of the process's executable.
+pub(crate) fn exe_path(pid: u32) -> Option<String> {
     let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
     let mut buf = [0u16; 1024];
     let mut len = buf.len() as u32;
@@ -355,8 +355,12 @@ fn exe_name(pid: u32) -> Option<String> {
         let _ = CloseHandle(process);
     }
     found.ok()?;
-    let path = String::from_utf16_lossy(&buf[..len as usize]);
-    path.rsplit('\\').next().map(str::to_string)
+    Some(String::from_utf16_lossy(&buf[..len as usize]))
+}
+
+/// File name of the process's executable, e.g. `spotify.exe`.
+fn exe_name(pid: u32) -> Option<String> {
+    exe_path(pid)?.rsplit('\\').next().map(str::to_string)
 }
 
 // The policy factory names devices by their interface path, not the plain
